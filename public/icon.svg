@@ -1,78 +1,94 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
   <defs>
-    <!-- Amber glow filter -->
-    <filter id="aura" x="-40%" y="-40%" width="180%" height="180%">
-      <feGaussianBlur in="SourceGraphic" stdDeviation="18" result="blur"/>
+    <!-- Amber aura glow -->
+    <filter id="glow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="12" result="blur"/>
       <feColorMatrix in="blur" type="matrix"
-        values="1 0 0 0 0
-                0.62 0 0 0 0
-                0.04 0 0 0 0
-                0 0 0 0.45 0" result="glow"/>
+        values="1 0 0 0 0  0.62 0 0 0 0  0.04 0 0 0 0  0 0 0 0.6 0"/>
       <feMerge>
-        <feMergeNode in="glow"/>
+        <feMergeNode/>
         <feMergeNode in="SourceGraphic"/>
       </feMerge>
     </filter>
-    <!-- Stronger outer aura -->
-    <filter id="outerGlow" x="-50%" y="-50%" width="200%" height="200%">
-      <feGaussianBlur in="SourceGraphic" stdDeviation="32"/>
-      <feColorMatrix type="matrix"
-        values="1 0 0 0 0
-                0.62 0 0 0 0
-                0.04 0 0 0 0
-                0 0 0 0.2 0"/>
-    </filter>
+    <!-- Big background aura -->
+    <radialGradient id="bgAura" cx="50%" cy="48%" r="45%">
+      <stop offset="0%" stop-color="#F59E0B" stop-opacity="0.12"/>
+      <stop offset="100%" stop-color="#F59E0B" stop-opacity="0"/>
+    </radialGradient>
+    <!-- Flame gradient -->
+    <linearGradient id="flame" x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0%" stop-color="#D97706"/>
+      <stop offset="50%" stop-color="#F59E0B"/>
+      <stop offset="100%" stop-color="#FDE68A"/>
+    </linearGradient>
+    <!-- Scouter lens gradient -->
+    <linearGradient id="lens" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#34D399"/>
+      <stop offset="100%" stop-color="#059669"/>
+    </linearGradient>
   </defs>
 
   <!-- Background -->
-  <rect width="512" height="512" rx="96" fill="#030712"/>
+  <rect width="512" height="512" rx="108" fill="#030712"/>
 
-  <!-- Outer aura glow (big soft halo) -->
-  <g filter="url(#outerGlow)">
-    <ellipse cx="256" cy="260" rx="100" ry="130" fill="#F59E0B"/>
+  <!-- Background aura -->
+  <rect width="512" height="512" rx="108" fill="url(#bgAura)"/>
+
+  <!-- FLAME AURA behind the figure — rising energy -->
+  <g opacity="0.3">
+    <path d="M256,440 Q200,350 210,280 Q220,220 200,160 Q230,200 256,120 Q282,200 312,160 Q292,220 302,280 Q312,350 256,440Z" fill="url(#flame)"/>
+  </g>
+  <g opacity="0.15">
+    <path d="M256,450 Q180,340 190,250 Q200,180 175,100 Q220,160 256,70 Q292,160 337,100 Q312,180 322,250 Q332,340 256,450Z" fill="#FBBF24"/>
   </g>
 
-  <!-- Main figure group with inner glow -->
-  <g filter="url(#aura)">
-    <!-- BARBELL -->
-    <!-- Bar -->
-    <rect x="128" y="148" width="256" height="14" rx="7" fill="#F59E0B"/>
-    <!-- Left weight plates -->
-    <rect x="108" y="122" width="32" height="66" rx="6" fill="#F59E0B"/>
-    <rect x="88" y="132" width="24" height="46" rx="4" fill="#F59E0B"/>
-    <!-- Right weight plates -->
-    <rect x="372" y="122" width="32" height="66" rx="6" fill="#F59E0B"/>
-    <rect x="400" y="132" width="24" height="46" rx="4" fill="#F59E0B"/>
+  <!-- FIGURE — Spiky-haired warrior in power stance -->
+  <g filter="url(#glow)">
+    <!-- SPIKY HAIR — Vegeta-style flame hair -->
+    <polygon points="256,155 235,152 215,90 230,130 220,60 242,120 240,45 256,110 272,45 270,120 292,60 282,130 297,90 277,152" fill="#F59E0B"/>
 
-    <!-- WARRIOR FIGURE — bold, geometric, overhead press stance -->
     <!-- Head -->
-    <circle cx="256" cy="195" r="26" fill="#F59E0B"/>
+    <ellipse cx="256" cy="175" rx="28" ry="26" fill="#F59E0B"/>
+
+    <!-- SCOUTER — the iconic detail -->
+    <!-- Arm piece over left ear -->
+    <path d="M226,162 Q218,160 216,168 Q214,178 220,182" stroke="#059669" stroke-width="5" fill="none" stroke-linecap="round"/>
+    <!-- Lens — green circle at eye level -->
+    <circle cx="222" cy="172" r="10" fill="url(#lens)" opacity="0.9"/>
+    <!-- Lens reflection -->
+    <circle cx="219" cy="169" r="3" fill="white" opacity="0.4"/>
+
     <!-- Neck -->
-    <rect x="248" y="218" width="16" height="14" fill="#F59E0B"/>
-    <!-- Torso — wide, powerful, tapered -->
-    <polygon points="220,232 292,232 284,330 228,330" fill="#F59E0B"/>
-    <!-- Left arm — reaching up to bar -->
-    <polygon points="220,232 198,232 168,160 186,155 210,220" fill="#F59E0B"/>
-    <!-- Right arm — reaching up to bar -->
-    <polygon points="292,232 314,232 344,160 326,155 302,220" fill="#F59E0B"/>
-    <!-- Left leg — wide power stance -->
-    <polygon points="228,330 244,330 230,420 208,420" fill="#F59E0B"/>
-    <!-- Right leg -->
-    <polygon points="268,330 284,330 304,420 282,420" fill="#F59E0B"/>
-    <!-- Left foot -->
-    <rect x="198" y="416" width="38" height="12" rx="4" fill="#F59E0B"/>
-    <!-- Right foot -->
-    <rect x="276" y="416" width="38" height="12" rx="4" fill="#F59E0B"/>
+    <rect x="247" y="198" width="18" height="16" rx="2" fill="#F59E0B"/>
+
+    <!-- Torso — armored, V-taper -->
+    <path d="M218,214 L294,214 L288,220 L292,310 L282,316 L230,316 L220,310 L224,220Z" fill="#F59E0B"/>
+    <!-- Armor line detail -->
+    <line x1="256" y1="220" x2="256" y2="310" stroke="#D97706" stroke-width="2" opacity="0.5"/>
+    <line x1="230" y1="250" x2="282" y2="250" stroke="#D97706" stroke-width="2" opacity="0.3"/>
+
+    <!-- Arms — crossed in front, power pose -->
+    <!-- Left arm -->
+    <polygon points="218,214 196,218 178,270 186,280 204,240 220,310" fill="#F59E0B"/>
+    <!-- Left fist -->
+    <circle cx="180" cy="276" r="12" fill="#F59E0B"/>
+    <!-- Right arm -->
+    <polygon points="294,214 316,218 334,270 326,280 308,240 292,310" fill="#F59E0B"/>
+    <!-- Right fist -->
+    <circle cx="332" cy="276" r="12" fill="#F59E0B"/>
+
+    <!-- Legs — wide stance -->
+    <polygon points="232,316 248,316 240,420 218,420" fill="#F59E0B"/>
+    <polygon points="264,316 280,316 294,420 272,420" fill="#F59E0B"/>
+
+    <!-- Boots -->
+    <path d="M212,416 L244,416 L246,432 Q246,440 238,440 L216,440 Q208,440 208,432Z" fill="#F59E0B"/>
+    <path d="M268,416 L300,416 L302,432 Q302,440 294,440 L274,440 Q266,440 266,432Z" fill="#F59E0B"/>
+    <!-- Boot tips — pointed like Saiyan boots -->
+    <polygon points="208,432 200,438 208,440" fill="#D97706"/>
+    <polygon points="302,432 310,438 302,440" fill="#D97706"/>
   </g>
 
-  <!-- POWER-UP ENERGY — upward chevrons above the barbell -->
-  <g opacity="0.7">
-    <polyline points="238,98 256,78 274,98" fill="none" stroke="#F59E0B" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
-  </g>
-  <g opacity="0.45">
-    <polyline points="234,72 256,48 278,72" fill="none" stroke="#F59E0B" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
-  </g>
-  <g opacity="0.25">
-    <polyline points="240,110 256,94 272,110" fill="none" stroke="#FBBF24" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
-  </g>
+  <!-- Power level reading near scouter — tiny "OVER 9000" energy -->
+  <text x="200" y="148" font-family="monospace" font-size="14" fill="#34D399" opacity="0.6" font-weight="bold">9001</text>
 </svg>

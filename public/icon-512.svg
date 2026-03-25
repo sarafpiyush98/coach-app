@@ -1,6 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
   <defs>
-    <!-- Amber glow filter -->
     <filter id="aura" x="-40%" y="-40%" width="180%" height="180%">
       <feGaussianBlur in="SourceGraphic" stdDeviation="18" result="blur"/>
       <feColorMatrix in="blur" type="matrix"
@@ -13,7 +12,6 @@
         <feMergeNode in="SourceGraphic"/>
       </feMerge>
     </filter>
-    <!-- Stronger outer aura -->
     <filter id="outerGlow" x="-50%" y="-50%" width="200%" height="200%">
       <feGaussianBlur in="SourceGraphic" stdDeviation="32"/>
       <feColorMatrix type="matrix"
@@ -24,48 +22,30 @@
     </filter>
   </defs>
 
-  <!-- Background -->
   <rect width="512" height="512" rx="96" fill="#030712"/>
 
-  <!-- Outer aura glow (big soft halo) -->
   <g filter="url(#outerGlow)">
     <ellipse cx="256" cy="260" rx="100" ry="130" fill="#F59E0B"/>
   </g>
 
-  <!-- Main figure group with inner glow -->
   <g filter="url(#aura)">
-    <!-- BARBELL -->
-    <!-- Bar -->
     <rect x="128" y="148" width="256" height="14" rx="7" fill="#F59E0B"/>
-    <!-- Left weight plates -->
     <rect x="108" y="122" width="32" height="66" rx="6" fill="#F59E0B"/>
     <rect x="88" y="132" width="24" height="46" rx="4" fill="#F59E0B"/>
-    <!-- Right weight plates -->
     <rect x="372" y="122" width="32" height="66" rx="6" fill="#F59E0B"/>
     <rect x="400" y="132" width="24" height="46" rx="4" fill="#F59E0B"/>
 
-    <!-- WARRIOR FIGURE — bold, geometric, overhead press stance -->
-    <!-- Head -->
     <circle cx="256" cy="195" r="26" fill="#F59E0B"/>
-    <!-- Neck -->
     <rect x="248" y="218" width="16" height="14" fill="#F59E0B"/>
-    <!-- Torso — wide, powerful, tapered -->
     <polygon points="220,232 292,232 284,330 228,330" fill="#F59E0B"/>
-    <!-- Left arm — reaching up to bar -->
     <polygon points="220,232 198,232 168,160 186,155 210,220" fill="#F59E0B"/>
-    <!-- Right arm — reaching up to bar -->
     <polygon points="292,232 314,232 344,160 326,155 302,220" fill="#F59E0B"/>
-    <!-- Left leg — wide power stance -->
     <polygon points="228,330 244,330 230,420 208,420" fill="#F59E0B"/>
-    <!-- Right leg -->
     <polygon points="268,330 284,330 304,420 282,420" fill="#F59E0B"/>
-    <!-- Left foot -->
     <rect x="198" y="416" width="38" height="12" rx="4" fill="#F59E0B"/>
-    <!-- Right foot -->
     <rect x="276" y="416" width="38" height="12" rx="4" fill="#F59E0B"/>
   </g>
 
-  <!-- POWER-UP ENERGY — upward chevrons above the barbell -->
   <g opacity="0.7">
     <polyline points="238,98 256,78 274,98" fill="none" stroke="#F59E0B" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
   </g>

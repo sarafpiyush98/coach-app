@@ -76,37 +76,14 @@ export default function Dashboard() {
   useEffect(() => {
     async function fetchData() {
       try {
-        const [logRes, streakRes, mealRes, progressRes] =
-          await Promise.allSettled([
-            fetch("/api/daily-log"),
-            fetch("/api/streaks"),
-            fetch(`/api/meals?date=${todayStr}`),
-            fetch("/api/progress"),
-          ]);
-
-        if (logRes.status === "fulfilled" && logRes.value.ok) {
-          const json = await logRes.value.json();
-          setDailyLog(json.data ?? json);
-        }
-        if (streakRes.status === "fulfilled" && streakRes.value.ok) {
-          const json = await streakRes.value.json();
-          setStreaks(json.data ?? json);
-        }
-        if (mealRes.status === "fulfilled" && mealRes.value.ok) {
-          const json = await mealRes.value.json();
-          const mealsData = json.data ?? json;
-          setMeals(Array.isArray(mealsData) ? mealsData : []);
-        }
-        if (progressRes.status === "fulfilled" && progressRes.value.ok) {
-          const json = await progressRes.value.json();
-          const progressData = json.data ?? json;
-          setMilestones(
-            Array.isArray(progressData?.milestones)
-              ? progressData.milestones
-              : Array.isArray(progressData)
-                ? progressData
-                : []
-          );
+        const res = await fetch("/api/dashboard");
+        if (res.ok) {
+          const json = await res.json();
+          const { dailyLog: log, streaks: s, meals: m, milestones: ms } = json.data;
+          setDailyLog(log ?? null);
+          setStreaks(s ?? null);
+          setMeals(Array.isArray(m) ? m : []);
+          setMilestones(Array.isArray(ms) ? ms : []);
         }
       } catch {
         // Dashboard shows zeroes on failure

@@ -18,7 +18,7 @@ import {
   TrendingDown,
 } from "lucide-react";
 
-const START_DATE = new Date(2026, 2, 25);
+const START_DATE = new Date(2026, 2, 28); // March 28, 2026
 const START_WEIGHT = 128;
 const CALORIE_TARGET = 2000;
 const PROTEIN_TARGET = 150;

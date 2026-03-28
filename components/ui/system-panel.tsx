@@ -4,12 +4,20 @@ import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 
 const variantStyles = {
-  default: "glow-blue border-[#1B45D7]/30",
-  warning: "glow-gold border-[#FFC107]/30",
-  danger: "glow-red border-[#D50000]/30",
-  success: "glow-blue border-[#059669]/30",
-  gold: "glow-gold border-[#FFC107]/30",
-  purple: "glow-purple border-[#463671]/30",
+  default:
+    "bg-[var(--surface-1)] border border-[var(--border-subtle)]",
+  hero:
+    "bg-[var(--surface-2)] border-t-2 border-t-[var(--accent-blue)] border-x border-b border-x-[var(--border-subtle)] border-b-[var(--border-subtle)] shadow-[0_4px_24px_var(--accent-glow)]",
+  interactive:
+    "bg-[var(--surface-1)] border border-[var(--border-subtle)] hover:bg-[var(--surface-2)] hover:border-[var(--border-accent)] transition-colors",
+  ghost:
+    "bg-transparent border-none",
+  success:
+    "bg-[var(--surface-1)] border border-[var(--border-subtle)] border-l-4 border-l-[var(--success)]",
+  danger:
+    "bg-[var(--surface-1)] border border-[var(--border-subtle)] border-l-4 border-l-[var(--danger)]",
+  gold:
+    "bg-[var(--surface-1)] border border-[var(--border-subtle)] border-l-4 border-l-[var(--warning)]",
 } as const;
 
 type Variant = keyof typeof variantStyles;
@@ -28,23 +36,24 @@ export function SystemPanel({
   animate = true,
 }: SystemPanelProps) {
   const classes = cn(
-    "relative rounded-lg border",
-    "bg-[rgba(10,20,60,0.85)] backdrop-blur-[16px]",
+    "relative rounded-lg",
     variantStyles[variant],
     className
   );
 
   const content = (
     <>
-      {/* Scanline overlay */}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-0 z-[1] rounded-[inherit]"
-        style={{
-          background:
-            "repeating-linear-gradient(0deg, transparent 2px, rgba(27,69,215,0.03) 4px)",
-        }}
-      />
+      {/* Scanline overlay — hero only */}
+      {variant === "hero" && (
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 z-[1] rounded-[inherit]"
+          style={{
+            background:
+              "repeating-linear-gradient(0deg, transparent 2px, rgba(59,108,246,0.02) 4px)",
+          }}
+        />
+      )}
       <div className="relative z-[2]">{children}</div>
     </>
   );

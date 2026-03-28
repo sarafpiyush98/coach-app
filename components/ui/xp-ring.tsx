@@ -26,9 +26,6 @@ export function XPRing({ level, xpProgress, rank, size = 140 }: XPRingProps) {
         height={size}
         viewBox={`0 0 ${size} ${size}`}
         className="-rotate-90"
-        style={{
-          filter: "drop-shadow(0 0 6px #1B45D7) drop-shadow(0 0 12px #021FA0)",
-        }}
       >
         {/* Background ring */}
         <circle
@@ -36,7 +33,7 @@ export function XPRing({ level, xpProgress, rank, size = 140 }: XPRingProps) {
           cy={center}
           r={radius}
           fill="none"
-          stroke="#1A1A2E"
+          stroke="var(--surface-3)"
           strokeWidth={strokeWidth}
         />
         {/* Progress ring */}
@@ -45,7 +42,7 @@ export function XPRing({ level, xpProgress, rank, size = 140 }: XPRingProps) {
           cy={center}
           r={radius}
           fill="none"
-          stroke="#1B45D7"
+          stroke="var(--accent-blue)"
           strokeWidth={strokeWidth}
           strokeLinecap="round"
           strokeDasharray={circumference}
@@ -57,10 +54,10 @@ export function XPRing({ level, xpProgress, rank, size = 140 }: XPRingProps) {
 
       {/* Center text */}
       <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <span className="font-[family-name:var(--font-geist-mono)] text-2xl font-semibold text-[#FBEFFA]">
+        <span className="font-[family-name:var(--font-geist-mono)] text-2xl font-semibold text-[var(--text-primary)]">
           {level}
         </span>
-        <span className="font-[family-name:var(--font-rajdhani)] text-[10px] font-bold uppercase tracking-widest text-[#4A5568]">
+        <span className="font-[family-name:var(--font-rajdhani)] text-[10px] font-bold uppercase tracking-widest text-[var(--text-muted)]">
           {rank}
         </span>
       </div>

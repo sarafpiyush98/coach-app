@@ -79,9 +79,7 @@ export default function CommandCenter() {
   useEffect(() => {
     if (!data?.quests) return;
     const completed = data.quests.filter((q) => q.completed);
-    // Only toast if there are completions (debounce: only once)
     if (completed.length > 0 && completed.length === data.quests.filter((q) => q.completed).length) {
-      // Don't spam — just show a summary if multiple
       const last = completed[completed.length - 1];
       if (completed.length === 1) {
         addToast({
@@ -91,7 +89,6 @@ export default function CommandCenter() {
         });
       }
     }
-  // Only run once on data load
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data?.questCompletionPercent]);
 
@@ -103,37 +100,37 @@ export default function CommandCenter() {
   const completedDaily = dailyQuests.filter((q) => q.completed).length;
 
   return (
-    <div className="mx-auto max-w-lg px-4 pb-4 pt-6 space-y-4">
+    <div className="mx-auto max-w-lg px-4 pb-6 pt-8 space-y-6">
       {/* System Header */}
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         className="text-center"
       >
-        <p className="font-[family-name:var(--font-rajdhani)] text-[10px] font-bold uppercase tracking-[0.3em] text-[#4A5568]">
+        <h1 className="font-[family-name:var(--font-rajdhani)] text-[28px] font-bold tracking-[0.1em] text-[var(--text-primary)]">
           THE SYSTEM
-        </p>
-        <p className="font-[family-name:var(--font-geist-mono)] text-xs tabular-nums text-[#4A5568]">
+        </h1>
+        <p className="font-[family-name:var(--font-geist-mono)] text-sm tabular-nums text-[var(--accent-blue)]">
           DAY {dayNumber}
         </p>
       </motion.div>
 
       {/* Day 1 initialization or Missed Yesterday Warning */}
       {dayNumber === 1 && completedDaily === 0 ? (
-        <SystemPanel className="px-4 py-3">
-          <p className="font-[family-name:var(--font-rajdhani)] text-xs font-bold uppercase tracking-wider text-[#1B45D7]">
+        <div className="border-l-2 border-l-[var(--accent-blue)] pl-4 py-2">
+          <p className="font-[family-name:var(--font-rajdhani)] text-xs font-bold uppercase tracking-wider text-[var(--accent-blue)]">
             SYSTEM INITIALIZED. FIRST QUEST AWAITS. BEGIN.
           </p>
-        </SystemPanel>
+        </div>
       ) : streaks.missedYesterday ? (
         <SystemPanel variant="danger" className="px-4 py-3">
-          <p className="font-[family-name:var(--font-rajdhani)] text-xs font-bold uppercase tracking-wider text-[#D50000]">
+          <p className="font-[family-name:var(--font-rajdhani)] text-xs font-bold uppercase tracking-wider text-[var(--danger)]">
             Yesterday: Protocol incomplete. Today determines the streak.
           </p>
         </SystemPanel>
       ) : null}
 
-      {/* Daily Progress */}
+      {/* Daily Progress — hero card */}
       <DailyProgress
         questsCompleted={completedDaily}
         questsTotal={dailyQuests.length}
@@ -150,28 +147,26 @@ export default function CommandCenter() {
       {/* Active Quests */}
       <QuestList quests={quests} />
 
-      {/* Streak Row */}
-      <SystemPanel animate={false} className="p-4">
-        <div className="grid grid-cols-3 gap-3">
-          <StreakIndicator
-            label="EXERCISE"
-            count={streaks.exercise}
-            danger={streaks.exerciseDanger}
-          />
-          <StreakIndicator
-            label="LOGGING"
-            count={streaks.logging}
-            danger={streaks.loggingDanger}
-          />
-          <StreakIndicator
-            label="FASTING"
-            count={streaks.noLateEating}
-            danger={streaks.noLateEatingDanger}
-          />
-        </div>
-      </SystemPanel>
+      {/* Streak Row — no card, just inline data */}
+      <div className="grid grid-cols-3 gap-3 py-2">
+        <StreakIndicator
+          label="EXERCISE"
+          count={streaks.exercise}
+          danger={streaks.exerciseDanger}
+        />
+        <StreakIndicator
+          label="LOGGING"
+          count={streaks.logging}
+          danger={streaks.loggingDanger}
+        />
+        <StreakIndicator
+          label="FASTING"
+          count={streaks.noLateEating}
+          danger={streaks.noLateEatingDanger}
+        />
+      </div>
 
-      {/* Quick Actions */}
+      {/* Quick Actions — surface-2, functional */}
       <div className="grid grid-cols-3 gap-2.5">
         <QuickAction href="/log/meal" icon={<UtensilsCrossed size={20} />} label="LOG MEAL" />
         <QuickAction href="/log/workout" icon={<Dumbbell size={20} />} label="LOG WORKOUT" />
@@ -198,22 +193,22 @@ function StreakIndicator({
         <span
           className={`font-[family-name:var(--font-geist-mono)] text-2xl font-semibold tabular-nums ${
             active
-              ? "text-[#FBEFFA]"
+              ? "text-[var(--text-primary)]"
               : danger
-                ? "text-[#D50000]"
-                : "text-[#4A5568]"
+                ? "text-[var(--danger)]"
+                : "text-[var(--text-muted)]"
           }`}
         >
           {count}
         </span>
         {active && (
-          <Flame size={14} className="text-[#FFC107]" />
+          <Flame size={14} className="text-[var(--warning)]" />
         )}
         {danger && !active && (
-          <AlertTriangle size={12} className="text-[#D50000]" />
+          <AlertTriangle size={12} className="text-[var(--danger)]" />
         )}
       </div>
-      <p className="font-[family-name:var(--font-rajdhani)] text-[10px] font-bold uppercase tracking-widest text-[#4A5568]">
+      <p className="font-[family-name:var(--font-rajdhani)] text-[10px] font-bold uppercase tracking-widest text-[var(--text-muted)]">
         {label}
       </p>
     </div>
@@ -231,41 +226,36 @@ function QuickAction({
 }) {
   return (
     <Link href={href}>
-      <SystemPanel animate={false} className="flex h-16 cursor-pointer flex-col items-center justify-center gap-1 transition-all hover:scale-[1.02] active:scale-[0.98]">
-        <span className="text-[#1B45D7]">{icon}</span>
-        <span className="font-[family-name:var(--font-rajdhani)] text-[10px] font-bold uppercase tracking-wider text-[#4A5568]">
+      <div className="flex h-16 cursor-pointer flex-col items-center justify-center gap-1 rounded-lg bg-[var(--surface-2)] transition-colors hover:bg-[var(--surface-3)] active:scale-[0.98]">
+        <span className="text-[var(--text-secondary)]">{icon}</span>
+        <span className="font-[family-name:var(--font-rajdhani)] text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)]">
           {label}
         </span>
-      </SystemPanel>
+      </div>
     </Link>
   );
 }
 
 function LoadingSkeleton() {
   return (
-    <div className="mx-auto max-w-lg px-4 pb-4 pt-6 space-y-4">
-      {/* Header skeleton */}
+    <div className="mx-auto max-w-lg px-4 pb-6 pt-8 space-y-6">
       <div className="flex flex-col items-center gap-1">
-        <div className="h-3 w-20 rounded bg-[#0D1117] animate-pulse" />
-        <div className="h-3 w-12 rounded bg-[#0D1117] animate-pulse" />
+        <div className="h-7 w-32 rounded bg-[var(--surface-1)] animate-pulse" />
+        <div className="h-4 w-16 rounded bg-[var(--surface-1)] animate-pulse" />
       </div>
-      {/* Progress ring skeleton */}
-      <div className="h-48 rounded-lg border border-[#1B45D7]/10 bg-[rgba(10,20,60,0.85)] animate-pulse" />
-      {/* Quest skeletons */}
+      <div className="h-52 rounded-lg bg-[var(--surface-1)] animate-pulse" />
       {[1, 2, 3, 4, 5, 6].map((i) => (
         <div
           key={i}
-          className="h-16 rounded-lg border border-[#1B45D7]/10 bg-[rgba(10,20,60,0.85)] animate-pulse"
+          className="h-16 rounded-lg bg-[var(--surface-1)] animate-pulse"
         />
       ))}
-      {/* Streak skeleton */}
-      <div className="h-20 rounded-lg border border-[#1B45D7]/10 bg-[rgba(10,20,60,0.85)] animate-pulse" />
-      {/* Quick actions skeleton */}
+      <div className="h-20 rounded-lg bg-[var(--surface-1)] animate-pulse" />
       <div className="grid grid-cols-3 gap-2.5">
         {[1, 2, 3].map((i) => (
           <div
             key={i}
-            className="h-16 rounded-lg border border-[#1B45D7]/10 bg-[rgba(10,20,60,0.85)] animate-pulse"
+            className="h-16 rounded-lg bg-[var(--surface-1)] animate-pulse"
           />
         ))}
       </div>

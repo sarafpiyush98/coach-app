@@ -32,8 +32,8 @@ import {
 } from "@/lib/gamification";
 
 const START_WEIGHT = 128;
+const START_DATE = new Date(2026, 2, 28);
 
-// --- Interfaces matching API response ---
 interface GamificationData {
   profile: {
     totalXp: number;
@@ -63,27 +63,17 @@ interface GamificationData {
 }
 
 const GRADE_COLORS: Record<WeeklyGrade, string> = {
-  S: "text-[#FFC107]",
-  A: "text-[#1B45D7]",
+  S: "text-[var(--warning)]",
+  A: "text-[var(--accent-blue)]",
   B: "text-teal-400",
-  C: "text-[#4A5568]",
-  F: "text-[#D50000]",
-};
-
-const GRADE_GLOW: Record<WeeklyGrade, string> = {
-  S: "drop-shadow-[0_0_12px_rgba(255,193,7,0.6)]",
-  A: "drop-shadow-[0_0_12px_rgba(27,69,215,0.6)]",
-  B: "drop-shadow-[0_0_8px_rgba(45,212,191,0.4)]",
-  C: "",
-  F: "drop-shadow-[0_0_8px_rgba(213,0,0,0.4)]",
+  C: "text-[var(--text-muted)]",
+  F: "text-[var(--danger)]",
 };
 
 export default function DungeonPage() {
   const [gData, setGData] = useState<GamificationData | null>(null);
   const [history, setHistory] = useState<DailyLog[]>([]);
-  const [weights, setWeights] = useState<{ date: string; weight_kg: number }[]>(
-    []
-  );
+  const [weights, setWeights] = useState<{ date: string; weight_kg: number }[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -109,12 +99,11 @@ export default function DungeonPage() {
 
   if (loading) {
     return (
-      <div className="max-w-lg mx-auto px-4 pt-6 space-y-4">
+      <div className="max-w-lg mx-auto px-4 pt-8 space-y-6">
         {[1, 2, 3, 4, 5].map((i) => (
           <div
             key={i}
-            className="h-36 rounded-xl animate-pulse"
-            style={{ background: "rgba(10,20,60,0.85)" }}
+            className="h-36 rounded-xl animate-pulse bg-[var(--surface-1)]"
           />
         ))}
       </div>
@@ -123,8 +112,8 @@ export default function DungeonPage() {
 
   if (!gData) {
     return (
-      <div className="max-w-lg mx-auto px-4 pt-6">
-        <p className="text-[#4A5568] text-sm text-center py-12 font-[family-name:var(--font-geist-mono)]">
+      <div className="max-w-lg mx-auto px-4 pt-8">
+        <p className="text-[var(--text-muted)] text-sm text-center py-12 font-[family-name:var(--font-geist-mono)]">
           No data. Run schema first.
         </p>
       </div>
@@ -145,7 +134,11 @@ export default function DungeonPage() {
     const d = subDays(today, i);
     const dateStr = format(d, "yyyy-MM-dd");
     const log = history.find((h) => h.date === dateStr);
-    if (i === 0 && !log) {
+
+    // Before start date = future style
+    if (d < START_DATE) {
+      heatmapDays.push({ date: d, status: "future" });
+    } else if (i === 0 && !log) {
       heatmapDays.push({ date: d, status: "future" });
     } else if (!log) {
       heatmapDays.push({
@@ -161,7 +154,7 @@ export default function DungeonPage() {
     }
   }
 
-  // Weekly grade — count active days this week from history
+  // Weekly grade
   const weekStart = startOfWeek(today, { weekStartsOn: 1 });
   const weekActiveDays = history.filter((h) => {
     const d = new Date(h.date);
@@ -171,18 +164,16 @@ export default function DungeonPage() {
     );
   }).length;
   const weekGrade = getWeeklyGrade(weekActiveDays);
-  // Rough score: (activeDays / 7) * 100
   const weekScore = Math.round((weekActiveDays / 7) * 100);
 
-  // Check which bosses are defeated
   const allBossesDefeated = BOSS_FIGHTS.every(
     (b) => latestWeight <= b.targetWeight
   );
 
   return (
-    <div className="max-w-lg mx-auto px-4 pt-6 pb-24 space-y-4">
+    <div className="max-w-lg mx-auto px-4 pt-8 pb-24 space-y-6">
       {/* Header */}
-      <h1 className="font-[family-name:var(--font-rajdhani)] text-lg font-bold tracking-widest uppercase text-center text-[#4A5568]">
+      <h1 className="font-[family-name:var(--font-rajdhani)] text-[11px] font-semibold tracking-[0.15em] uppercase text-center text-[var(--text-muted)]">
         DUNGEON
       </h1>
 
@@ -190,10 +181,10 @@ export default function DungeonPage() {
       {allBossesDefeated ? (
         <SystemPanel variant="gold" className="p-5">
           <div className="text-center space-y-2">
-            <div className="font-[family-name:var(--font-rajdhani)] text-xl font-bold text-[#FFC107]">
+            <div className="font-[family-name:var(--font-rajdhani)] text-xl font-bold text-[var(--warning)]">
               ALL BOSSES DEFEATED.
             </div>
-            <div className="font-[family-name:var(--font-rajdhani)] text-sm text-[#FFC107]/60">
+            <div className="font-[family-name:var(--font-rajdhani)] text-sm text-[var(--warning)]/60">
               THE DUNGEON IS CLEAR.
             </div>
           </div>
@@ -201,26 +192,26 @@ export default function DungeonPage() {
       ) : boss ? (
         <SystemPanel variant="danger" className="p-5 overflow-hidden relative">
           {/* Boss tier badge */}
-          <div className="absolute top-3 right-3 font-[family-name:var(--font-geist-mono)] text-[10px] uppercase tracking-wider px-2 py-0.5 rounded border border-[#D50000]/20 text-[#D50000]/50 bg-[#D50000]/5">
+          <div className="absolute top-3 right-3 font-[family-name:var(--font-geist-mono)] text-[10px] uppercase tracking-wider px-2 py-0.5 rounded border border-[var(--danger)]/20 text-[var(--danger)]/50 bg-[var(--danger)]/5">
             {boss.tier}
           </div>
 
-          <div className="font-[family-name:var(--font-rajdhani)] text-2xl font-bold text-[#FBEFFA] uppercase tracking-wide mb-1">
+          <div className="font-[family-name:var(--font-rajdhani)] text-2xl font-bold text-[var(--text-primary)] uppercase tracking-wide mb-1">
             {boss.name}
           </div>
-          <div className="text-sm italic text-[#4A5568] mb-4">
+          <div className="text-sm italic text-[var(--text-muted)] mb-4">
             &ldquo;{boss.taunt}&rdquo;
           </div>
 
-          {/* HP Bar */}
+          {/* HP Bar — thin and elegant */}
           <div className="space-y-1.5">
-            <div className="relative h-4 w-full rounded-full bg-[#0C0C0F] overflow-hidden border border-[#D50000]/10">
+            <div className="relative h-1.5 w-full rounded-full bg-[var(--surface-0)] overflow-hidden">
               <div
-                className="h-full rounded-full bg-gradient-to-r from-[#D50000] to-[#ff3333] transition-all duration-700"
+                className="h-full rounded-full bg-gradient-to-r from-[var(--danger)] to-[#ff6666] transition-all duration-700"
                 style={{ width: `${boss.hpPercent}%` }}
               />
             </div>
-            <div className="font-[family-name:var(--font-geist-mono)] text-xs text-[#D50000]/60">
+            <div className="font-[family-name:var(--font-geist-mono)] text-xs text-[var(--danger)]/60">
               HP: {boss.kgRemaining.toFixed(1)} kg remaining
             </div>
           </div>
@@ -240,27 +231,27 @@ export default function DungeonPage() {
                   <div
                     className={`w-10 h-10 rounded-full border-2 flex items-center justify-center transition-all ${
                       defeated
-                        ? "border-[#059669] bg-[#059669]/20"
+                        ? "border-[var(--success)] bg-[var(--success)]/10"
                         : isActive
-                          ? "border-[#D50000] bg-[#D50000]/10 animate-pulse"
-                          : "border-[#4A5568]/30 bg-[#0C0C0F]"
+                          ? "border-[var(--danger)] bg-[var(--danger)]/10 animate-pulse"
+                          : "border-[var(--text-muted)]/20 bg-[var(--surface-0)]"
                     }`}
                   >
                     {defeated ? (
-                      <CheckCircle2 size={18} className="text-[#059669]" />
+                      <CheckCircle2 size={18} className="text-[var(--success)]" />
                     ) : isActive ? (
-                      <Swords size={18} className="text-[#D50000]" />
+                      <Swords size={18} className="text-[var(--danger)]" />
                     ) : (
-                      <Lock size={14} className="text-[#4A5568]/40" />
+                      <Lock size={14} className="text-[var(--text-muted)]/40" />
                     )}
                   </div>
                   <div
                     className={`mt-1.5 text-[9px] font-[family-name:var(--font-rajdhani)] font-bold uppercase leading-tight text-center max-w-[60px] ${
                       defeated
-                        ? "text-[#059669]/70"
+                        ? "text-[var(--success)]/70"
                         : isActive
-                          ? "text-[#FBEFFA]/80"
-                          : "text-[#4A5568]/40"
+                          ? "text-[var(--text-primary)]/80"
+                          : "text-[var(--text-muted)]/40"
                     }`}
                   >
                     {b.name.replace("The ", "")}
@@ -268,18 +259,17 @@ export default function DungeonPage() {
                   <div
                     className={`text-[9px] font-[family-name:var(--font-geist-mono)] ${
                       defeated
-                        ? "text-[#059669]/40 line-through"
-                        : "text-[#4A5568]/30"
+                        ? "text-[var(--success)]/40 line-through"
+                        : "text-[var(--text-muted)]/30"
                     }`}
                   >
                     {b.targetWeight}kg
                   </div>
                 </div>
-                {/* Connecting line */}
                 {i < BOSS_FIGHTS.length - 1 && (
                   <div
                     className={`h-0.5 w-6 mx-1 mt-[-20px] ${
-                      defeated ? "bg-[#059669]/30" : "bg-[#4A5568]/15"
+                      defeated ? "bg-[var(--success)]/30" : "bg-[var(--text-muted)]/15"
                     }`}
                   />
                 )}
@@ -295,51 +285,49 @@ export default function DungeonPage() {
       {/* 90-Day Heatmap */}
       <HeatmapCard days={heatmapDays} />
 
-      {/* Stats Grid */}
-      <div className="grid grid-cols-2 gap-3">
-        <StatCard
-          label="Total Workouts"
-          value={profile.totalWorkouts}
-          icon={<Dumbbell size={16} className="text-[#1B45D7]" />}
-        />
-        <StatCard
-          label="Personal Records"
-          value={profile.totalPrs}
-          icon={<Trophy size={16} className="text-[#FFC107]" />}
-        />
-        <StatCard
-          label="Best Streak"
-          value={profile.bestExerciseStreak}
-          icon={<Flame size={16} className="text-[#D50000]" />}
-        />
-        <StatCard
-          label="Best Combo"
-          value={profile.bestCombo}
-          icon={<Zap size={16} className="text-[#463671]" />}
-        />
-      </div>
-
-      {/* Weekly Grade */}
+      {/* Weekly Grade — letter dominates */}
       <SystemPanel className="p-5">
         <div className="text-center space-y-1">
-          <div className="font-[family-name:var(--font-rajdhani)] text-xs font-bold tracking-widest uppercase text-[#4A5568]">
+          <div className="font-[family-name:var(--font-rajdhani)] text-[11px] font-semibold tracking-[0.15em] uppercase text-[var(--text-muted)]">
             WEEK GRADE
           </div>
           <div
-            className={`font-[family-name:var(--font-rajdhani)] text-6xl font-black ${GRADE_COLORS[weekGrade]} ${GRADE_GLOW[weekGrade]}`}
+            className={`font-[family-name:var(--font-rajdhani)] text-[72px] leading-none font-black ${GRADE_COLORS[weekGrade]}`}
           >
             {weekGrade}
           </div>
-          <div className="font-[family-name:var(--font-geist-mono)] text-sm text-[#4A5568]">
+          <div className="font-[family-name:var(--font-geist-mono)] text-sm text-[var(--text-muted)]">
             {weekScore}/100
           </div>
         </div>
       </SystemPanel>
+
+      {/* Stats Grid — no borders, bg difference IS the card */}
+      <div className="grid grid-cols-2 gap-3">
+        <StatCard
+          label="Total Workouts"
+          value={profile.totalWorkouts}
+          icon={<Dumbbell size={16} className="text-[var(--accent-blue)]" />}
+        />
+        <StatCard
+          label="Personal Records"
+          value={profile.totalPrs}
+          icon={<Trophy size={16} className="text-[var(--warning)]" />}
+        />
+        <StatCard
+          label="Best Streak"
+          value={profile.bestExerciseStreak}
+          icon={<Flame size={16} className="text-[var(--danger)]" />}
+        />
+        <StatCard
+          label="Best Combo"
+          value={profile.bestCombo}
+          icon={<Zap size={16} className="text-[var(--purple)]" />}
+        />
+      </div>
     </div>
   );
 }
-
-// --- SUB-COMPONENTS ---
 
 function WeightChart({
   data,
@@ -349,12 +337,12 @@ function WeightChart({
   if (data.length === 0) {
     return (
       <SystemPanel className="p-5">
-        <div className="font-[family-name:var(--font-rajdhani)] text-xs font-bold tracking-widest uppercase text-[#4A5568] mb-4 flex items-center gap-2">
-          <TrendingDown size={16} className="text-[#1B45D7]" />
+        <div className="font-[family-name:var(--font-rajdhani)] text-[11px] font-semibold tracking-[0.15em] uppercase text-[var(--text-muted)] mb-4 flex items-center gap-2">
+          <TrendingDown size={16} className="text-[var(--accent-blue)]" />
           WEIGHT DATA
         </div>
         <div className="h-36 flex items-center justify-center">
-          <p className="font-[family-name:var(--font-geist-mono)] text-xs text-[#4A5568]/40">
+          <p className="font-[family-name:var(--font-geist-mono)] text-xs text-[var(--text-muted)]/40">
             No weigh-ins recorded.
           </p>
         </div>
@@ -372,8 +360,8 @@ function WeightChart({
 
   return (
     <SystemPanel className="p-5">
-      <div className="font-[family-name:var(--font-rajdhani)] text-xs font-bold tracking-widest uppercase text-[#4A5568] mb-4 flex items-center gap-2">
-        <TrendingDown size={16} className="text-[#1B45D7]" />
+      <div className="font-[family-name:var(--font-rajdhani)] text-[11px] font-semibold tracking-[0.15em] uppercase text-[var(--text-muted)] mb-4 flex items-center gap-2">
+        <TrendingDown size={16} className="text-[var(--accent-blue)]" />
         WEIGHT DATA
       </div>
       <div className="h-44">
@@ -381,19 +369,19 @@ function WeightChart({
           <AreaChart data={chartData}>
             <defs>
               <linearGradient id="wGradBlue" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#1B45D7" stopOpacity={0.2} />
-                <stop offset="100%" stopColor="#1B45D7" stopOpacity={0} />
+                <stop offset="0%" stopColor="var(--accent-blue)" stopOpacity={0.15} />
+                <stop offset="100%" stopColor="var(--accent-blue)" stopOpacity={0} />
               </linearGradient>
             </defs>
             <CartesianGrid
               strokeDasharray="3 3"
-              stroke="#0A1543"
+              stroke="var(--surface-2)"
               vertical={false}
             />
             <XAxis
               dataKey="date"
               tick={{
-                fill: "#4A5568",
+                fill: "var(--text-muted)",
                 fontSize: 10,
                 fontFamily: "var(--font-geist-mono)",
               }}
@@ -403,7 +391,7 @@ function WeightChart({
             <YAxis
               domain={[minW, maxW]}
               tick={{
-                fill: "#4A5568",
+                fill: "var(--text-muted)",
                 fontSize: 10,
                 fontFamily: "var(--font-geist-mono)",
               }}
@@ -413,25 +401,25 @@ function WeightChart({
             />
             <Tooltip
               contentStyle={{
-                background: "rgba(10,20,60,0.95)",
-                border: "1px solid rgba(27,69,215,0.3)",
+                background: "var(--surface-2)",
+                border: "1px solid var(--border-subtle)",
                 borderRadius: "8px",
                 fontSize: "12px",
                 fontFamily: "var(--font-geist-mono)",
-                color: "#FBEFFA",
+                color: "var(--text-primary)",
               }}
             />
             <Area
               type="monotone"
               dataKey="weight"
-              stroke="#1B45D7"
+              stroke="var(--accent-blue)"
               strokeWidth={2}
               fill="url(#wGradBlue)"
-              dot={{ fill: "#1B45D7", r: 3, strokeWidth: 0 }}
+              dot={{ fill: "var(--accent-blue)", r: 3, strokeWidth: 0 }}
               activeDot={{
                 r: 6,
-                fill: "#3B65F7",
-                stroke: "#1B45D7",
+                fill: "#5b8cff",
+                stroke: "var(--accent-blue)",
                 strokeWidth: 2,
               }}
             />
@@ -448,11 +436,11 @@ function HeatmapCard({
   days: { date: Date; status: string }[];
 }) {
   const statusColors: Record<string, string> = {
-    good: "bg-[#1B45D7] shadow-[0_0_4px_rgba(27,69,215,0.4)]",
-    ok: "bg-[#0A1543]",
-    rest: "bg-[#4A5568]/20",
-    missed: "bg-[#D50000]/25",
-    future: "bg-transparent border border-[#4A5568]/10",
+    good: "bg-[var(--accent-blue)]",
+    ok: "bg-[var(--surface-3)]",
+    rest: "bg-[var(--text-muted)]/10",
+    missed: "bg-[var(--danger)]/20",
+    future: "bg-transparent border border-[var(--text-muted)]/10",
   };
 
   const firstDayOfWeek = (days[0].date.getDay() + 6) % 7;
@@ -460,8 +448,8 @@ function HeatmapCard({
 
   return (
     <SystemPanel className="p-5">
-      <div className="font-[family-name:var(--font-rajdhani)] text-xs font-bold tracking-widest uppercase text-[#4A5568] mb-3 flex items-center gap-2">
-        <Flame size={16} className="text-[#1B45D7]" />
+      <div className="font-[family-name:var(--font-rajdhani)] text-[11px] font-semibold tracking-[0.15em] uppercase text-[var(--text-muted)] mb-3 flex items-center gap-2">
+        <Flame size={16} className="text-[var(--accent-blue)]" />
         ACTIVITY LOG — 90 DAYS
       </div>
       <div className="grid grid-flow-col grid-rows-7 gap-[3px]">
@@ -476,19 +464,18 @@ function HeatmapCard({
           />
         ))}
       </div>
-      {/* Legend */}
-      <div className="flex gap-4 mt-3 text-[9px] font-[family-name:var(--font-geist-mono)] text-[#4A5568]/60">
+      <div className="flex gap-4 mt-3 text-[9px] font-[family-name:var(--font-geist-mono)] text-[var(--text-muted)]/60">
         <span className="flex items-center gap-1">
-          <span className="w-2 h-2 rounded-sm bg-[#1B45D7]" /> logged + workout
+          <span className="w-2 h-2 rounded-sm bg-[var(--accent-blue)]" /> logged + workout
         </span>
         <span className="flex items-center gap-1">
-          <span className="w-2 h-2 rounded-sm bg-[#0A1543]" /> logged
+          <span className="w-2 h-2 rounded-sm bg-[var(--surface-3)]" /> logged
         </span>
         <span className="flex items-center gap-1">
-          <span className="w-2 h-2 rounded-sm bg-[#D50000]/25" /> missed
+          <span className="w-2 h-2 rounded-sm bg-[var(--danger)]/20" /> missed
         </span>
         <span className="flex items-center gap-1">
-          <span className="w-2 h-2 rounded-sm bg-[#4A5568]/20" /> rest
+          <span className="w-2 h-2 rounded-sm bg-[var(--text-muted)]/10" /> rest
         </span>
       </div>
     </SystemPanel>
@@ -505,14 +492,14 @@ function StatCard({
   icon: React.ReactNode;
 }) {
   return (
-    <SystemPanel className="p-4">
+    <div className="rounded-lg bg-[var(--surface-1)] p-4">
       <div className="flex items-center gap-1.5 mb-2">{icon}</div>
-      <div className="font-[family-name:var(--font-geist-mono)] text-3xl font-bold text-[#FBEFFA] tabular-nums">
+      <div className="font-[family-name:var(--font-geist-mono)] text-3xl font-bold text-[var(--text-primary)] tabular-nums">
         {value}
       </div>
-      <div className="font-[family-name:var(--font-rajdhani)] text-[10px] font-bold tracking-widest uppercase text-[#4A5568] mt-1">
+      <div className="font-[family-name:var(--font-rajdhani)] text-[10px] font-bold tracking-widest uppercase text-[var(--text-muted)] mt-1">
         {label}
       </div>
-    </SystemPanel>
+    </div>
   );
 }

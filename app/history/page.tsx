@@ -37,7 +37,6 @@ function getDayStatus(log: DailyLog | undefined, date: Date): DayStatus {
 
 const WEEKDAYS = ["M", "T", "W", "T", "F", "S", "S"]
 
-// Quest name mapping for day detail display
 const QUEST_NAMES: Record<string, string> = {
   fuel_vessel_1: "FUEL THE VESSEL I",
   fuel_vessel_2: "FUEL THE VESSEL II",
@@ -132,11 +131,9 @@ export default function HistoryPage() {
   const monthEnd = endOfMonth(currentMonth)
   const allDays = eachDayOfInterval({ start: monthStart, end: monthEnd })
 
-  // Monday-based offset: getDay returns 0=Sun, we want Mon=0
   const startDayOfWeek = (getDay(monthStart) + 6) % 7
   const paddingDays = Array.from({ length: startDayOfWeek }, (_, i) => i)
 
-  // Monthly summary calculations
   const today = new Date()
   const daysInPast = allDays.filter((d) => !isFutureDate(d))
   const daysTracked = days.filter((d) => d.meals_logged || d.workout_done).length
@@ -151,12 +148,12 @@ export default function HistoryPage() {
     : null
 
   return (
-    <div className="flex flex-col gap-4 p-4 max-w-lg mx-auto pt-6 pb-24">
+    <div className="flex flex-col gap-6 p-4 max-w-lg mx-auto pt-8 pb-24">
       {/* Header */}
       <motion.h1
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
-        className="text-center font-[family-name:var(--font-rajdhani)] text-lg font-bold uppercase tracking-[0.3em] text-[#4A5568]"
+        className="text-center font-[family-name:var(--font-rajdhani)] text-[11px] font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)]"
       >
         Records
       </motion.h1>
@@ -168,18 +165,18 @@ export default function HistoryPage() {
             type="button"
             whileTap={{ scale: 0.85 }}
             onClick={handlePrev}
-            className="flex h-8 w-8 items-center justify-center rounded-md bg-[#0D1117] border border-[#1A1A2E] text-[#4A5568] hover:text-[#FBEFFA] hover:border-[#1B45D7]/50 hover:shadow-[0_0_8px_rgba(27,69,215,0.3)] transition-all"
+            className="flex h-8 w-8 items-center justify-center rounded-md bg-[var(--surface-2)] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-3)] transition-all"
           >
             <ChevronLeft size={16} />
           </motion.button>
-          <span className="font-[family-name:var(--font-rajdhani)] text-sm font-bold uppercase tracking-[0.2em] text-[#FBEFFA]">
+          <span className="font-[family-name:var(--font-rajdhani)] text-sm font-bold uppercase tracking-[0.2em] text-[var(--text-primary)]">
             {format(currentMonth, "MMMM yyyy")}
           </span>
           <motion.button
             type="button"
             whileTap={{ scale: 0.85 }}
             onClick={handleNext}
-            className="flex h-8 w-8 items-center justify-center rounded-md bg-[#0D1117] border border-[#1A1A2E] text-[#4A5568] hover:text-[#FBEFFA] hover:border-[#1B45D7]/50 hover:shadow-[0_0_8px_rgba(27,69,215,0.3)] transition-all"
+            className="flex h-8 w-8 items-center justify-center rounded-md bg-[var(--surface-2)] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-3)] transition-all"
           >
             <ChevronRight size={16} />
           </motion.button>
@@ -193,7 +190,7 @@ export default function HistoryPage() {
           {WEEKDAYS.map((wd, i) => (
             <div
               key={`${wd}-${i}`}
-              className="text-center font-[family-name:var(--font-rajdhani)] text-[10px] font-bold uppercase tracking-widest text-[#4A5568] py-1"
+              className="text-center font-[family-name:var(--font-rajdhani)] text-[10px] font-bold uppercase tracking-widest text-[var(--text-muted)] py-1"
             >
               {wd}
             </div>
@@ -201,10 +198,10 @@ export default function HistoryPage() {
 
           {/* Padding cells */}
           {paddingDays.map((i) => (
-            <div key={`pad-${i}`} className="aspect-square" />
+            <div key={`pad-${i}`} className="w-10 h-10" />
           ))}
 
-          {/* Day cells */}
+          {/* Day cells — 40x40 with 4px gap */}
           {allDays.map((date) => {
             const dateStr = format(date, "yyyy-MM-dd")
             const log = days.find((d) => d.date === dateStr)
@@ -220,42 +217,48 @@ export default function HistoryPage() {
                 whileTap={!isFuture ? { scale: 0.9 } : undefined}
                 onClick={() => handleSelectDay(date)}
                 disabled={isFuture}
-                className={`relative aspect-square rounded-lg flex items-center justify-center text-sm transition-all ${
-                  // Selected state
-                  isSelected
-                    ? "border border-[#1B45D7] shadow-[0_0_12px_rgba(27,69,215,0.4)]"
-                    : isToday
-                      ? "border border-[#1B45D7]/50 shadow-[0_0_6px_rgba(27,69,215,0.2)]"
-                      : ""
+                className={`relative w-10 h-10 rounded-lg flex items-center justify-center text-sm transition-all ${
+                  // Today: filled accent bg
+                  isToday && !isSelected
+                    ? "bg-[var(--accent-blue)] text-white"
+                    : ""
                 } ${
-                  // Background based on status
-                  status === "good"
-                    ? "bg-[#1B45D7]/40"
-                    : status === "ok"
-                      ? "bg-[#0A1543]"
-                      : status === "rest"
-                        ? "bg-[#0D1117]/50"
-                        : status === "future"
-                          ? "bg-transparent"
-                          : ""
-                } ${isFuture ? "cursor-default" : "cursor-pointer hover:bg-[#0A1543]/50"}`}
+                  // Selected: accent border
+                  isSelected
+                    ? "border-2 border-[var(--accent-blue)]"
+                    : ""
+                } ${
+                  // Background based on status (not today, not selected)
+                  !isToday && !isSelected
+                    ? status === "good"
+                      ? "bg-[var(--accent-blue)]/30"
+                      : status === "ok"
+                        ? "bg-[var(--surface-2)]"
+                        : status === "rest"
+                          ? "bg-[var(--surface-1)]/50"
+                          : status === "future"
+                            ? "bg-transparent"
+                            : ""
+                    : ""
+                } ${isFuture ? "cursor-default" : "cursor-pointer hover:bg-[var(--surface-2)]"}`}
               >
                 <span
                   className={`font-[family-name:var(--font-geist-mono)] text-xs tabular-nums ${
-                    status === "good"
+                    isToday
                       ? "text-white font-semibold"
-                      : status === "future"
-                        ? "text-[#4A5568]/40"
-                        : status === "rest"
-                          ? "text-[#4A5568]/60"
-                          : "text-[#FBEFFA]"
+                      : status === "good"
+                        ? "text-[var(--text-primary)] font-semibold"
+                        : status === "future"
+                          ? "text-[var(--text-muted)]/40"
+                          : status === "rest"
+                            ? "text-[var(--text-muted)]/60"
+                            : "text-[var(--text-primary)]"
                   }`}
                 >
                   {format(date, "d")}
                 </span>
-                {/* Missed indicator — dim red dot in corner */}
                 {status === "missed" && (
-                  <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-[#D50000]/60" />
+                  <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-[var(--danger)]/60" />
                 )}
               </motion.button>
             )
@@ -267,22 +270,22 @@ export default function HistoryPage() {
       {selectedDate && (
         <SystemPanel className="p-4">
           {detailLoading ? (
-            <p className="font-[family-name:var(--font-rajdhani)] text-xs uppercase tracking-widest text-[#4A5568]">
+            <p className="font-[family-name:var(--font-rajdhani)] text-xs uppercase tracking-widest text-[var(--text-muted)]">
               Loading...
             </p>
           ) : !dayDetail?.log ? (
             <div>
-              <h3 className="font-[family-name:var(--font-rajdhani)] text-sm font-bold uppercase tracking-[0.15em] text-[#FBEFFA] mb-3">
+              <h3 className="font-[family-name:var(--font-rajdhani)] text-sm font-bold uppercase tracking-[0.15em] text-[var(--text-primary)] mb-3">
                 {format(selectedDate, "MMMM d, yyyy")}
               </h3>
-              <p className="font-[family-name:var(--font-rajdhani)] text-xs uppercase tracking-widest text-[#4A5568]">
+              <p className="font-[family-name:var(--font-rajdhani)] text-xs uppercase tracking-widest text-[var(--text-muted)]">
                 No data recorded
               </p>
             </div>
           ) : (
             <div className="flex flex-col gap-4">
               {/* Date header */}
-              <h3 className="font-[family-name:var(--font-rajdhani)] text-sm font-bold uppercase tracking-[0.15em] text-[#FBEFFA]">
+              <h3 className="font-[family-name:var(--font-rajdhani)] text-sm font-bold uppercase tracking-[0.15em] text-[var(--text-primary)]">
                 {format(selectedDate, "MMMM d, yyyy")}
               </h3>
 
@@ -290,12 +293,12 @@ export default function HistoryPage() {
               <div className="flex flex-col gap-1.5">
                 {getQuestStatus(dayDetail.log, dayDetail.meals).map((quest) => (
                   <div key={quest.name} className="flex items-center justify-between">
-                    <span className="font-[family-name:var(--font-rajdhani)] text-[11px] font-bold uppercase tracking-wider text-[#FBEFFA]/80">
+                    <span className="font-[family-name:var(--font-rajdhani)] text-[11px] font-bold uppercase tracking-wider text-[var(--text-primary)]/80">
                       {quest.name}
                     </span>
                     <span
                       className={`font-[family-name:var(--font-rajdhani)] text-[10px] font-bold uppercase tracking-widest ${
-                        quest.complete ? "text-[#059669]" : "text-[#D50000]/60"
+                        quest.complete ? "text-[var(--success)]" : "text-[var(--danger)]/60"
                       }`}
                     >
                       {quest.complete ? "COMPLETE" : "INCOMPLETE"}
@@ -304,10 +307,13 @@ export default function HistoryPage() {
                 ))}
               </div>
 
+              {/* Divider */}
+              <div className="border-t border-[var(--border-subtle)]" />
+
               {/* Meals */}
               {dayDetail.meals.length > 0 && (
                 <div>
-                  <h4 className="font-[family-name:var(--font-rajdhani)] text-[10px] font-bold uppercase tracking-widest text-[#4A5568] mb-2">
+                  <h4 className="font-[family-name:var(--font-rajdhani)] text-[10px] font-bold uppercase tracking-widest text-[var(--text-muted)] mb-2">
                     Fuel Logged
                   </h4>
                   <div className="flex flex-col gap-1.5">
@@ -317,21 +323,21 @@ export default function HistoryPage() {
                         className="flex items-center justify-between text-sm"
                       >
                         <div className="flex items-center gap-2">
-                          <span className="font-[family-name:var(--font-geist-mono)] text-[10px] text-[#1B45D7]">
+                          <span className="font-[family-name:var(--font-geist-mono)] text-[10px] text-[var(--accent-blue)]">
                             M{meal.meal_number}
                           </span>
-                          <span className="text-[#FBEFFA]/80 text-xs">
+                          <span className="text-[var(--text-primary)]/80 text-xs">
                             {meal.description}
                           </span>
                         </div>
                         <div className="flex items-center gap-2">
                           {meal.calories != null && (
-                            <span className="font-[family-name:var(--font-geist-mono)] text-[10px] tabular-nums text-[#4A5568]">
+                            <span className="font-[family-name:var(--font-geist-mono)] text-[10px] tabular-nums text-[var(--text-muted)]">
                               {meal.calories} cal
                             </span>
                           )}
                           {meal.protein_g != null && meal.protein_g > 0 && (
-                            <span className="font-[family-name:var(--font-geist-mono)] text-[10px] tabular-nums text-[#4A5568]">
+                            <span className="font-[family-name:var(--font-geist-mono)] text-[10px] tabular-nums text-[var(--text-muted)]">
                               {meal.protein_g}g
                             </span>
                           )}
@@ -342,10 +348,15 @@ export default function HistoryPage() {
                 </div>
               )}
 
+              {/* Divider */}
+              {dayDetail.meals.length > 0 && dayDetail.log.workout_done && (
+                <div className="border-t border-[var(--border-subtle)]" />
+              )}
+
               {/* Workout */}
               {dayDetail.log.workout_done && (
                 <div>
-                  <h4 className="font-[family-name:var(--font-rajdhani)] text-[10px] font-bold uppercase tracking-widest text-[#4A5568] mb-2">
+                  <h4 className="font-[family-name:var(--font-rajdhani)] text-[10px] font-bold uppercase tracking-widest text-[var(--text-muted)] mb-2">
                     Movement Executed
                   </h4>
                   {dayDetail.workouts.length > 0 ? (
@@ -355,16 +366,16 @@ export default function HistoryPage() {
                           key={w.id}
                           className="flex items-center gap-3 text-xs"
                         >
-                          <span className="font-[family-name:var(--font-rajdhani)] text-[11px] font-bold uppercase text-[#FBEFFA]/80">
+                          <span className="font-[family-name:var(--font-rajdhani)] text-[11px] font-bold uppercase text-[var(--text-primary)]/80">
                             {w.type.replace("_", " ")}
                           </span>
                           {w.duration_minutes != null && (
-                            <span className="font-[family-name:var(--font-geist-mono)] text-[10px] tabular-nums text-[#4A5568]">
+                            <span className="font-[family-name:var(--font-geist-mono)] text-[10px] tabular-nums text-[var(--text-muted)]">
                               {w.duration_minutes} min
                             </span>
                           )}
                           {w.notes && (
-                            <span className="text-[#4A5568] text-[10px] truncate">
+                            <span className="text-[var(--text-muted)] text-[10px] truncate">
                               {w.notes}
                             </span>
                           )}
@@ -372,7 +383,7 @@ export default function HistoryPage() {
                       ))}
                     </div>
                   ) : (
-                    <p className="text-xs text-[#FBEFFA]/60">
+                    <p className="text-xs text-[var(--text-primary)]/60">
                       {dayDetail.log.workout_type
                         ? `${dayDetail.log.workout_type} — ${dayDetail.log.workout_minutes || "?"} min`
                         : "Workout completed"}
@@ -383,49 +394,52 @@ export default function HistoryPage() {
 
               {/* Check-in data */}
               {(dayDetail.log.sleep_hours != null || dayDetail.log.mood != null || dayDetail.log.energy_level != null) && (
-                <div>
-                  <h4 className="font-[family-name:var(--font-rajdhani)] text-[10px] font-bold uppercase tracking-widest text-[#4A5568] mb-2">
-                    Diagnostics
-                  </h4>
-                  <div className="grid grid-cols-3 gap-3">
-                    {dayDetail.log.sleep_hours != null && (
-                      <div className="text-center">
-                        <span className="font-[family-name:var(--font-geist-mono)] text-lg font-semibold tabular-nums text-[#FBEFFA]">
-                          {dayDetail.log.sleep_hours}h
-                        </span>
-                        <p className="font-[family-name:var(--font-rajdhani)] text-[9px] font-bold uppercase tracking-widest text-[#4A5568]">
-                          Sleep
-                        </p>
-                      </div>
-                    )}
-                    {dayDetail.log.mood != null && (
-                      <div className="text-center">
-                        <span className="font-[family-name:var(--font-geist-mono)] text-lg font-semibold tabular-nums text-[#FBEFFA]">
-                          {dayDetail.log.mood}/5
-                        </span>
-                        <p className="font-[family-name:var(--font-rajdhani)] text-[9px] font-bold uppercase tracking-widest text-[#4A5568]">
-                          Mood
-                        </p>
-                      </div>
-                    )}
-                    {dayDetail.log.energy_level != null && (
-                      <div className="text-center">
-                        <span className="font-[family-name:var(--font-geist-mono)] text-lg font-semibold tabular-nums text-[#FBEFFA]">
-                          {dayDetail.log.energy_level}/5
-                        </span>
-                        <p className="font-[family-name:var(--font-rajdhani)] text-[9px] font-bold uppercase tracking-widest text-[#4A5568]">
-                          Energy
-                        </p>
-                      </div>
-                    )}
+                <>
+                  <div className="border-t border-[var(--border-subtle)]" />
+                  <div>
+                    <h4 className="font-[family-name:var(--font-rajdhani)] text-[10px] font-bold uppercase tracking-widest text-[var(--text-muted)] mb-2">
+                      Diagnostics
+                    </h4>
+                    <div className="grid grid-cols-3 gap-3">
+                      {dayDetail.log.sleep_hours != null && (
+                        <div className="text-center">
+                          <span className="font-[family-name:var(--font-geist-mono)] text-lg font-semibold tabular-nums text-[var(--text-primary)]">
+                            {dayDetail.log.sleep_hours}h
+                          </span>
+                          <p className="font-[family-name:var(--font-rajdhani)] text-[9px] font-bold uppercase tracking-widest text-[var(--text-muted)]">
+                            Sleep
+                          </p>
+                        </div>
+                      )}
+                      {dayDetail.log.mood != null && (
+                        <div className="text-center">
+                          <span className="font-[family-name:var(--font-geist-mono)] text-lg font-semibold tabular-nums text-[var(--text-primary)]">
+                            {dayDetail.log.mood}/5
+                          </span>
+                          <p className="font-[family-name:var(--font-rajdhani)] text-[9px] font-bold uppercase tracking-widest text-[var(--text-muted)]">
+                            Mood
+                          </p>
+                        </div>
+                      )}
+                      {dayDetail.log.energy_level != null && (
+                        <div className="text-center">
+                          <span className="font-[family-name:var(--font-geist-mono)] text-lg font-semibold tabular-nums text-[var(--text-primary)]">
+                            {dayDetail.log.energy_level}/5
+                          </span>
+                          <p className="font-[family-name:var(--font-rajdhani)] text-[9px] font-bold uppercase tracking-widest text-[var(--text-muted)]">
+                            Energy
+                          </p>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
+                </>
               )}
 
               {/* Late eating flag */}
               {dayDetail.log.ate_after_10pm && (
-                <div className="px-2 py-1.5 rounded bg-[#D50000]/10 border border-[#D50000]/20">
-                  <span className="font-[family-name:var(--font-rajdhani)] text-[10px] font-bold uppercase tracking-widest text-[#D50000]">
+                <div className="px-2 py-1.5 rounded bg-[var(--danger)]/10 border border-[var(--danger)]/20">
+                  <span className="font-[family-name:var(--font-rajdhani)] text-[10px] font-bold uppercase tracking-widest text-[var(--danger)]">
                     Fasting Seal Broken
                   </span>
                 </div>
@@ -434,10 +448,10 @@ export default function HistoryPage() {
               {/* Notes */}
               {dayDetail.log.notes && (
                 <div>
-                  <h4 className="font-[family-name:var(--font-rajdhani)] text-[10px] font-bold uppercase tracking-widest text-[#4A5568] mb-1">
+                  <h4 className="font-[family-name:var(--font-rajdhani)] text-[10px] font-bold uppercase tracking-widest text-[var(--text-muted)] mb-1">
                     Notes
                   </h4>
-                  <p className="text-xs text-[#FBEFFA]/60 whitespace-pre-wrap">
+                  <p className="text-xs text-[var(--text-primary)]/60 whitespace-pre-wrap">
                     {dayDetail.log.notes}
                   </p>
                 </div>
@@ -449,45 +463,45 @@ export default function HistoryPage() {
 
       {/* Monthly Summary */}
       <SystemPanel className="p-4">
-        <h3 className="font-[family-name:var(--font-rajdhani)] text-[10px] font-bold uppercase tracking-widest text-[#4A5568] mb-3">
+        <h3 className="font-[family-name:var(--font-rajdhani)] text-[10px] font-bold uppercase tracking-widest text-[var(--text-muted)] mb-3">
           Monthly Summary
         </h3>
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <span className="font-[family-name:var(--font-geist-mono)] text-xl font-semibold tabular-nums text-[#FBEFFA]">
+            <span className="font-[family-name:var(--font-geist-mono)] text-xl font-semibold tabular-nums text-[var(--text-primary)]">
               {daysTracked}
             </span>
-            <span className="font-[family-name:var(--font-geist-mono)] text-sm text-[#4A5568]">
+            <span className="font-[family-name:var(--font-geist-mono)] text-sm text-[var(--text-muted)]">
               /{daysInPast.length}
             </span>
-            <p className="font-[family-name:var(--font-rajdhani)] text-[9px] font-bold uppercase tracking-widest text-[#4A5568]">
+            <p className="font-[family-name:var(--font-rajdhani)] text-[9px] font-bold uppercase tracking-widest text-[var(--text-muted)]">
               Days Tracked
             </p>
           </div>
           <div>
-            <span className="font-[family-name:var(--font-geist-mono)] text-xl font-semibold tabular-nums text-[#FBEFFA]">
+            <span className="font-[family-name:var(--font-geist-mono)] text-xl font-semibold tabular-nums text-[var(--text-primary)]">
               {daysExercised}
             </span>
-            <p className="font-[family-name:var(--font-rajdhani)] text-[9px] font-bold uppercase tracking-widest text-[#4A5568]">
+            <p className="font-[family-name:var(--font-rajdhani)] text-[9px] font-bold uppercase tracking-widest text-[var(--text-muted)]">
               Days Exercised
             </p>
           </div>
           {avgCalories != null && (
             <div>
-              <span className="font-[family-name:var(--font-geist-mono)] text-xl font-semibold tabular-nums text-[#FBEFFA]">
+              <span className="font-[family-name:var(--font-geist-mono)] text-xl font-semibold tabular-nums text-[var(--text-primary)]">
                 {avgCalories}
               </span>
-              <p className="font-[family-name:var(--font-rajdhani)] text-[9px] font-bold uppercase tracking-widest text-[#4A5568]">
+              <p className="font-[family-name:var(--font-rajdhani)] text-[9px] font-bold uppercase tracking-widest text-[var(--text-muted)]">
                 Avg Calories
               </p>
             </div>
           )}
           {avgProtein != null && (
             <div>
-              <span className="font-[family-name:var(--font-geist-mono)] text-xl font-semibold tabular-nums text-[#FBEFFA]">
+              <span className="font-[family-name:var(--font-geist-mono)] text-xl font-semibold tabular-nums text-[var(--text-primary)]">
                 {avgProtein}g
               </span>
-              <p className="font-[family-name:var(--font-rajdhani)] text-[9px] font-bold uppercase tracking-widest text-[#4A5568]">
+              <p className="font-[family-name:var(--font-rajdhani)] text-[9px] font-bold uppercase tracking-widest text-[var(--text-muted)]">
                 Avg Protein
               </p>
             </div>

@@ -24,43 +24,47 @@ export function QuestList({ quests }: QuestListProps) {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       {/* Daily quests */}
       <div className="space-y-2">
         <div className="flex items-baseline justify-between px-1">
-          <h2 className="font-[family-name:var(--font-rajdhani)] text-xs font-bold uppercase tracking-widest text-[#4A5568]">
+          <h2 className="font-[family-name:var(--font-rajdhani)] text-[11px] font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)]">
             DAILY PROTOCOLS
           </h2>
-          <span className="font-[family-name:var(--font-geist-mono)] text-xs tabular-nums text-[#4A5568]">
-            {completedCount}/{daily.length} COMPLETE
+          <span className="font-[family-name:var(--font-geist-mono)] text-[11px] tabular-nums text-[var(--text-muted)]">
+            {completedCount}/{daily.length}
           </span>
         </div>
-        {daily.map((quest, i) => (
-          <QuestCard
-            key={quest.id}
-            quest={quest}
-            index={i}
-            isFirstIncomplete={isFirstIncomplete(quest)}
-          />
-        ))}
+        <div className="space-y-2">
+          {daily.map((quest, i) => (
+            <QuestCard
+              key={quest.id}
+              quest={quest}
+              index={i}
+              isFirstIncomplete={isFirstIncomplete(quest)}
+            />
+          ))}
+        </div>
       </div>
 
       {/* Divider */}
-      <div className="border-t border-[#1B45D7]/10" />
+      <div className="border-t border-[var(--border-subtle)]" />
 
       {/* Bonus quests */}
       <div className="space-y-2">
-        <h2 className="px-1 font-[family-name:var(--font-rajdhani)] text-xs font-bold uppercase tracking-widest text-[#4A5568]">
+        <h2 className="px-1 font-[family-name:var(--font-rajdhani)] text-[11px] font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)]">
           BONUS OBJECTIVES
         </h2>
-        {bonus.map((quest, i) => (
-          <QuestCard
-            key={quest.id}
-            quest={quest}
-            index={daily.length + i}
-            isFirstIncomplete={isFirstIncomplete(quest)}
-          />
-        ))}
+        <div className="space-y-2">
+          {bonus.map((quest, i) => (
+            <QuestCard
+              key={quest.id}
+              quest={quest}
+              index={daily.length + i}
+              isFirstIncomplete={isFirstIncomplete(quest)}
+            />
+          ))}
+        </div>
       </div>
     </div>
   );

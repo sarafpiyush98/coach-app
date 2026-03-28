@@ -3,7 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import { Rajdhani } from "next/font/google";
 import { ServiceWorkerRegistration } from "@/components/ServiceWorkerRegistration";
 import { BottomNav } from "@/components/BottomNav";
-import { ParticlesBg } from "@/components/particles-bg";
+// import { ParticlesBg } from "@/components/particles-bg";
 import { SystemToastContainer } from "@/components/ui/system-toast";
 import { MuteToggle } from "@/components/mute-toggle";
 import "./globals.css";
@@ -57,7 +57,7 @@ export default function RootLayout({
         <ServiceWorkerRegistration />
         <SystemToastContainer />
         <MuteToggle />
-        <ParticlesBg />
+        {/* <ParticlesBg /> */}
         <main className="relative z-10 flex-1 pb-20">{children}</main>
         <BottomNav />
       </body>

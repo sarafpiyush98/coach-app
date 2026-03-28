@@ -118,6 +118,15 @@ export default function CommandCenter() {
         </p>
       </motion.div>
 
+      {/* Missed Yesterday Warning */}
+      {streaks.missedYesterday && (
+        <SystemPanel variant="danger" className="px-4 py-3">
+          <p className="font-[family-name:var(--font-rajdhani)] text-xs font-bold uppercase tracking-wider text-[#D50000]">
+            Yesterday: Protocol incomplete. Today determines the streak.
+          </p>
+        </SystemPanel>
+      )}
+
       {/* Daily Progress */}
       <DailyProgress
         questsCompleted={completedDaily}

@@ -53,6 +53,7 @@ function RatingPips({
 export default function CheckinPage() {
   const router = useRouter()
   const addToast = useToastStore((s) => s.add)
+  const [weightKg, setWeightKg] = useState("")
   const [sleepHours, setSleepHours] = useState("")
   const [sleepQuality, setSleepQuality] = useState<number | null>(null)
   const [energyLevel, setEnergyLevel] = useState<number | null>(null)
@@ -75,12 +76,13 @@ export default function CheckinPage() {
           energy_level: energyLevel,
           mood,
           ate_after_10pm: ateAfter10pm,
+          weight_kg: weightKg ? Number(weightKg) : null,
           notes: notes.trim() || null,
         }),
       })
       playQuestComplete()
       addToast({ title: "SYSTEM DIAGNOSTIC — COMPLETE", variant: "success" })
-      router.push("/")
+      setTimeout(() => router.push("/"), 1000)
     } catch {
       setSaving(false)
     }
@@ -103,6 +105,29 @@ export default function CheckinPage() {
           {format(new Date(), "EEEE, MMM d")}
         </p>
       </div>
+
+      {/* Weight */}
+      <SystemPanel className="p-4">
+        <label className="block font-[family-name:var(--font-rajdhani)] text-[10px] font-bold uppercase tracking-widest text-[#4A5568] mb-2">
+          Weigh-In (optional)
+        </label>
+        <div className="relative">
+          <input
+            type="number"
+            inputMode="decimal"
+            step={0.1}
+            min={0}
+            max={300}
+            placeholder="120.0"
+            value={weightKg}
+            onChange={(e) => setWeightKg(e.target.value)}
+            className="w-full h-11 px-3 pr-10 rounded-lg bg-[#0D1117] border border-[#1A1A2E] text-[#FBEFFA] text-base font-[family-name:var(--font-geist-mono)] placeholder:text-[#4A5568]/50 focus:border-[#1B45D7] focus:outline-none transition-colors"
+          />
+          <span className="absolute right-3 top-1/2 -translate-y-1/2 font-[family-name:var(--font-rajdhani)] text-[10px] font-bold uppercase text-[#4A5568]">
+            kg
+          </span>
+        </div>
+      </SystemPanel>
 
       {/* Sleep hours */}
       <SystemPanel className="p-4">

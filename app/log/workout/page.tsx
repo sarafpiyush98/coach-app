@@ -98,7 +98,7 @@ export default function LogWorkoutPage() {
       })
       playQuestComplete()
       addToast({ title: "MOVEMENT PROTOCOL — COMPLETE", variant: "success" })
-      router.push("/")
+      setTimeout(() => router.push("/"), 1000)
     } catch {
       setSaving(false)
     }

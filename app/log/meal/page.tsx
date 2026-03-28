@@ -41,7 +41,7 @@ export default function LogMealPage() {
       })
       playQuestComplete()
       addToast({ title: "FUEL THE VESSEL — LOGGED", variant: "success" })
-      router.push("/")
+      setTimeout(() => router.push("/"), 1000)
     } catch {
       setSaving(false)
     }

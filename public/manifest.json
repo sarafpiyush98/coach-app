@@ -1,11 +1,11 @@
 {
-  "name": "Coach - Fitness Tracker",
-  "short_name": "Coach",
-  "description": "Personal fitness tracking app",
+  "name": "THE SYSTEM",
+  "short_name": "SYSTEM",
+  "description": "The System assigns. The System records.",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#030712",
-  "theme_color": "#F59E0B",
+  "background_color": "#0C0C0F",
+  "theme_color": "#0C0C0F",
   "orientation": "portrait",
   "icons": [
     {

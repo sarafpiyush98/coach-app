@@ -6,15 +6,16 @@ import {
   endOfMonth,
   eachDayOfInterval,
   format,
-  isSameMonth,
   isSameDay,
   addMonths,
   subMonths,
   getDay,
+  isSunday,
+  isFuture as isFutureDate,
 } from "date-fns"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
+import { motion } from "framer-motion"
+import { ChevronLeft, ChevronRight } from "lucide-react"
+import { SystemPanel } from "@/components/ui/system-panel"
 import type { DailyLog, Meal, Workout } from "@/lib/types"
 
 interface DayDetail {
@@ -23,23 +24,39 @@ interface DayDetail {
   workouts: Workout[]
 }
 
-type DayStatus = "good" | "ok" | "missed" | "none"
+type DayStatus = "good" | "ok" | "missed" | "rest" | "future" | "none"
 
-function getDayStatus(log: DailyLog | undefined): DayStatus {
+function getDayStatus(log: DailyLog | undefined, date: Date): DayStatus {
+  if (isFutureDate(date)) return "future"
+  if (isSunday(date) && !log) return "rest"
   if (!log) return "none"
   if (log.meals_logged && log.workout_done) return "good"
   if (log.meals_logged) return "ok"
   return "missed"
 }
 
-const STATUS_DOT: Record<DayStatus, string> = {
-  good: "bg-emerald-500",
-  ok: "bg-amber-500",
-  missed: "bg-red-500/60",
-  none: "",
+const WEEKDAYS = ["M", "T", "W", "T", "F", "S", "S"]
+
+// Quest name mapping for day detail display
+const QUEST_NAMES: Record<string, string> = {
+  fuel_vessel_1: "FUEL THE VESSEL I",
+  fuel_vessel_2: "FUEL THE VESSEL II",
+  fuel_vessel_3: "FUEL THE VESSEL III",
+  movement_protocol: "MOVEMENT PROTOCOL",
+  system_diagnostic: "SYSTEM DIAGNOSTIC",
+  fasting_seal: "FASTING SEAL",
 }
 
-const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+function getQuestStatus(log: DailyLog, meals: Meal[]) {
+  const quests: { name: string; complete: boolean }[] = []
+  quests.push({ name: QUEST_NAMES.fuel_vessel_1, complete: meals.some((m) => m.meal_number === 1) })
+  quests.push({ name: QUEST_NAMES.fuel_vessel_2, complete: meals.some((m) => m.meal_number === 2) })
+  quests.push({ name: QUEST_NAMES.fuel_vessel_3, complete: meals.some((m) => m.meal_number === 3) })
+  quests.push({ name: QUEST_NAMES.movement_protocol, complete: log.workout_done === true })
+  quests.push({ name: QUEST_NAMES.system_diagnostic, complete: log.sleep_hours != null })
+  quests.push({ name: QUEST_NAMES.fasting_seal, complete: log.ate_after_10pm === false })
+  return quests
+}
 
 export default function HistoryPage() {
   const [currentMonth, setCurrentMonth] = useState(new Date())
@@ -78,6 +95,7 @@ export default function HistoryPage() {
   }
 
   async function handleSelectDay(date: Date) {
+    if (isFutureDate(date)) return
     if (selectedDate && isSameDay(selectedDate, date)) {
       setSelectedDate(null)
       setDayDetail(null)
@@ -118,276 +136,364 @@ export default function HistoryPage() {
   const startDayOfWeek = (getDay(monthStart) + 6) % 7
   const paddingDays = Array.from({ length: startDayOfWeek }, (_, i) => i)
 
+  // Monthly summary calculations
+  const today = new Date()
+  const daysInPast = allDays.filter((d) => !isFutureDate(d))
+  const daysTracked = days.filter((d) => d.meals_logged || d.workout_done).length
+  const daysExercised = days.filter((d) => d.workout_done).length
+  const daysWithCalories = days.filter((d) => d.calories_total != null && d.calories_total > 0)
+  const avgCalories = daysWithCalories.length > 0
+    ? Math.round(daysWithCalories.reduce((sum, d) => sum + (d.calories_total || 0), 0) / daysWithCalories.length)
+    : null
+  const daysWithProtein = days.filter((d) => d.protein_g != null && d.protein_g > 0)
+  const avgProtein = daysWithProtein.length > 0
+    ? Math.round(daysWithProtein.reduce((sum, d) => sum + (d.protein_g || 0), 0) / daysWithProtein.length)
+    : null
+
   return (
-    <div className="flex flex-col gap-4 p-4 max-w-lg mx-auto pt-6">
-      {/* Month header with navigation */}
-      <div className="flex items-center justify-between">
-        <Button variant="ghost" size="icon" onClick={handlePrev}>
-          <span className="text-lg">&lsaquo;</span>
-        </Button>
-        <h1 className="text-xl font-semibold text-foreground">
-          {format(currentMonth, "MMMM yyyy")}
-        </h1>
-        <Button variant="ghost" size="icon" onClick={handleNext}>
-          <span className="text-lg">&rsaquo;</span>
-        </Button>
-      </div>
+    <div className="flex flex-col gap-4 p-4 max-w-lg mx-auto pt-6 pb-24">
+      {/* Header */}
+      <motion.h1
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        className="text-center font-[family-name:var(--font-rajdhani)] text-lg font-bold uppercase tracking-[0.3em] text-[#4A5568]"
+      >
+        Records
+      </motion.h1>
 
-      {/* Legend */}
-      <div className="flex gap-3 text-xs text-muted-foreground">
-        <span className="flex items-center gap-1">
-          <span className="inline-block w-2 h-2 rounded-full bg-emerald-500" />
-          Full day
-        </span>
-        <span className="flex items-center gap-1">
-          <span className="inline-block w-2 h-2 rounded-full bg-amber-500" />
-          Logged
-        </span>
-        <span className="flex items-center gap-1">
-          <span className="inline-block w-2 h-2 rounded-full bg-red-500/60" />
-          Missed
-        </span>
-      </div>
-
-      {/* Calendar grid */}
-      <div className="grid grid-cols-7 gap-1">
-        {/* Weekday headers */}
-        {WEEKDAYS.map((wd) => (
-          <div
-            key={wd}
-            className="text-center text-[10px] text-muted-foreground font-medium py-1"
+      {/* Month Navigator */}
+      <SystemPanel className="p-3">
+        <div className="flex items-center justify-between">
+          <motion.button
+            type="button"
+            whileTap={{ scale: 0.85 }}
+            onClick={handlePrev}
+            className="flex h-8 w-8 items-center justify-center rounded-md bg-[#0D1117] border border-[#1A1A2E] text-[#4A5568] hover:text-[#FBEFFA] hover:border-[#1B45D7]/50 hover:shadow-[0_0_8px_rgba(27,69,215,0.3)] transition-all"
           >
-            {wd}
-          </div>
-        ))}
+            <ChevronLeft size={16} />
+          </motion.button>
+          <span className="font-[family-name:var(--font-rajdhani)] text-sm font-bold uppercase tracking-[0.2em] text-[#FBEFFA]">
+            {format(currentMonth, "MMMM yyyy")}
+          </span>
+          <motion.button
+            type="button"
+            whileTap={{ scale: 0.85 }}
+            onClick={handleNext}
+            className="flex h-8 w-8 items-center justify-center rounded-md bg-[#0D1117] border border-[#1A1A2E] text-[#4A5568] hover:text-[#FBEFFA] hover:border-[#1B45D7]/50 hover:shadow-[0_0_8px_rgba(27,69,215,0.3)] transition-all"
+          >
+            <ChevronRight size={16} />
+          </motion.button>
+        </div>
+      </SystemPanel>
 
-        {/* Padding cells */}
-        {paddingDays.map((i) => (
-          <div key={`pad-${i}`} className="aspect-square" />
-        ))}
-
-        {/* Day cells */}
-        {allDays.map((date) => {
-          const dateStr = format(date, "yyyy-MM-dd")
-          const log = days.find((d) => d.date === dateStr)
-          const status = getDayStatus(log)
-          const isToday = isSameDay(date, new Date())
-          const isSelected = selectedDate && isSameDay(date, selectedDate)
-          const inMonth = isSameMonth(date, currentMonth)
-          const isFuture = date > new Date()
-
-          return (
-            <button
-              key={dateStr}
-              type="button"
-              onClick={() => !isFuture && handleSelectDay(date)}
-              disabled={isFuture}
-              className={`aspect-square rounded-lg flex flex-col items-center justify-center gap-0.5 text-sm transition-colors ${
-                isSelected
-                  ? "ring-2 ring-amber-500 bg-amber-500/10"
-                  : isToday
-                    ? "bg-card border border-amber-500/30"
-                    : "hover:bg-card/50"
-              } ${!inMonth || isFuture ? "opacity-30" : ""} ${
-                isFuture ? "cursor-default" : "cursor-pointer"
-              }`}
+      {/* Calendar Grid */}
+      <SystemPanel className="p-4">
+        <div className="grid grid-cols-7 gap-1">
+          {/* Day-of-week headers */}
+          {WEEKDAYS.map((wd, i) => (
+            <div
+              key={`${wd}-${i}`}
+              className="text-center font-[family-name:var(--font-rajdhani)] text-[10px] font-bold uppercase tracking-widest text-[#4A5568] py-1"
             >
-              <span
-                className={`tabular-nums ${
-                  isToday ? "text-amber-400 font-semibold" : "text-foreground"
-                }`}
+              {wd}
+            </div>
+          ))}
+
+          {/* Padding cells */}
+          {paddingDays.map((i) => (
+            <div key={`pad-${i}`} className="aspect-square" />
+          ))}
+
+          {/* Day cells */}
+          {allDays.map((date) => {
+            const dateStr = format(date, "yyyy-MM-dd")
+            const log = days.find((d) => d.date === dateStr)
+            const status = getDayStatus(log, date)
+            const isToday = isSameDay(date, today)
+            const isSelected = selectedDate && isSameDay(date, selectedDate)
+            const isFuture = isFutureDate(date)
+
+            return (
+              <motion.button
+                key={dateStr}
+                type="button"
+                whileTap={!isFuture ? { scale: 0.9 } : undefined}
+                onClick={() => handleSelectDay(date)}
+                disabled={isFuture}
+                className={`relative aspect-square rounded-lg flex items-center justify-center text-sm transition-all ${
+                  // Selected state
+                  isSelected
+                    ? "border border-[#1B45D7] shadow-[0_0_12px_rgba(27,69,215,0.4)]"
+                    : isToday
+                      ? "border border-[#1B45D7]/50 shadow-[0_0_6px_rgba(27,69,215,0.2)]"
+                      : ""
+                } ${
+                  // Background based on status
+                  status === "good"
+                    ? "bg-[#1B45D7]/40"
+                    : status === "ok"
+                      ? "bg-[#0A1543]"
+                      : status === "rest"
+                        ? "bg-[#0D1117]/50"
+                        : status === "future"
+                          ? "bg-transparent"
+                          : ""
+                } ${isFuture ? "cursor-default" : "cursor-pointer hover:bg-[#0A1543]/50"}`}
               >
-                {format(date, "d")}
-              </span>
-              {status !== "none" && !isFuture && (
                 <span
-                  className={`w-1.5 h-1.5 rounded-full ${STATUS_DOT[status]}`}
-                />
-              )}
-            </button>
-          )
-        })}
-      </div>
+                  className={`font-[family-name:var(--font-geist-mono)] text-xs tabular-nums ${
+                    status === "good"
+                      ? "text-white font-semibold"
+                      : status === "future"
+                        ? "text-[#4A5568]/40"
+                        : status === "rest"
+                          ? "text-[#4A5568]/60"
+                          : "text-[#FBEFFA]"
+                  }`}
+                >
+                  {format(date, "d")}
+                </span>
+                {/* Missed indicator — dim red dot in corner */}
+                {status === "missed" && (
+                  <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-[#D50000]/60" />
+                )}
+              </motion.button>
+            )
+          })}
+        </div>
+      </SystemPanel>
 
-      {/* Expanded day detail */}
+      {/* Day Detail */}
       {selectedDate && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">
-              {format(selectedDate, "EEEE, MMM d")}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {loading || detailLoading ? (
-              <p className="text-sm text-muted-foreground">Loading...</p>
-            ) : !dayDetail?.log ? (
-              <p className="text-sm text-muted-foreground">
-                No data logged for this day.
+        <SystemPanel className="p-4">
+          {detailLoading ? (
+            <p className="font-[family-name:var(--font-rajdhani)] text-xs uppercase tracking-widest text-[#4A5568]">
+              Loading...
+            </p>
+          ) : !dayDetail?.log ? (
+            <div>
+              <h3 className="font-[family-name:var(--font-rajdhani)] text-sm font-bold uppercase tracking-[0.15em] text-[#FBEFFA] mb-3">
+                {format(selectedDate, "MMMM d, yyyy")}
+              </h3>
+              <p className="font-[family-name:var(--font-rajdhani)] text-xs uppercase tracking-widest text-[#4A5568]">
+                No data recorded
               </p>
-            ) : (
-              <div className="flex flex-col gap-4">
-                {/* Quick stats row */}
-                <div className="grid grid-cols-3 gap-3">
-                  {dayDetail.log.calories_total != null && (
-                    <div className="text-center">
-                      <span className="text-lg font-bold text-amber-400 tabular-nums">
-                        {dayDetail.log.calories_total}
-                      </span>
-                      <p className="text-[10px] text-muted-foreground">
-                        calories
-                      </p>
-                    </div>
-                  )}
-                  {dayDetail.log.protein_g != null && (
-                    <div className="text-center">
-                      <span className="text-lg font-bold text-foreground tabular-nums">
-                        {dayDetail.log.protein_g}g
-                      </span>
-                      <p className="text-[10px] text-muted-foreground">
-                        protein
-                      </p>
-                    </div>
-                  )}
-                  {dayDetail.log.weight_kg != null && (
-                    <div className="text-center">
-                      <span className="text-lg font-bold text-foreground tabular-nums">
-                        {dayDetail.log.weight_kg}
-                      </span>
-                      <p className="text-[10px] text-muted-foreground">kg</p>
-                    </div>
-                  )}
-                </div>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-4">
+              {/* Date header */}
+              <h3 className="font-[family-name:var(--font-rajdhani)] text-sm font-bold uppercase tracking-[0.15em] text-[#FBEFFA]">
+                {format(selectedDate, "MMMM d, yyyy")}
+              </h3>
 
-                {/* Meals */}
-                {dayDetail.meals.length > 0 && (
-                  <div>
-                    <h4 className="text-xs font-medium text-muted-foreground mb-2">
-                      Meals
-                    </h4>
-                    <div className="flex flex-col gap-2">
-                      {dayDetail.meals.map((meal) => (
-                        <div
-                          key={meal.id}
-                          className="flex items-center justify-between text-sm"
-                        >
-                          <div className="flex items-center gap-2">
-                            <Badge variant="secondary" className="text-[10px]">
-                              M{meal.meal_number}
-                            </Badge>
-                            <span className="text-foreground">
-                              {meal.description}
-                            </span>
-                          </div>
+              {/* Quest completion status */}
+              <div className="flex flex-col gap-1.5">
+                {getQuestStatus(dayDetail.log, dayDetail.meals).map((quest) => (
+                  <div key={quest.name} className="flex items-center justify-between">
+                    <span className="font-[family-name:var(--font-rajdhani)] text-[11px] font-bold uppercase tracking-wider text-[#FBEFFA]/80">
+                      {quest.name}
+                    </span>
+                    <span
+                      className={`font-[family-name:var(--font-rajdhani)] text-[10px] font-bold uppercase tracking-widest ${
+                        quest.complete ? "text-[#059669]" : "text-[#D50000]/60"
+                      }`}
+                    >
+                      {quest.complete ? "COMPLETE" : "INCOMPLETE"}
+                    </span>
+                  </div>
+                ))}
+              </div>
+
+              {/* Meals */}
+              {dayDetail.meals.length > 0 && (
+                <div>
+                  <h4 className="font-[family-name:var(--font-rajdhani)] text-[10px] font-bold uppercase tracking-widest text-[#4A5568] mb-2">
+                    Fuel Logged
+                  </h4>
+                  <div className="flex flex-col gap-1.5">
+                    {dayDetail.meals.map((meal) => (
+                      <div
+                        key={meal.id}
+                        className="flex items-center justify-between text-sm"
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className="font-[family-name:var(--font-geist-mono)] text-[10px] text-[#1B45D7]">
+                            M{meal.meal_number}
+                          </span>
+                          <span className="text-[#FBEFFA]/80 text-xs">
+                            {meal.description}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
                           {meal.calories != null && (
-                            <span className="text-muted-foreground tabular-nums text-xs">
+                            <span className="font-[family-name:var(--font-geist-mono)] text-[10px] tabular-nums text-[#4A5568]">
                               {meal.calories} cal
+                            </span>
+                          )}
+                          {meal.protein_g != null && meal.protein_g > 0 && (
+                            <span className="font-[family-name:var(--font-geist-mono)] text-[10px] tabular-nums text-[#4A5568]">
+                              {meal.protein_g}g
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Workout */}
+              {dayDetail.log.workout_done && (
+                <div>
+                  <h4 className="font-[family-name:var(--font-rajdhani)] text-[10px] font-bold uppercase tracking-widest text-[#4A5568] mb-2">
+                    Movement Executed
+                  </h4>
+                  {dayDetail.workouts.length > 0 ? (
+                    <div className="flex flex-col gap-1">
+                      {dayDetail.workouts.map((w) => (
+                        <div
+                          key={w.id}
+                          className="flex items-center gap-3 text-xs"
+                        >
+                          <span className="font-[family-name:var(--font-rajdhani)] text-[11px] font-bold uppercase text-[#FBEFFA]/80">
+                            {w.type.replace("_", " ")}
+                          </span>
+                          {w.duration_minutes != null && (
+                            <span className="font-[family-name:var(--font-geist-mono)] text-[10px] tabular-nums text-[#4A5568]">
+                              {w.duration_minutes} min
+                            </span>
+                          )}
+                          {w.notes && (
+                            <span className="text-[#4A5568] text-[10px] truncate">
+                              {w.notes}
                             </span>
                           )}
                         </div>
                       ))}
                     </div>
-                  </div>
-                )}
+                  ) : (
+                    <p className="text-xs text-[#FBEFFA]/60">
+                      {dayDetail.log.workout_type
+                        ? `${dayDetail.log.workout_type} — ${dayDetail.log.workout_minutes || "?"} min`
+                        : "Workout completed"}
+                    </p>
+                  )}
+                </div>
+              )}
 
-                {/* Workout */}
-                {dayDetail.log.workout_done && (
-                  <div>
-                    <h4 className="text-xs font-medium text-muted-foreground mb-2">
-                      Workout
-                    </h4>
-                    {dayDetail.workouts.length > 0 ? (
-                      <div className="flex flex-col gap-1.5">
-                        {dayDetail.workouts.map((w) => (
-                          <div
-                            key={w.id}
-                            className="flex items-center gap-2 text-sm"
-                          >
-                            <Badge variant="outline" className="text-[10px] capitalize">
-                              {w.type.replace("_", " ")}
-                            </Badge>
-                            {w.duration_minutes != null && (
-                              <span className="text-muted-foreground text-xs tabular-nums">
-                                {w.duration_minutes} min
-                              </span>
-                            )}
-                            {w.notes && (
-                              <span className="text-muted-foreground text-xs truncate">
-                                {w.notes}
-                              </span>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="text-sm text-foreground">
-                        {dayDetail.log.workout_type
-                          ? `${dayDetail.log.workout_type} - ${dayDetail.log.workout_minutes || "?"} min`
-                          : "Workout completed"}
-                      </p>
-                    )}
-                  </div>
-                )}
-
-                {/* Sleep + mood row */}
-                {(dayDetail.log.sleep_hours != null ||
-                  dayDetail.log.mood != null) && (
-                  <div className="grid grid-cols-2 gap-3">
+              {/* Check-in data */}
+              {(dayDetail.log.sleep_hours != null || dayDetail.log.mood != null || dayDetail.log.energy_level != null) && (
+                <div>
+                  <h4 className="font-[family-name:var(--font-rajdhani)] text-[10px] font-bold uppercase tracking-widest text-[#4A5568] mb-2">
+                    Diagnostics
+                  </h4>
+                  <div className="grid grid-cols-3 gap-3">
                     {dayDetail.log.sleep_hours != null && (
-                      <div>
-                        <h4 className="text-xs font-medium text-muted-foreground mb-1">
-                          Sleep
-                        </h4>
-                        <span className="text-sm text-foreground tabular-nums">
+                      <div className="text-center">
+                        <span className="font-[family-name:var(--font-geist-mono)] text-lg font-semibold tabular-nums text-[#FBEFFA]">
                           {dayDetail.log.sleep_hours}h
                         </span>
-                        {dayDetail.log.sleep_quality != null && (
-                          <span className="text-muted-foreground text-xs ml-1">
-                            ({dayDetail.log.sleep_quality}/5)
-                          </span>
-                        )}
+                        <p className="font-[family-name:var(--font-rajdhani)] text-[9px] font-bold uppercase tracking-widest text-[#4A5568]">
+                          Sleep
+                        </p>
                       </div>
                     )}
                     {dayDetail.log.mood != null && (
-                      <div>
-                        <h4 className="text-xs font-medium text-muted-foreground mb-1">
-                          Mood
-                        </h4>
-                        <span className="text-sm text-foreground">
+                      <div className="text-center">
+                        <span className="font-[family-name:var(--font-geist-mono)] text-lg font-semibold tabular-nums text-[#FBEFFA]">
                           {dayDetail.log.mood}/5
                         </span>
-                        {dayDetail.log.energy_level != null && (
-                          <span className="text-muted-foreground text-xs ml-2">
-                            Energy: {dayDetail.log.energy_level}/5
-                          </span>
-                        )}
+                        <p className="font-[family-name:var(--font-rajdhani)] text-[9px] font-bold uppercase tracking-widest text-[#4A5568]">
+                          Mood
+                        </p>
+                      </div>
+                    )}
+                    {dayDetail.log.energy_level != null && (
+                      <div className="text-center">
+                        <span className="font-[family-name:var(--font-geist-mono)] text-lg font-semibold tabular-nums text-[#FBEFFA]">
+                          {dayDetail.log.energy_level}/5
+                        </span>
+                        <p className="font-[family-name:var(--font-rajdhani)] text-[9px] font-bold uppercase tracking-widest text-[#4A5568]">
+                          Energy
+                        </p>
                       </div>
                     )}
                   </div>
-                )}
+                </div>
+              )}
 
-                {/* Late eating flag */}
-                {dayDetail.log.ate_after_10pm && (
-                  <Badge variant="destructive" className="w-fit text-xs">
-                    Ate after 10 PM
-                  </Badge>
-                )}
+              {/* Late eating flag */}
+              {dayDetail.log.ate_after_10pm && (
+                <div className="px-2 py-1.5 rounded bg-[#D50000]/10 border border-[#D50000]/20">
+                  <span className="font-[family-name:var(--font-rajdhani)] text-[10px] font-bold uppercase tracking-widest text-[#D50000]">
+                    Fasting Seal Broken
+                  </span>
+                </div>
+              )}
 
-                {/* Notes */}
-                {dayDetail.log.notes && (
-                  <div>
-                    <h4 className="text-xs font-medium text-muted-foreground mb-1">
-                      Notes
-                    </h4>
-                    <p className="text-sm text-foreground whitespace-pre-wrap">
-                      {dayDetail.log.notes}
-                    </p>
-                  </div>
-                )}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+              {/* Notes */}
+              {dayDetail.log.notes && (
+                <div>
+                  <h4 className="font-[family-name:var(--font-rajdhani)] text-[10px] font-bold uppercase tracking-widest text-[#4A5568] mb-1">
+                    Notes
+                  </h4>
+                  <p className="text-xs text-[#FBEFFA]/60 whitespace-pre-wrap">
+                    {dayDetail.log.notes}
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+        </SystemPanel>
       )}
+
+      {/* Monthly Summary */}
+      <SystemPanel className="p-4">
+        <h3 className="font-[family-name:var(--font-rajdhani)] text-[10px] font-bold uppercase tracking-widest text-[#4A5568] mb-3">
+          Monthly Summary
+        </h3>
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <span className="font-[family-name:var(--font-geist-mono)] text-xl font-semibold tabular-nums text-[#FBEFFA]">
+              {daysTracked}
+            </span>
+            <span className="font-[family-name:var(--font-geist-mono)] text-sm text-[#4A5568]">
+              /{daysInPast.length}
+            </span>
+            <p className="font-[family-name:var(--font-rajdhani)] text-[9px] font-bold uppercase tracking-widest text-[#4A5568]">
+              Days Tracked
+            </p>
+          </div>
+          <div>
+            <span className="font-[family-name:var(--font-geist-mono)] text-xl font-semibold tabular-nums text-[#FBEFFA]">
+              {daysExercised}
+            </span>
+            <p className="font-[family-name:var(--font-rajdhani)] text-[9px] font-bold uppercase tracking-widest text-[#4A5568]">
+              Days Exercised
+            </p>
+          </div>
+          {avgCalories != null && (
+            <div>
+              <span className="font-[family-name:var(--font-geist-mono)] text-xl font-semibold tabular-nums text-[#FBEFFA]">
+                {avgCalories}
+              </span>
+              <p className="font-[family-name:var(--font-rajdhani)] text-[9px] font-bold uppercase tracking-widest text-[#4A5568]">
+                Avg Calories
+              </p>
+            </div>
+          )}
+          {avgProtein != null && (
+            <div>
+              <span className="font-[family-name:var(--font-geist-mono)] text-xl font-semibold tabular-nums text-[#FBEFFA]">
+                {avgProtein}g
+              </span>
+              <p className="font-[family-name:var(--font-rajdhani)] text-[9px] font-bold uppercase tracking-widest text-[#4A5568]">
+                Avg Protein
+              </p>
+            </div>
+          )}
+        </div>
+      </SystemPanel>
     </div>
   )
 }

@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabase";
+import { db } from "@/lib/supabase-untyped";
 import { format, subDays } from "date-fns";
 import { calculateStreaks, getStreakMessage } from "@/lib/streaks";
 import { getDailyQuests, getQuestCompletionPercent } from "@/lib/quests";
@@ -24,7 +25,7 @@ export async function GET() {
   const today = format(new Date(), "yyyy-MM-dd");
   const ninetyDaysAgo = format(subDays(new Date(), 90), "yyyy-MM-dd");
 
-  const [dailyLogResult, mealsResult, milestonesResult, streakLogsResult, profileRes] =
+  const [dailyLogResult, mealsResult, milestonesResult, streakLogsResult, profileRes, prescriptionRes] =
     await Promise.all([
       supabase
         .from("daily_log")
@@ -47,6 +48,11 @@ export async function GET() {
         .lte("date", today)
         .order("date", { ascending: false }),
       supabase.from("player_profile").select("*").limit(1).single(),
+      db
+        .from("prescribed_workouts")
+        .select("type, is_deload, completed")
+        .eq("date", today)
+        .maybeSingle(),
     ]);
 
   const errors = [
@@ -99,6 +105,16 @@ export async function GET() {
     .reduce((sum, q) => sum + q.xpReward, 0);
   const todayXp = Math.round(todayBaseXp * comboMultiplier * loot.multiplier);
 
+  // Workout prescription
+  const todayPrescription = prescriptionRes.data;
+  const workoutPrescription = todayPrescription
+    ? {
+        type: todayPrescription.type as string,
+        isDeload: todayPrescription.is_deload as boolean,
+        completed: todayPrescription.completed as boolean,
+      }
+    : null;
+
   return Response.json({
     data: {
       dailyLog,
@@ -107,6 +123,7 @@ export async function GET() {
       milestones: milestonesResult.data ?? [],
       quests,
       questCompletionPercent,
+      workoutPrescription,
       gamification: {
         level: levelInfo.level,
         levelProgress: levelInfo.progress,

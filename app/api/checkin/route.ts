@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabase";
+import { recalculateAndWriteXP } from "@/lib/xp-engine";
 import type { DailyLog } from "@/lib/types";
 
 export async function POST(request: Request) {
@@ -30,6 +31,8 @@ export async function POST(request: Request) {
   if (error) {
     return Response.json({ error: error.message }, { status: 500 });
   }
+
+  await recalculateAndWriteXP(body.date);
 
   return Response.json({ data });
 }

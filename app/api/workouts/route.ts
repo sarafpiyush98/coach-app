@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabase";
+import { recalculateAndWriteXP } from "@/lib/xp-engine";
 import type { Workout } from "@/lib/types";
 
 interface ExerciseInput {
@@ -112,6 +113,8 @@ export async function POST(request: Request) {
   if (updateError) {
     return Response.json({ error: updateError.message }, { status: 500 });
   }
+
+  await recalculateAndWriteXP(body.date);
 
   const typedWorkout = workout as Workout;
   return Response.json(

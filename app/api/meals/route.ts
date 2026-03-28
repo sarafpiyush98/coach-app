@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabase";
+import { recalculateAndWriteXP } from "@/lib/xp-engine";
 import type { Meal } from "@/lib/types";
 
 export async function GET(request: Request) {
@@ -101,6 +102,8 @@ export async function POST(request: Request) {
   if (updateError) {
     return Response.json({ error: updateError.message }, { status: 500 });
   }
+
+  await recalculateAndWriteXP(body.date);
 
   return Response.json({ data: meal }, { status: 201 });
 }

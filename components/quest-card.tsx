@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { motion } from "framer-motion";
 import { SystemPanel } from "@/components/ui/system-panel";
 import { Check, ChevronRight } from "lucide-react";
@@ -66,7 +66,6 @@ function getIcon(name: string) {
 
 export function QuestCard({ quest, index, isFirstIncomplete = false }: QuestCardProps) {
   const Icon = getIcon(quest.icon);
-  const router = useRouter();
 
   const variant = quest.completed
     ? "success"
@@ -75,20 +74,23 @@ export function QuestCard({ quest, index, isFirstIncomplete = false }: QuestCard
       : "default";
 
   const route = QUEST_ROUTES[quest.id];
-  const tappable = !quest.completed && route;
+  const tappable = !quest.completed && !!route;
 
-  const handleTap = () => {
-    if (tappable) router.push(route);
-  };
+  const Wrapper = tappable
+    ? ({ children, className }: { children: React.ReactNode; className?: string }) => (
+        <Link href={route} className={`block ${className ?? ""}`}>{children}</Link>
+      )
+    : ({ children, className }: { children: React.ReactNode; className?: string }) => (
+        <div className={className}>{children}</div>
+      );
 
   return (
     <motion.div
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: index * 0.05, duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
-      onClick={handleTap}
-      className={tappable ? "cursor-pointer" : ""}
     >
+      <Wrapper className={tappable ? "cursor-pointer" : ""}>
       <SystemPanel
         variant={variant}
         className={`p-3 ${
@@ -153,6 +155,7 @@ export function QuestCard({ quest, index, isFirstIncomplete = false }: QuestCard
           </div>
         </div>
       </SystemPanel>
+      </Wrapper>
     </motion.div>
   );
 }

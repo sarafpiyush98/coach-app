@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { Suspense, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { format } from "date-fns"
 import { motion } from "framer-motion"
@@ -12,6 +12,14 @@ const MEAL_NUMBERS = [1, 2, 3] as const
 const MEAL_LABELS = ["I", "II", "III"] as const
 
 export default function LogMealPage() {
+  return (
+    <Suspense>
+      <LogMealContent />
+    </Suspense>
+  )
+}
+
+function LogMealContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const preselected = searchParams.get("meal")

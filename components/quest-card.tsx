@@ -37,13 +37,14 @@ const ICON_MAP: Record<string, typeof Circle> = {
 interface QuestCardProps {
   quest: Quest;
   index: number;
+  isFirstIncomplete?: boolean;
 }
 
 function getIcon(name: string) {
   return ICON_MAP[name] ?? Circle;
 }
 
-export function QuestCard({ quest, index }: QuestCardProps) {
+export function QuestCard({ quest, index, isFirstIncomplete = false }: QuestCardProps) {
   const Icon = getIcon(quest.icon);
 
   const handleTap = () => {
@@ -64,9 +65,11 @@ export function QuestCard({ quest, index }: QuestCardProps) {
       <SystemPanel
         variant={variant}
         className={`p-3 ${
-          !quest.completed
-            ? "animate-pulse-border"
-            : "ring-1 ring-[#059669]/40"
+          quest.completed
+            ? "ring-1 ring-[#059669]/40"
+            : isFirstIncomplete
+              ? "animate-pulse-border"
+              : ""
         }`}
       >
         <div className="flex items-center gap-3">

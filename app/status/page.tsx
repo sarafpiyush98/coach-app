@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { motion } from "framer-motion";
 import { SystemPanel } from "@/components/ui/system-panel";
 import { XPRing } from "@/components/ui/xp-ring";
@@ -118,8 +118,9 @@ function LoadingSkeleton() {
 export default function StatusPage() {
   const [data, setData] = useState<StatusData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [allocating, setAllocating] = useState<string | null>(null);
 
-  useEffect(() => {
+  const fetchData = useCallback(() => {
     fetch("/api/gamification")
       .then((r) => r.json())
       .then((res) => {
@@ -128,6 +129,27 @@ export default function StatusPage() {
       })
       .catch(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  const allocateStat = async (stat: keyof PlayerStats) => {
+    if (allocating) return;
+    setAllocating(stat);
+    try {
+      const res = await fetch("/api/allocate-stats", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ stat, points: 1 }),
+      });
+      if (res.ok) {
+        fetchData();
+      }
+    } finally {
+      setAllocating(null);
+    }
+  };
 
   if (loading || !data) return <LoadingSkeleton />;
 
@@ -165,13 +187,25 @@ export default function StatusPage() {
       <SystemPanel className="p-5">
         <div className="flex flex-col gap-3">
           {(Object.keys(stats) as (keyof PlayerStats)[]).map((stat) => (
-            <StatBar
-              key={stat}
-              label={stat}
-              value={stats[stat]}
-              max={statMax}
-              color={STAT_COLORS[stat]}
-            />
+            <div key={stat} className="flex items-center gap-2">
+              <div className="flex-1">
+                <StatBar
+                  label={stat}
+                  value={stats[stat]}
+                  max={statMax}
+                  color={STAT_COLORS[stat]}
+                />
+              </div>
+              {distributablePoints > 0 && (
+                <button
+                  onClick={() => allocateStat(stat)}
+                  disabled={allocating !== null}
+                  className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-[#1B45D7]/50 bg-[#1B45D7]/20 text-[#1B45D7] text-xs font-bold transition-all hover:bg-[#1B45D7]/40 active:scale-90 disabled:opacity-40"
+                >
+                  +
+                </button>
+              )}
+            </div>
           ))}
         </div>
         <div className="mt-4 flex items-center justify-between">

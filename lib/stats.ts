@@ -23,7 +23,9 @@ export interface StatInput {
   level: number;
 }
 
-export function calculateStats(input: StatInput): PlayerStats {
+export function calculateStats(
+  input: StatInput & { allocations?: Record<string, number> }
+): PlayerStats {
   const {
     totalWorkouts,
     totalPrs,
@@ -35,15 +37,26 @@ export function calculateStats(input: StatInput): PlayerStats {
     bestCombo,
     consecutiveGoodWeeks,
     level,
+    allocations,
   } = input;
 
-  return {
+  const stats: PlayerStats = {
     STR: Math.floor(totalWorkouts * 0.5 + totalPrs * 3),
     AGI: Math.floor(totalWorkouts * 0.3 + totalCheckins * 0.1),
     VIT: Math.floor(bestNoLateEatingStreak * 1.0 + bestLoggingStreak * 0.3),
     INT: Math.floor(totalMealsLogged * 0.2 + consecutiveGoodWeeks * 2),
     DSC: Math.floor(bestExerciseStreak * 0.8 + bestCombo * 0.5 + level * 0.3),
   };
+
+  if (allocations) {
+    stats.STR += allocations.STR ?? 0;
+    stats.AGI += allocations.AGI ?? 0;
+    stats.VIT += allocations.VIT ?? 0;
+    stats.INT += allocations.INT ?? 0;
+    stats.DSC += allocations.DSC ?? 0;
+  }
+
+  return stats;
 }
 
 export function getStatTotal(stats: PlayerStats): number {

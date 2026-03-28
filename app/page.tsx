@@ -118,14 +118,20 @@ export default function CommandCenter() {
         </p>
       </motion.div>
 
-      {/* Missed Yesterday Warning */}
-      {streaks.missedYesterday && (
+      {/* Day 1 initialization or Missed Yesterday Warning */}
+      {dayNumber === 1 && completedDaily === 0 ? (
+        <SystemPanel className="px-4 py-3">
+          <p className="font-[family-name:var(--font-rajdhani)] text-xs font-bold uppercase tracking-wider text-[#1B45D7]">
+            SYSTEM INITIALIZED. FIRST QUEST AWAITS. BEGIN.
+          </p>
+        </SystemPanel>
+      ) : streaks.missedYesterday ? (
         <SystemPanel variant="danger" className="px-4 py-3">
           <p className="font-[family-name:var(--font-rajdhani)] text-xs font-bold uppercase tracking-wider text-[#D50000]">
             Yesterday: Protocol incomplete. Today determines the streak.
           </p>
         </SystemPanel>
-      )}
+      ) : null}
 
       {/* Daily Progress */}
       <DailyProgress
@@ -145,7 +151,7 @@ export default function CommandCenter() {
       <QuestList quests={quests} />
 
       {/* Streak Row */}
-      <SystemPanel className="p-4">
+      <SystemPanel animate={false} className="p-4">
         <div className="grid grid-cols-3 gap-3">
           <StreakIndicator
             label="EXERCISE"
@@ -225,7 +231,7 @@ function QuickAction({
 }) {
   return (
     <Link href={href}>
-      <SystemPanel className="flex h-16 cursor-pointer flex-col items-center justify-center gap-1 transition-all hover:scale-[1.02] active:scale-[0.98]">
+      <SystemPanel animate={false} className="flex h-16 cursor-pointer flex-col items-center justify-center gap-1 transition-all hover:scale-[1.02] active:scale-[0.98]">
         <span className="text-[#1B45D7]">{icon}</span>
         <span className="font-[family-name:var(--font-rajdhani)] text-[10px] font-bold uppercase tracking-wider text-[#4A5568]">
           {label}

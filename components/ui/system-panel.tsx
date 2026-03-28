@@ -18,25 +18,24 @@ interface SystemPanelProps {
   variant?: Variant;
   className?: string;
   children: React.ReactNode;
+  animate?: boolean;
 }
 
 export function SystemPanel({
   variant = "default",
   className,
   children,
+  animate = true,
 }: SystemPanelProps) {
-  return (
-    <motion.div
-      initial={{ scale: 0.95, opacity: 0 }}
-      animate={{ scale: 1, opacity: 1 }}
-      transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
-      className={cn(
-        "relative rounded-lg border",
-        "bg-[rgba(10,20,60,0.85)] backdrop-blur-[16px]",
-        variantStyles[variant],
-        className
-      )}
-    >
+  const classes = cn(
+    "relative rounded-lg border",
+    "bg-[rgba(10,20,60,0.85)] backdrop-blur-[16px]",
+    variantStyles[variant],
+    className
+  );
+
+  const content = (
+    <>
       {/* Scanline overlay */}
       <div
         aria-hidden
@@ -47,6 +46,21 @@ export function SystemPanel({
         }}
       />
       <div className="relative z-[2]">{children}</div>
+    </>
+  );
+
+  if (!animate) {
+    return <div className={classes}>{content}</div>;
+  }
+
+  return (
+    <motion.div
+      initial={{ scale: 0.95, opacity: 0 }}
+      animate={{ scale: 1, opacity: 1 }}
+      transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
+      className={classes}
+    >
+      {content}
     </motion.div>
   );
 }

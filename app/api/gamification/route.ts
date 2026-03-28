@@ -121,7 +121,10 @@ export async function GET() {
   const hunterRank = getHunterRank(levelInfo.level);
   const nextHunterRank = getNextHunterRank(levelInfo.level);
 
-  // 5-stat system
+  // 5-stat system (includes manual allocations)
+  const statAllocations = (
+    (profile as Record<string, unknown>).stat_allocations as Record<string, number> | null
+  ) ?? {};
   const stats: PlayerStats = calculateStats({
     totalWorkouts: profile.total_workouts ?? 0,
     totalPrs: profile.total_prs ?? 0,
@@ -133,6 +136,7 @@ export async function GET() {
     bestCombo: profile.best_combo ?? 0,
     consecutiveGoodWeeks: profile.consecutive_good_weeks ?? 0,
     level: levelInfo.level,
+    allocations: statAllocations,
   });
 
   const distributablePoints = getDistributablePoints(

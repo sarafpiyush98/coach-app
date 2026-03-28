@@ -1,4 +1,21 @@
 let ctx: AudioContext | null = null;
+let muted = false;
+
+if (typeof window !== "undefined") {
+  muted = localStorage.getItem("system-muted") === "true";
+}
+
+export function toggleMute(): boolean {
+  muted = !muted;
+  if (typeof window !== "undefined") {
+    localStorage.setItem("system-muted", String(muted));
+  }
+  return muted;
+}
+
+export function isMuted(): boolean {
+  return muted;
+}
 
 function getContext(): AudioContext {
   if (!ctx) {
@@ -11,6 +28,7 @@ function getContext(): AudioContext {
 }
 
 export function playQuestComplete() {
+  if (muted) return;
   const ac = getContext();
   const osc = ac.createOscillator();
   const gain = ac.createGain();
@@ -24,6 +42,7 @@ export function playQuestComplete() {
 }
 
 export function playLevelUp() {
+  if (muted) return;
   const ac = getContext();
   const osc = ac.createOscillator();
   const gain = ac.createGain();
@@ -38,6 +57,7 @@ export function playLevelUp() {
 }
 
 export function playRankUp() {
+  if (muted) return;
   const ac = getContext();
   const freqs = [440, 554, 659];
   freqs.forEach((f) => {
@@ -55,6 +75,7 @@ export function playRankUp() {
 }
 
 export function playQuestFailed() {
+  if (muted) return;
   const ac = getContext();
   const osc = ac.createOscillator();
   const gain = ac.createGain();
@@ -68,6 +89,7 @@ export function playQuestFailed() {
 }
 
 export function playSystemPing() {
+  if (muted) return;
   const ac = getContext();
   const osc = ac.createOscillator();
   const gain = ac.createGain();

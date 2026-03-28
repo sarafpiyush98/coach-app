@@ -12,6 +12,17 @@ export function QuestList({ quests }: QuestListProps) {
   const bonus = quests.filter((q) => q.category === "bonus");
   const completedCount = daily.filter((q) => q.completed).length;
 
+  // Track the first incomplete quest across both lists
+  let firstIncompleteFound = false;
+
+  function isFirstIncomplete(quest: Quest): boolean {
+    if (!quest.completed && !firstIncompleteFound) {
+      firstIncompleteFound = true;
+      return true;
+    }
+    return false;
+  }
+
   return (
     <div className="space-y-4">
       {/* Daily quests */}
@@ -25,7 +36,12 @@ export function QuestList({ quests }: QuestListProps) {
           </span>
         </div>
         {daily.map((quest, i) => (
-          <QuestCard key={quest.id} quest={quest} index={i} />
+          <QuestCard
+            key={quest.id}
+            quest={quest}
+            index={i}
+            isFirstIncomplete={isFirstIncomplete(quest)}
+          />
         ))}
       </div>
 
@@ -38,7 +54,12 @@ export function QuestList({ quests }: QuestListProps) {
           BONUS OBJECTIVES
         </h2>
         {bonus.map((quest, i) => (
-          <QuestCard key={quest.id} quest={quest} index={daily.length + i} />
+          <QuestCard
+            key={quest.id}
+            quest={quest}
+            index={daily.length + i}
+            isFirstIncomplete={isFirstIncomplete(quest)}
+          />
         ))}
       </div>
     </div>

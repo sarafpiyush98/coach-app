@@ -1,6 +1,6 @@
 "use client"
 
-import { Suspense, useState } from "react"
+import { Suspense, useState, useEffect } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { format } from "date-fns"
 import { motion } from "framer-motion"
@@ -10,6 +10,9 @@ import { useCacheStore } from "@/lib/cache"
 
 const MEAL_NUMBERS = [1, 2, 3] as const
 const MEAL_LABELS = ["I", "II", "III"] as const
+
+const CALORIE_TARGET = 2000
+const PROTEIN_TARGET = 160
 
 export default function LogMealPage() {
   return (
@@ -33,6 +36,23 @@ function LogMealContent() {
   const [isEatingOut, setIsEatingOut] = useState(true)
   const [restaurant, setRestaurant] = useState("")
   const [saving, setSaving] = useState(false)
+
+  // Today's running totals
+  const [todayCals, setTodayCals] = useState(0)
+  const [todayProtein, setTodayProtein] = useState(0)
+  const [mealsLogged, setMealsLogged] = useState<number[]>([])
+
+  useEffect(() => {
+    fetch("/api/dashboard")
+      .then((r) => r.json())
+      .then((res) => {
+        const d = res.data ?? res
+        setTodayCals(d.dailyLog?.calories_total ?? 0)
+        setTodayProtein(d.dailyLog?.protein_g ?? 0)
+        setMealsLogged((d.meals ?? []).map((m: { meal_number: number }) => m.meal_number))
+      })
+      .catch(() => {})
+  }, [])
 
   async function handleSave() {
     if (!mealNumber || !calories) return
@@ -62,9 +82,63 @@ function LogMealContent() {
 
   return (
     <div className="max-w-lg mx-auto px-4 pt-8 pb-24">
-      <h1 className="font-[family-name:var(--font-rajdhani)] text-[11px] font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-6">
+      <h1 className="font-[family-name:var(--font-rajdhani)] text-[11px] font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-4">
         Fuel the Vessel
       </h1>
+
+      {/* Daily targets */}
+      <div className="rounded-lg bg-[var(--surface-1)] border border-[var(--border-subtle)] p-3 mb-4">
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <div className="flex items-baseline justify-between mb-1">
+              <span className="font-[family-name:var(--font-rajdhani)] text-[10px] font-bold uppercase tracking-widest text-[var(--text-muted)]">Calories</span>
+              <span className="font-[family-name:var(--font-geist-mono)] text-xs tabular-nums text-[var(--text-secondary)]">
+                {todayCals} / {CALORIE_TARGET}
+              </span>
+            </div>
+            <div className="h-1.5 rounded-full bg-[var(--surface-2)] overflow-hidden">
+              <div
+                className="h-full rounded-full transition-all duration-300"
+                style={{
+                  width: `${Math.min((todayCals / CALORIE_TARGET) * 100, 100)}%`,
+                  backgroundColor: todayCals > CALORIE_TARGET ? "var(--danger)" : "var(--accent-blue)",
+                }}
+              />
+            </div>
+          </div>
+          <div>
+            <div className="flex items-baseline justify-between mb-1">
+              <span className="font-[family-name:var(--font-rajdhani)] text-[10px] font-bold uppercase tracking-widest text-[var(--text-muted)]">Protein</span>
+              <span className="font-[family-name:var(--font-geist-mono)] text-xs tabular-nums text-[var(--text-secondary)]">
+                {todayProtein}g / {PROTEIN_TARGET}g
+              </span>
+            </div>
+            <div className="h-1.5 rounded-full bg-[var(--surface-2)] overflow-hidden">
+              <div
+                className="h-full rounded-full transition-all duration-300"
+                style={{
+                  width: `${Math.min((todayProtein / PROTEIN_TARGET) * 100, 100)}%`,
+                  backgroundColor: todayProtein >= PROTEIN_TARGET ? "var(--success)" : "var(--accent-blue)",
+                }}
+              />
+            </div>
+          </div>
+        </div>
+        {mealsLogged.length > 0 && (
+          <div className="mt-2 flex gap-2">
+            {MEAL_NUMBERS.map((n, i) => (
+              <span
+                key={n}
+                className={`font-[family-name:var(--font-rajdhani)] text-[9px] font-bold uppercase tracking-wider ${
+                  mealsLogged.includes(n) ? "text-[var(--success)]" : "text-[var(--text-muted)]/40"
+                }`}
+              >
+                {mealsLogged.includes(n) ? "✓" : "○"} {MEAL_LABELS[i]}
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
 
       {/* Single form container */}
       <div className="rounded-lg bg-[var(--surface-1)] border border-[var(--border-subtle)] p-4 space-y-4">

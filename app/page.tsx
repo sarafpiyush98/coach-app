@@ -19,7 +19,7 @@ import { useCachedFetch } from "@/lib/use-cached-fetch";
 import type { Quest } from "@/lib/quests";
 import type { LootRarity } from "@/lib/gamification";
 
-const START_DATE = new Date(2026, 2, 28); // March 28, 2026
+const START_DATE = new Date(2026, 2, 29); // March 29, 2026
 
 interface Streaks {
   exercise: number;
@@ -122,14 +122,14 @@ export default function CommandCenter() {
       </motion.div>
 
       {/* System Message — context-sensitive */}
-      {systemMessage && !streaks.missedYesterday ? (
+      {systemMessage ? (
         <div className="border-l-2 border-l-[var(--accent-blue)] pl-4 py-2">
           <p className="font-[family-name:var(--font-rajdhani)] text-xs font-bold uppercase tracking-wider text-[var(--accent-blue)]">
             {systemMessage}
           </p>
         </div>
-      ) : streaks.missedYesterday ? (
-        <SystemPanel variant="danger" className="px-4 py-3">
+      ) : streaks.missedYesterday && dayNumber > 1 ? (
+        <SystemPanel variant="danger" className="px-4 py-3" animate={false}>
           <p className="font-[family-name:var(--font-rajdhani)] text-xs font-bold uppercase tracking-wider text-[var(--danger)]">
             Yesterday: Protocol incomplete. Today determines the streak.
           </p>

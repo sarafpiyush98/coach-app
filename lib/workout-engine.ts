@@ -8,7 +8,7 @@
 import { db as supabase } from "@/lib/supabase-untyped";
 import { differenceInCalendarDays, getDay } from "date-fns";
 
-const START_DATE = new Date(2026, 2, 28); // March 28, 2026
+const START_DATE = new Date(2026, 2, 29); // March 29, 2026
 
 // Exercises that skip warm-up sets
 const SKIP_WARMUP = ["Dead Bug", "Dumbbell Rows"];

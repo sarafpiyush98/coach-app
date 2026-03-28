@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { format } from "date-fns"
 import { motion } from "framer-motion"
 import { useToastStore } from "@/components/ui/system-toast"
@@ -13,8 +13,12 @@ const MEAL_LABELS = ["I", "II", "III"] as const
 
 export default function LogMealPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const preselected = searchParams.get("meal")
   const addToast = useToastStore((s) => s.add)
-  const [mealNumber, setMealNumber] = useState<number | null>(null)
+  const [mealNumber, setMealNumber] = useState<number | null>(
+    preselected ? Number(preselected) : null
+  )
   const [description, setDescription] = useState("")
   const [calories, setCalories] = useState("")
   const [proteinG, setProteinG] = useState("")

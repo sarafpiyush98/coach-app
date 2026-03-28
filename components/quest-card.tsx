@@ -1,8 +1,9 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { SystemPanel } from "@/components/ui/system-panel";
-import { Check } from "lucide-react";
+import { Check, ChevronRight } from "lucide-react";
 import {
   Utensils,
   Dumbbell,
@@ -14,6 +15,18 @@ import {
   Circle,
 } from "lucide-react";
 import type { Quest } from "@/lib/quests";
+
+const QUEST_ROUTES: Record<string, string> = {
+  fuel_vessel_1: "/log/meal?meal=1",
+  fuel_vessel_2: "/log/meal?meal=2",
+  fuel_vessel_3: "/log/meal?meal=3",
+  movement_protocol: "/log/workout",
+  system_diagnostic: "/checkin",
+  fasting_seal: "/checkin",
+  protein_synthesis: "/log/meal",
+  energy_calibration: "/log/meal",
+  wake_protocol: "/checkin",
+};
 
 const STAT_ICON_COLORS: Record<string, string> = {
   STR: "text-red-400",
@@ -53,6 +66,7 @@ function getIcon(name: string) {
 
 export function QuestCard({ quest, index, isFirstIncomplete = false }: QuestCardProps) {
   const Icon = getIcon(quest.icon);
+  const router = useRouter();
 
   const variant = quest.completed
     ? "success"
@@ -60,11 +74,20 @@ export function QuestCard({ quest, index, isFirstIncomplete = false }: QuestCard
       ? "interactive"
       : "default";
 
+  const route = QUEST_ROUTES[quest.id];
+  const tappable = !quest.completed && route;
+
+  const handleTap = () => {
+    if (tappable) router.push(route);
+  };
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: index * 0.05, duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
+      onClick={handleTap}
+      className={tappable ? "cursor-pointer" : ""}
     >
       <SystemPanel
         variant={variant}
@@ -108,7 +131,7 @@ export function QuestCard({ quest, index, isFirstIncomplete = false }: QuestCard
             </p>
           </div>
 
-          {/* Stat badge + XP */}
+          {/* Stat badge + XP + nav hint */}
           <div className="flex shrink-0 items-center gap-2">
             <span
               className={`rounded border px-1.5 py-0.5 font-[family-name:var(--font-rajdhani)] text-[10px] font-bold ${
@@ -124,6 +147,9 @@ export function QuestCard({ quest, index, isFirstIncomplete = false }: QuestCard
             >
               +{quest.xpReward}
             </span>
+            {tappable && (
+              <ChevronRight size={14} className="text-[var(--text-muted)]" />
+            )}
           </div>
         </div>
       </SystemPanel>

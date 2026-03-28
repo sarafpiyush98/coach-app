@@ -1,12 +1,30 @@
 import { supabase } from "@/lib/supabase";
 import { format, subDays } from "date-fns";
 import { calculateStreaks, getStreakMessage } from "@/lib/streaks";
+import { getDailyQuests, getQuestCompletionPercent } from "@/lib/quests";
+import { levelFromTotalXp, getRank, LOOT_TABLE } from "@/lib/gamification";
+
+function rollLootForDate(dateStr: string) {
+  const hash = Array.from(dateStr).reduce(
+    (acc, ch) => (acc * 31 + ch.charCodeAt(0)) & 0xffffffff,
+    0
+  );
+  const roll = (hash % 1000) / 1000;
+  let cumulative = 0;
+  for (const loot of LOOT_TABLE) {
+    cumulative += loot.chance;
+    if (roll < cumulative) {
+      return { multiplier: loot.multiplier, rarity: loot.rarity, label: loot.label };
+    }
+  }
+  return { multiplier: 1.0, rarity: "common" as const, label: "Standard Day" };
+}
 
 export async function GET() {
   const today = format(new Date(), "yyyy-MM-dd");
   const ninetyDaysAgo = format(subDays(new Date(), 90), "yyyy-MM-dd");
 
-  const [dailyLogResult, mealsResult, milestonesResult, streakLogsResult] =
+  const [dailyLogResult, mealsResult, milestonesResult, streakLogsResult, profileRes] =
     await Promise.all([
       supabase
         .from("daily_log")
@@ -28,6 +46,7 @@ export async function GET() {
         .gte("date", ninetyDaysAgo)
         .lte("date", today)
         .order("date", { ascending: false }),
+      supabase.from("player_profile").select("*").limit(1).single(),
     ]);
 
   const errors = [
@@ -44,15 +63,61 @@ export async function GET() {
     );
   }
 
+  const dailyLog = dailyLogResult.data ?? null;
+  const meals = mealsResult.data ?? [];
+
+  // Streaks
   const streakStatus = calculateStreaks(streakLogsResult.data ?? [], today);
   const streakMessage = getStreakMessage(streakStatus);
 
+  // Quests
+  const quests = getDailyQuests(dailyLog, meals);
+  const questCompletionPercent = getQuestCompletionPercent(quests);
+
+  // Gamification data from profile
+  const profile = profileRes.data ?? {
+    total_xp: 0,
+    level: 1,
+    last_active_date: null,
+    best_combo: 0,
+  };
+
+  const totalXp = profile.total_xp ?? 0;
+  const levelInfo = levelFromTotalXp(totalXp);
+  const rank = getRank(levelInfo.level);
+
+  // Combo day — use logging streak as proxy for consecutive active days
+  const comboDay = streakStatus.logging;
+  const comboMultiplier = Math.min(1 + comboDay * 0.1, 2.5);
+
+  // Today's loot
+  const loot = rollLootForDate(today);
+
+  // Today's XP from completed quests (base, before multipliers)
+  const todayBaseXp = quests
+    .filter((q) => q.completed)
+    .reduce((sum, q) => sum + q.xpReward, 0);
+  const todayXp = Math.round(todayBaseXp * comboMultiplier * loot.multiplier);
+
   return Response.json({
     data: {
-      dailyLog: dailyLogResult.data ?? null,
+      dailyLog,
       streaks: { ...streakStatus, message: streakMessage },
-      meals: mealsResult.data ?? [],
+      meals,
       milestones: milestonesResult.data ?? [],
+      quests,
+      questCompletionPercent,
+      gamification: {
+        level: levelInfo.level,
+        levelProgress: levelInfo.progress,
+        rank: rank.title,
+        totalXp,
+        todayXp,
+        comboDay,
+        comboMultiplier,
+        lootRarity: loot.rarity,
+        lootMultiplier: loot.multiplier,
+      },
     },
   });
 }

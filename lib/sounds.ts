@@ -61,7 +61,7 @@ export function playQuestFailed() {
   osc.type = "sine";
   osc.frequency.value = 220;
   gain.gain.setValueAtTime(0.3, ac.currentTime);
-  gain.gain.setValueAtTime(0.001, ac.currentTime + 0.1);
+  gain.gain.linearRampToValueAtTime(0.001, ac.currentTime + 0.1);
   osc.connect(gain).connect(ac.destination);
   osc.start(ac.currentTime);
   osc.stop(ac.currentTime + 0.1);

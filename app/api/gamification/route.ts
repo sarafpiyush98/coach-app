@@ -8,12 +8,74 @@ import {
   getBossHpPercent,
   getDailyQuote,
   getComebackStatus,
-  getWeeklyGrade,
-  WEEKLY_GRADE_COLORS,
-  WEEKLY_GRADE_LABELS,
   ACHIEVEMENTS,
-  BOSS_FIGHTS,
 } from "@/lib/gamification";
+import { calculateStats, getStatTotal, getDistributablePoints, type PlayerStats } from "@/lib/stats";
+import { getHunterRank, getNextHunterRank } from "@/lib/ranks";
+
+interface ShadowSoldier {
+  id: string;
+  name: string;
+  unlockCondition: string;
+  benefit: string;
+  unlocked: boolean;
+}
+
+function getShadows(profile: {
+  total_workouts: number;
+  best_exercise_streak: number;
+  best_logging_streak: number;
+  total_checkins: number;
+  level: number;
+}): ShadowSoldier[] {
+  const level = profile.level ?? 1;
+  const hunterRank = getHunterRank(level);
+
+  return [
+    {
+      id: "iron",
+      name: "Iron",
+      unlockCondition: "50 workouts",
+      benefit: "Workout history insights",
+      unlocked: (profile.total_workouts ?? 0) >= 50,
+    },
+    {
+      id: "igris",
+      name: "Igris",
+      unlockCondition: "14-day workout streak",
+      benefit: "1 free streak miss/week",
+      unlocked: (profile.best_exercise_streak ?? 0) >= 14,
+    },
+    {
+      id: "tank",
+      name: "Tank",
+      unlockCondition: "21 days protein target",
+      benefit: "Meal suggestions",
+      unlocked: (profile.best_logging_streak ?? 0) >= 21,
+    },
+    {
+      id: "beru",
+      name: "Beru",
+      unlockCondition: "30 complete daily quests",
+      benefit: "Penalty difficulty -1",
+      unlocked: (profile.total_checkins ?? 0) >= 30,
+    },
+    {
+      id: "tusk",
+      name: "Tusk",
+      unlockCondition: "Reach B-Rank",
+      benefit: "Side quest variety",
+      unlocked: hunterRank.minLevel >= 18,
+    },
+    {
+      id: "bellion",
+      name: "Bellion",
+      unlockCondition: "Reach S-Rank",
+      benefit: "Emergency quests 2x XP",
+      unlocked: hunterRank.minLevel >= 40,
+    },
+  ];
+}
 
 export async function GET() {
   const today = format(new Date(), "yyyy-MM-dd");
@@ -47,6 +109,7 @@ export async function GET() {
     best_combo: 0,
     consecutive_good_weeks: 0,
     last_active_date: null,
+    allocated_stat_points: 0,
   };
 
   const totalXp = profile.total_xp ?? 0;
@@ -54,11 +117,42 @@ export async function GET() {
   const rank = getRank(levelInfo.level);
   const nextRank = getNextRank(levelInfo.level);
 
+  // Hunter rank system
+  const hunterRank = getHunterRank(levelInfo.level);
+  const nextHunterRank = getNextHunterRank(levelInfo.level);
+
+  // 5-stat system
+  const stats: PlayerStats = calculateStats({
+    totalWorkouts: profile.total_workouts ?? 0,
+    totalPrs: profile.total_prs ?? 0,
+    totalCheckins: profile.total_checkins ?? 0,
+    totalMealsLogged: profile.total_meals_logged ?? 0,
+    bestExerciseStreak: profile.best_exercise_streak ?? 0,
+    bestLoggingStreak: profile.best_logging_streak ?? 0,
+    bestNoLateEatingStreak: profile.best_no_late_eating_streak ?? 0,
+    bestCombo: profile.best_combo ?? 0,
+    consecutiveGoodWeeks: profile.consecutive_good_weeks ?? 0,
+    level: levelInfo.level,
+  });
+
+  const distributablePoints = getDistributablePoints(
+    levelInfo.level,
+    profile.allocated_stat_points ?? 0
+  );
+
+  // Shadow army
+  const shadows = getShadows({
+    total_workouts: profile.total_workouts ?? 0,
+    best_exercise_streak: profile.best_exercise_streak ?? 0,
+    best_logging_streak: profile.best_logging_streak ?? 0,
+    total_checkins: profile.total_checkins ?? 0,
+    level: levelInfo.level,
+  });
+
   // Comeback status
   const comeback = getComebackStatus(profile.last_active_date, today);
 
   // Boss fight
-  // Get latest weight from daily_log
   const { data: latestWeightRow } = await supabase
     .from("daily_log")
     .select("weight_kg")
@@ -80,7 +174,6 @@ export async function GET() {
   const achievements = ACHIEVEMENTS.map((a) => ({
     ...a,
     unlocked: unlockedIds.includes(a.id),
-    // Don't reveal hidden achievements that aren't unlocked
     title: a.hidden && !unlockedIds.includes(a.id) ? "???" : a.title,
     description:
       a.hidden && !unlockedIds.includes(a.id)
@@ -114,6 +207,12 @@ export async function GET() {
         bestCombo: profile.best_combo ?? 0,
         consecutiveGoodWeeks: profile.consecutive_good_weeks ?? 0,
       },
+      hunterRank,
+      nextHunterRank,
+      stats,
+      statTotal: getStatTotal(stats),
+      distributablePoints,
+      shadows,
       boss: boss
         ? {
             ...boss,

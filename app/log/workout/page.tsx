@@ -3,11 +3,11 @@
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { format } from "date-fns"
-import { Card, CardContent } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
+import { motion } from "framer-motion"
+import { SystemPanel } from "@/components/ui/system-panel"
+import { useToastStore } from "@/components/ui/system-toast"
+import { playQuestComplete } from "@/lib/sounds"
+import { ChevronLeft } from "lucide-react"
 
 const WORKOUT_TYPES = [
   "Strength",
@@ -41,6 +41,7 @@ function emptyExercise(name: string): ExerciseEntry {
 
 export default function LogWorkoutPage() {
   const router = useRouter()
+  const addToast = useToastStore((s) => s.add)
   const [workoutType, setWorkoutType] = useState<WorkoutType | null>(null)
   const [duration, setDuration] = useState("")
   const [notes, setNotes] = useState("")
@@ -51,21 +52,15 @@ export default function LogWorkoutPage() {
   function toggleExercise(name: string) {
     const idx = exercises.findIndex((e) => e.exercise_name === name)
     if (idx >= 0) {
-      // Already added -- toggle expand/collapse
       setExpandedIndex(expandedIndex === idx ? null : idx)
     } else {
-      // Add and expand
       const newExercises = [...exercises, emptyExercise(name)]
       setExercises(newExercises)
       setExpandedIndex(newExercises.length - 1)
     }
   }
 
-  function updateExercise(
-    idx: number,
-    field: keyof ExerciseEntry,
-    value: string
-  ) {
+  function updateExercise(idx: number, field: keyof ExerciseEntry, value: string) {
     setExercises((prev) =>
       prev.map((e, i) => (i === idx ? { ...e, [field]: value } : e))
     )
@@ -101,6 +96,8 @@ export default function LogWorkoutPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       })
+      playQuestComplete()
+      addToast({ title: "MOVEMENT PROTOCOL — COMPLETE", variant: "success" })
       router.push("/")
     } catch {
       setSaving(false)
@@ -112,172 +109,162 @@ export default function LogWorkoutPage() {
   // Step 1: pick type
   if (!workoutType) {
     return (
-      <div className="flex flex-col gap-5 p-4 max-w-lg mx-auto pt-6">
-        <h1 className="text-xl font-semibold text-foreground">Log Workout</h1>
-        <Label className="text-muted-foreground text-xs">Type</Label>
-        <div className="grid grid-cols-2 gap-3">
-          {WORKOUT_TYPES.map((t) => (
-            <button
-              key={t}
-              type="button"
-              onClick={() => setWorkoutType(t)}
-              className="h-16 rounded-xl bg-card border border-border text-sm font-medium text-muted-foreground hover:border-amber-500/50 transition-colors"
-            >
-              {t}
-            </button>
-          ))}
-        </div>
+      <div className="flex flex-col gap-5 p-4 max-w-lg mx-auto pt-6 pb-24">
+        <h1 className="font-[family-name:var(--font-rajdhani)] text-xl font-bold uppercase tracking-[0.15em] text-[#FBEFFA]">
+          Movement Protocol
+        </h1>
+        <SystemPanel className="p-4">
+          <span className="block font-[family-name:var(--font-rajdhani)] text-[10px] font-bold uppercase tracking-widest text-[#4A5568] mb-3">
+            Select Protocol
+          </span>
+          <div className="grid grid-cols-2 gap-3">
+            {WORKOUT_TYPES.map((t, i) => (
+              <motion.button
+                key={t}
+                type="button"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: i * 0.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={() => setWorkoutType(t)}
+                className="h-16 rounded-lg bg-[#0D1117] border border-[#1A1A2E] font-[family-name:var(--font-rajdhani)] text-sm font-bold uppercase tracking-wider text-[#4A5568] hover:border-[#1B45D7]/30 hover:text-[#FBEFFA] transition-all"
+              >
+                {t}
+              </motion.button>
+            ))}
+          </div>
+        </SystemPanel>
       </div>
     )
   }
 
   // Step 2: details
   return (
-    <div className="flex flex-col gap-5 p-4 max-w-lg mx-auto pt-6">
+    <div className="flex flex-col gap-5 p-4 max-w-lg mx-auto pt-6 pb-24">
       <div className="flex items-center gap-3">
-        <button
+        <motion.button
           type="button"
+          whileTap={{ scale: 0.9 }}
           onClick={() => setWorkoutType(null)}
-          className="text-muted-foreground hover:text-foreground text-sm"
+          className="text-[#4A5568] hover:text-[#FBEFFA] transition-colors"
         >
-          &larr; Back
-        </button>
-        <h1 className="text-xl font-semibold text-foreground">{workoutType}</h1>
+          <ChevronLeft size={20} />
+        </motion.button>
+        <h1 className="font-[family-name:var(--font-rajdhani)] text-xl font-bold uppercase tracking-[0.15em] text-[#FBEFFA]">
+          {workoutType}
+        </h1>
       </div>
 
       {/* Strength: exercise list */}
       {isStrength && (
-        <div className="flex flex-col gap-2">
-          <Label className="text-muted-foreground text-xs">Exercises</Label>
-          {PRESET_EXERCISES.map((name) => {
-            const idx = exercises.findIndex((e) => e.exercise_name === name)
-            const isActive = idx >= 0
-            const isExpanded = expandedIndex === idx
+        <SystemPanel className="p-4">
+          <span className="block font-[family-name:var(--font-rajdhani)] text-[10px] font-bold uppercase tracking-widest text-[#4A5568] mb-3">
+            Exercises
+          </span>
+          <div className="flex flex-col gap-2">
+            {PRESET_EXERCISES.map((name) => {
+              const idx = exercises.findIndex((e) => e.exercise_name === name)
+              const isActive = idx >= 0
+              const isExpanded = expandedIndex === idx
 
-            return (
-              <div key={name} className="flex flex-col">
-                <button
-                  type="button"
-                  onClick={() => toggleExercise(name)}
-                  className={`h-12 rounded-xl text-sm font-medium transition-colors text-left px-4 ${
-                    isActive
-                      ? "bg-amber-500/20 border border-amber-500/50 text-amber-400"
-                      : "bg-card border border-border text-muted-foreground hover:border-amber-500/50"
-                  }`}
-                >
-                  {name}
-                  {isActive && (
-                    <span className="text-xs text-amber-500/70 ml-2">
-                      {exercises[idx].sets && exercises[idx].reps
-                        ? `${exercises[idx].sets}x${exercises[idx].reps} @ ${exercises[idx].weight_kg || 0}kg`
-                        : "tap to edit"}
-                    </span>
-                  )}
-                </button>
-                {isActive && isExpanded && (
-                  <Card className="mt-1 border-amber-500/30">
-                    <CardContent className="p-3">
+              return (
+                <div key={name} className="flex flex-col">
+                  <motion.button
+                    type="button"
+                    whileTap={{ scale: 0.98 }}
+                    onClick={() => toggleExercise(name)}
+                    className={`h-12 rounded-lg text-sm font-[family-name:var(--font-rajdhani)] font-bold uppercase tracking-wider text-left px-4 transition-all ${
+                      isActive
+                        ? "bg-[#1B45D7]/20 border border-[#1B45D7]/50 text-[#FBEFFA]"
+                        : "bg-[#0D1117] border border-[#1A1A2E] text-[#4A5568] hover:border-[#1B45D7]/30"
+                    }`}
+                  >
+                    {name}
+                    {isActive && (
+                      <span className="text-[10px] text-[#1B45D7] ml-2 font-[family-name:var(--font-geist-mono)] normal-case">
+                        {exercises[idx].sets && exercises[idx].reps
+                          ? `${exercises[idx].sets}x${exercises[idx].reps} @ ${exercises[idx].weight_kg || 0}kg`
+                          : "tap to edit"}
+                      </span>
+                    )}
+                  </motion.button>
+                  {isActive && isExpanded && (
+                    <div className="mt-1 p-3 rounded-lg bg-[#0D1117] border border-[#1B45D7]/20">
                       <div className="grid grid-cols-3 gap-2">
-                        <div className="flex flex-col gap-1">
-                          <Label className="text-muted-foreground text-[10px]">
-                            Weight (kg)
-                          </Label>
-                          <Input
-                            type="number"
-                            inputMode="numeric"
-                            placeholder="100"
-                            value={exercises[idx].weight_kg}
-                            onChange={(e) =>
-                              updateExercise(idx, "weight_kg", e.target.value)
-                            }
-                            className="h-10 text-base"
-                          />
-                        </div>
-                        <div className="flex flex-col gap-1">
-                          <Label className="text-muted-foreground text-[10px]">
-                            Reps
-                          </Label>
-                          <Input
-                            type="number"
-                            inputMode="numeric"
-                            placeholder="10"
-                            value={exercises[idx].reps}
-                            onChange={(e) =>
-                              updateExercise(idx, "reps", e.target.value)
-                            }
-                            className="h-10 text-base"
-                          />
-                        </div>
-                        <div className="flex flex-col gap-1">
-                          <Label className="text-muted-foreground text-[10px]">
-                            Sets
-                          </Label>
-                          <Input
-                            type="number"
-                            inputMode="numeric"
-                            placeholder="3"
-                            value={exercises[idx].sets}
-                            onChange={(e) =>
-                              updateExercise(idx, "sets", e.target.value)
-                            }
-                            className="h-10 text-base"
-                          />
-                        </div>
+                        {(["weight_kg", "reps", "sets"] as const).map((field) => (
+                          <div key={field} className="flex flex-col gap-1">
+                            <span className="font-[family-name:var(--font-rajdhani)] text-[9px] font-bold uppercase tracking-widest text-[#4A5568]">
+                              {field === "weight_kg" ? "Weight (kg)" : field === "reps" ? "Reps" : "Sets"}
+                            </span>
+                            <input
+                              type="number"
+                              inputMode="numeric"
+                              placeholder={field === "weight_kg" ? "100" : field === "reps" ? "10" : "3"}
+                              value={exercises[idx][field]}
+                              onChange={(e) => updateExercise(idx, field, e.target.value)}
+                              className="h-10 px-2 rounded-lg bg-[#0A1543] border border-[#1A1A2E] text-[#FBEFFA] text-base font-[family-name:var(--font-geist-mono)] placeholder:text-[#4A5568]/50 focus:border-[#1B45D7] focus:outline-none transition-colors"
+                            />
+                          </div>
+                        ))}
                       </div>
                       <button
                         type="button"
                         onClick={() => removeExercise(idx)}
-                        className="mt-2 text-xs text-red-400 hover:text-red-300"
+                        className="mt-2 font-[family-name:var(--font-rajdhani)] text-[10px] font-bold uppercase tracking-widest text-[#D50000] hover:text-[#FF5252]"
                       >
                         Remove
                       </button>
-                    </CardContent>
-                  </Card>
-                )}
-              </div>
-            )
-          })}
-        </div>
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </SystemPanel>
       )}
 
       {/* Duration */}
-      <div className="flex flex-col gap-1.5">
-        <Label htmlFor="duration" className="text-muted-foreground text-xs">
+      <SystemPanel className="p-4">
+        <label className="block font-[family-name:var(--font-rajdhani)] text-[10px] font-bold uppercase tracking-widest text-[#4A5568] mb-2">
           Duration (minutes)
-        </Label>
-        <Input
-          id="duration"
+        </label>
+        <input
           type="number"
           inputMode="numeric"
           placeholder="45"
           value={duration}
           onChange={(e) => setDuration(e.target.value)}
-          className="h-11 text-base"
+          className="w-full h-11 px-3 rounded-lg bg-[#0D1117] border border-[#1A1A2E] text-[#FBEFFA] text-base font-[family-name:var(--font-geist-mono)] placeholder:text-[#4A5568]/50 focus:border-[#1B45D7] focus:outline-none transition-colors"
         />
-      </div>
+      </SystemPanel>
 
       {/* Notes */}
-      <div className="flex flex-col gap-1.5">
-        <Label htmlFor="notes" className="text-muted-foreground text-xs">
+      <SystemPanel className="p-4">
+        <label className="block font-[family-name:var(--font-rajdhani)] text-[10px] font-bold uppercase tracking-widest text-[#4A5568] mb-2">
           Notes (optional)
-        </Label>
-        <Textarea
-          id="notes"
+        </label>
+        <textarea
           placeholder="How did it feel?"
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
-          className="min-h-[60px] text-base"
+          className="w-full min-h-[60px] px-3 py-2 rounded-lg bg-[#0D1117] border border-[#1A1A2E] text-[#FBEFFA] text-sm placeholder:text-[#4A5568]/50 focus:border-[#1B45D7] focus:outline-none transition-colors resize-none"
         />
-      </div>
+      </SystemPanel>
 
-      {/* Save */}
-      <Button
-        onClick={handleSave}
-        disabled={!duration || saving}
-        className="h-14 mt-2 rounded-xl bg-amber-500 text-black text-lg font-semibold hover:bg-amber-400 disabled:opacity-40"
+      {/* Submit */}
+      <SystemPanel
+        className={`p-0 overflow-hidden ${!duration || saving ? "opacity-40" : ""}`}
       >
-        {saving ? "Saving..." : "Save Workout"}
-      </Button>
+        <motion.button
+          type="button"
+          whileTap={{ scale: 0.97 }}
+          onClick={handleSave}
+          disabled={!duration || saving}
+          className="w-full h-14 font-[family-name:var(--font-rajdhani)] text-lg font-bold uppercase tracking-[0.15em] text-[#FBEFFA] bg-transparent cursor-pointer disabled:cursor-not-allowed"
+        >
+          {saving ? "Executing..." : "Execute Protocol"}
+        </motion.button>
+      </SystemPanel>
     </div>
   )
 }

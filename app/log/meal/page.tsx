@@ -3,15 +3,17 @@
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { format } from "date-fns"
-import { Card, CardContent } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
+import { motion } from "framer-motion"
+import { SystemPanel } from "@/components/ui/system-panel"
+import { useToastStore } from "@/components/ui/system-toast"
+import { playQuestComplete } from "@/lib/sounds"
 
 const MEAL_NUMBERS = [1, 2, 3] as const
+const MEAL_LABELS = ["MEAL I", "MEAL II", "MEAL III"] as const
 
 export default function LogMealPage() {
   const router = useRouter()
+  const addToast = useToastStore((s) => s.add)
   const [mealNumber, setMealNumber] = useState<number | null>(null)
   const [description, setDescription] = useState("")
   const [calories, setCalories] = useState("")
@@ -37,6 +39,8 @@ export default function LogMealPage() {
           restaurant: isEatingOut ? restaurant : "",
         }),
       })
+      playQuestComplete()
+      addToast({ title: "FUEL THE VESSEL — LOGGED", variant: "success" })
       router.push("/")
     } catch {
       setSaving(false)
@@ -44,121 +48,133 @@ export default function LogMealPage() {
   }
 
   return (
-    <div className="flex flex-col gap-5 p-4 max-w-lg mx-auto pt-6">
-      <h1 className="text-xl font-semibold text-foreground">Log Meal</h1>
+    <div className="flex flex-col gap-5 p-4 max-w-lg mx-auto pt-6 pb-24">
+      <h1 className="font-[family-name:var(--font-rajdhani)] text-xl font-bold uppercase tracking-[0.15em] text-[#FBEFFA]">
+        Fuel the Vessel
+      </h1>
 
-      {/* Meal number */}
-      <div className="flex flex-col gap-2">
-        <Label className="text-muted-foreground text-xs">Meal</Label>
+      {/* Meal selector */}
+      <SystemPanel className="p-4">
+        <span className="block font-[family-name:var(--font-rajdhani)] text-[10px] font-bold uppercase tracking-widest text-[#4A5568] mb-2">
+          Select Objective
+        </span>
         <div className="grid grid-cols-3 gap-3">
-          {MEAL_NUMBERS.map((n) => (
-            <button
+          {MEAL_NUMBERS.map((n, i) => (
+            <motion.button
               key={n}
               type="button"
+              whileTap={{ scale: 0.95 }}
               onClick={() => setMealNumber(n)}
-              className={`h-14 rounded-xl text-lg font-semibold transition-colors ${
+              className={`h-14 rounded-lg font-[family-name:var(--font-rajdhani)] text-sm font-bold uppercase tracking-wider transition-all ${
                 mealNumber === n
-                  ? "bg-amber-500 text-black"
-                  : "bg-card border border-border text-muted-foreground hover:border-amber-500/50"
+                  ? "bg-[#1B45D7]/30 border border-[#1B45D7] text-[#FBEFFA] shadow-[0_0_12px_rgba(27,69,215,0.4)]"
+                  : "bg-[#0D1117] border border-[#1A1A2E] text-[#4A5568] hover:border-[#1B45D7]/30"
               }`}
             >
-              Meal {n}
-            </button>
+              {MEAL_LABELS[i]}
+            </motion.button>
           ))}
         </div>
-      </div>
+      </SystemPanel>
 
       {/* Description */}
-      <div className="flex flex-col gap-1.5">
-        <Label htmlFor="description" className="text-muted-foreground text-xs">
-          What did you eat?
-        </Label>
-        <Input
-          id="description"
+      <SystemPanel className="p-4">
+        <label className="block font-[family-name:var(--font-rajdhani)] text-[10px] font-bold uppercase tracking-widest text-[#4A5568] mb-2">
+          Description
+        </label>
+        <input
           placeholder="Grilled chicken bowl from EatFit"
           value={description}
           onChange={(e) => setDescription(e.target.value)}
-          className="h-11 text-base"
+          className="w-full h-11 px-3 rounded-lg bg-[#0D1117] border border-[#1A1A2E] text-[#FBEFFA] text-sm font-[family-name:var(--font-geist-mono)] placeholder:text-[#4A5568]/50 focus:border-[#1B45D7] focus:outline-none transition-colors"
         />
-      </div>
+      </SystemPanel>
 
-      {/* Calories + Protein row */}
+      {/* Calories + Protein */}
       <div className="grid grid-cols-2 gap-3">
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="calories" className="text-muted-foreground text-xs">
+        <SystemPanel className="p-4">
+          <label className="block font-[family-name:var(--font-rajdhani)] text-[10px] font-bold uppercase tracking-widest text-[#4A5568] mb-2">
             Calories
-          </Label>
-          <Input
-            id="calories"
+          </label>
+          <input
             type="number"
             inputMode="numeric"
             placeholder="800"
             value={calories}
             onChange={(e) => setCalories(e.target.value)}
-            className="h-11 text-base"
+            className="w-full h-11 px-3 rounded-lg bg-[#0D1117] border border-[#1A1A2E] text-[#FBEFFA] text-base font-[family-name:var(--font-geist-mono)] placeholder:text-[#4A5568]/50 focus:border-[#1B45D7] focus:outline-none transition-colors"
           />
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="protein" className="text-muted-foreground text-xs">
+        </SystemPanel>
+        <SystemPanel className="p-4">
+          <label className="block font-[family-name:var(--font-rajdhani)] text-[10px] font-bold uppercase tracking-widest text-[#4A5568] mb-2">
             Protein (g)
-          </Label>
-          <Input
-            id="protein"
+          </label>
+          <input
             type="number"
             inputMode="numeric"
             placeholder="40"
             value={proteinG}
             onChange={(e) => setProteinG(e.target.value)}
-            className="h-11 text-base"
+            className="w-full h-11 px-3 rounded-lg bg-[#0D1117] border border-[#1A1A2E] text-[#FBEFFA] text-base font-[family-name:var(--font-geist-mono)] placeholder:text-[#4A5568]/50 focus:border-[#1B45D7] focus:outline-none transition-colors"
           />
-        </div>
+        </SystemPanel>
       </div>
 
       {/* Eating out toggle */}
-      <div className="flex flex-col gap-2">
-        <Label className="text-muted-foreground text-xs">Eating out?</Label>
+      <SystemPanel className="p-4">
+        <span className="block font-[family-name:var(--font-rajdhani)] text-[10px] font-bold uppercase tracking-widest text-[#4A5568] mb-2">
+          External Source
+        </span>
         <div className="grid grid-cols-2 gap-3">
           {[true, false].map((val) => (
-            <button
+            <motion.button
               key={String(val)}
               type="button"
+              whileTap={{ scale: 0.95 }}
               onClick={() => setIsEatingOut(val)}
-              className={`h-11 rounded-xl text-sm font-medium transition-colors ${
+              className={`h-11 rounded-lg font-[family-name:var(--font-rajdhani)] text-sm font-bold uppercase tracking-wider transition-all ${
                 isEatingOut === val
-                  ? "bg-amber-500 text-black"
-                  : "bg-card border border-border text-muted-foreground hover:border-amber-500/50"
+                  ? "bg-[#1B45D7]/30 border border-[#1B45D7] text-[#FBEFFA]"
+                  : "bg-[#0D1117] border border-[#1A1A2E] text-[#4A5568] hover:border-[#1B45D7]/30"
               }`}
             >
-              {val ? "Yes" : "No"}
-            </button>
+              {val ? "Affirmative" : "Negative"}
+            </motion.button>
           ))}
         </div>
-      </div>
+      </SystemPanel>
 
-      {/* Restaurant name (conditional) */}
+      {/* Restaurant name */}
       {isEatingOut && (
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="restaurant" className="text-muted-foreground text-xs">
-            Restaurant
-          </Label>
-          <Input
-            id="restaurant"
+        <SystemPanel className="p-4">
+          <label className="block font-[family-name:var(--font-rajdhani)] text-[10px] font-bold uppercase tracking-widest text-[#4A5568] mb-2">
+            Source
+          </label>
+          <input
             placeholder="EatFit, Swiggy, etc."
             value={restaurant}
             onChange={(e) => setRestaurant(e.target.value)}
-            className="h-11 text-base"
+            className="w-full h-11 px-3 rounded-lg bg-[#0D1117] border border-[#1A1A2E] text-[#FBEFFA] text-sm font-[family-name:var(--font-geist-mono)] placeholder:text-[#4A5568]/50 focus:border-[#1B45D7] focus:outline-none transition-colors"
           />
-        </div>
+        </SystemPanel>
       )}
 
-      {/* Save */}
-      <Button
-        onClick={handleSave}
-        disabled={!mealNumber || !calories || saving}
-        className="h-14 mt-2 rounded-xl bg-amber-500 text-black text-lg font-semibold hover:bg-amber-400 disabled:opacity-40"
+      {/* Submit */}
+      <SystemPanel
+        className={`p-0 overflow-hidden ${
+          !mealNumber || !calories || saving ? "opacity-40" : ""
+        }`}
       >
-        {saving ? "Saving..." : "Save Meal"}
-      </Button>
+        <motion.button
+          type="button"
+          whileTap={{ scale: 0.97 }}
+          onClick={handleSave}
+          disabled={!mealNumber || !calories || saving}
+          className="w-full h-14 font-[family-name:var(--font-rajdhani)] text-lg font-bold uppercase tracking-[0.15em] text-[#FBEFFA] bg-transparent cursor-pointer disabled:cursor-not-allowed"
+        >
+          {saving ? "Logging..." : "Log Entry"}
+        </motion.button>
+      </SystemPanel>
     </div>
   )
 }

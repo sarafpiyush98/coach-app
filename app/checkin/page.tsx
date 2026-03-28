@@ -3,14 +3,14 @@
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { format } from "date-fns"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
+import { motion } from "framer-motion"
+import { SystemPanel } from "@/components/ui/system-panel"
+import { useToastStore } from "@/components/ui/system-toast"
+import { playQuestComplete } from "@/lib/sounds"
 
 const RATINGS = [1, 2, 3, 4, 5] as const
 
-function RatingPills({
+function RatingPips({
   label,
   value,
   onChange,
@@ -19,38 +19,40 @@ function RatingPills({
   label: string
   value: number | null
   onChange: (v: number) => void
-  labels?: string[]
+  labels: string[]
 }) {
   return (
-    <div className="flex flex-col gap-2">
-      <Label className="text-muted-foreground text-xs">{label}</Label>
+    <SystemPanel className="p-4">
+      <span className="block font-[family-name:var(--font-rajdhani)] text-[10px] font-bold uppercase tracking-widest text-[#4A5568] mb-2">
+        {label}
+      </span>
       <div className="grid grid-cols-5 gap-2">
         {RATINGS.map((n) => (
-          <button
+          <motion.button
             key={n}
             type="button"
+            whileTap={{ scale: 0.9 }}
             onClick={() => onChange(n)}
-            className={`h-12 rounded-xl text-sm font-semibold transition-colors ${
+            className={`h-14 rounded-lg flex flex-col items-center justify-center gap-0.5 transition-all ${
               value === n
-                ? "bg-amber-500 text-black"
-                : "bg-card border border-border text-muted-foreground hover:border-amber-500/50"
+                ? "bg-[#1B45D7]/30 border border-[#1B45D7] text-[#FBEFFA] shadow-[0_0_12px_rgba(27,69,215,0.3)]"
+                : "bg-[#0D1117] border border-[#1A1A2E] text-[#4A5568] hover:border-[#1B45D7]/30"
             }`}
           >
-            <span className="text-lg">{n}</span>
-            {labels?.[n - 1] && (
-              <span className="block text-[10px] font-normal leading-tight opacity-70">
-                {labels[n - 1]}
-              </span>
-            )}
-          </button>
+            <span className="font-[family-name:var(--font-geist-mono)] text-lg">{n}</span>
+            <span className="font-[family-name:var(--font-rajdhani)] text-[8px] font-bold uppercase tracking-wider leading-none opacity-70">
+              {labels[n - 1]}
+            </span>
+          </motion.button>
         ))}
       </div>
-    </div>
+    </SystemPanel>
   )
 }
 
 export default function CheckinPage() {
   const router = useRouter()
+  const addToast = useToastStore((s) => s.add)
   const [sleepHours, setSleepHours] = useState("")
   const [sleepQuality, setSleepQuality] = useState<number | null>(null)
   const [energyLevel, setEnergyLevel] = useState<number | null>(null)
@@ -76,6 +78,8 @@ export default function CheckinPage() {
           notes: notes.trim() || null,
         }),
       })
+      playQuestComplete()
+      addToast({ title: "SYSTEM DIAGNOSTIC — COMPLETE", variant: "success" })
       router.push("/")
     } catch {
       setSaving(false)
@@ -90,19 +94,22 @@ export default function CheckinPage() {
     ateAfter10pm !== null
 
   return (
-    <div className="flex flex-col gap-5 p-4 max-w-lg mx-auto pt-6">
-      <h1 className="text-xl font-semibold text-foreground">Daily Check-in</h1>
-      <p className="text-sm text-muted-foreground -mt-3">
-        End-of-day reflection for {format(new Date(), "EEEE, MMM d")}
-      </p>
+    <div className="flex flex-col gap-4 p-4 max-w-lg mx-auto pt-6 pb-24">
+      <div>
+        <h1 className="font-[family-name:var(--font-rajdhani)] text-xl font-bold uppercase tracking-[0.15em] text-[#FBEFFA]">
+          System Diagnostic
+        </h1>
+        <p className="font-[family-name:var(--font-rajdhani)] text-xs uppercase tracking-widest text-[#4A5568] mt-1">
+          {format(new Date(), "EEEE, MMM d")}
+        </p>
+      </div>
 
       {/* Sleep hours */}
-      <div className="flex flex-col gap-1.5">
-        <Label htmlFor="sleep-hours" className="text-muted-foreground text-xs">
-          Hours of sleep
-        </Label>
-        <Input
-          id="sleep-hours"
+      <SystemPanel className="p-4">
+        <label className="block font-[family-name:var(--font-rajdhani)] text-[10px] font-bold uppercase tracking-widest text-[#4A5568] mb-2">
+          Rest Duration (hours)
+        </label>
+        <input
           type="number"
           inputMode="decimal"
           step={0.5}
@@ -111,81 +118,87 @@ export default function CheckinPage() {
           placeholder="7.5"
           value={sleepHours}
           onChange={(e) => setSleepHours(e.target.value)}
-          className="h-11 text-base"
+          className="w-full h-11 px-3 rounded-lg bg-[#0D1117] border border-[#1A1A2E] text-[#FBEFFA] text-base font-[family-name:var(--font-geist-mono)] placeholder:text-[#4A5568]/50 focus:border-[#1B45D7] focus:outline-none transition-colors"
         />
-      </div>
+      </SystemPanel>
 
       {/* Sleep quality */}
-      <RatingPills
-        label="Sleep quality"
+      <RatingPips
+        label="Rest Quality"
         value={sleepQuality}
         onChange={setSleepQuality}
-        labels={["Poor", "Fair", "OK", "Good", "Great"]}
+        labels={["Poor", "Fair", "OK", "Good", "Peak"]}
       />
 
       {/* Energy level */}
-      <RatingPills
-        label="Energy level"
+      <RatingPips
+        label="Energy Output"
         value={energyLevel}
         onChange={setEnergyLevel}
         labels={["Low", "Below", "Mid", "High", "Peak"]}
       />
 
       {/* Mood */}
-      <RatingPills
-        label="Mood"
+      <RatingPips
+        label="Mental State"
         value={mood}
         onChange={setMood}
-        labels={["Bad", "Meh", "OK", "Good", "Great"]}
+        labels={["Bad", "Meh", "OK", "Good", "Peak"]}
       />
 
-      {/* Ate after 10pm */}
-      <div className="flex flex-col gap-2">
-        <Label className="text-muted-foreground text-xs">
-          Did you eat after 10 PM?
-        </Label>
+      {/* Fasting seal */}
+      <SystemPanel className="p-4">
+        <span className="block font-[family-name:var(--font-rajdhani)] text-[10px] font-bold uppercase tracking-widest text-[#4A5568] mb-2">
+          Fasting Seal
+        </span>
         <div className="grid grid-cols-2 gap-3">
-          {[true, false].map((val) => (
-            <button
+          {([false, true] as const).map((val) => (
+            <motion.button
               key={String(val)}
               type="button"
+              whileTap={{ scale: 0.95 }}
               onClick={() => setAteAfter10pm(val)}
-              className={`h-11 rounded-xl text-sm font-medium transition-colors ${
+              className={`h-12 rounded-lg font-[family-name:var(--font-rajdhani)] text-sm font-bold uppercase tracking-wider transition-all ${
                 ateAfter10pm === val
                   ? val
-                    ? "bg-red-500/80 text-white"
-                    : "bg-emerald-500/80 text-white"
-                  : "bg-card border border-border text-muted-foreground hover:border-amber-500/50"
+                    ? "bg-[#D50000]/20 border border-[#D50000]/50 text-[#D50000]"
+                    : "bg-[#059669]/20 border border-[#059669]/50 text-[#059669] shadow-[0_0_12px_rgba(5,150,105,0.3)]"
+                  : "bg-[#0D1117] border border-[#1A1A2E] text-[#4A5568] hover:border-[#1B45D7]/30"
               }`}
             >
-              {val ? "Yes" : "No"}
-            </button>
+              {val ? "Seal Broken" : "Seal Intact"}
+            </motion.button>
           ))}
         </div>
-      </div>
+      </SystemPanel>
 
       {/* Notes */}
-      <div className="flex flex-col gap-1.5">
-        <Label htmlFor="notes" className="text-muted-foreground text-xs">
+      <SystemPanel className="p-4">
+        <label className="block font-[family-name:var(--font-rajdhani)] text-[10px] font-bold uppercase tracking-widest text-[#4A5568] mb-2">
           Notes (optional)
-        </Label>
-        <Textarea
-          id="notes"
-          placeholder="How did the day go? Anything notable?"
+        </label>
+        <textarea
+          placeholder="Operational notes..."
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
-          className="text-base"
+          className="w-full min-h-[60px] px-3 py-2 rounded-lg bg-[#0D1117] border border-[#1A1A2E] text-[#FBEFFA] text-sm placeholder:text-[#4A5568]/50 focus:border-[#1B45D7] focus:outline-none transition-colors resize-none"
         />
-      </div>
+      </SystemPanel>
 
-      {/* Save */}
-      <Button
-        onClick={handleSave}
-        disabled={!isValid || saving}
-        className="h-14 mt-2 rounded-xl bg-amber-500 text-black text-lg font-semibold hover:bg-amber-400 disabled:opacity-40"
+      {/* Submit */}
+      <SystemPanel
+        className={`p-0 overflow-hidden ${!isValid || saving ? "opacity-40" : ""}`}
       >
-        {saving ? "Saving..." : "Save Check-in"}
-      </Button>
+        <motion.button
+          type="button"
+          whileTap={{ scale: 0.97 }}
+          onClick={handleSave}
+          disabled={!isValid || saving}
+          className="w-full h-14 font-[family-name:var(--font-rajdhani)] text-lg font-bold uppercase tracking-[0.15em] text-[#FBEFFA] bg-transparent cursor-pointer disabled:cursor-not-allowed"
+        >
+          {saving ? "Processing..." : "Submit Diagnostic"}
+        </motion.button>
+      </SystemPanel>
     </div>
   )
 }

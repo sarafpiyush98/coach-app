@@ -1,50 +1,37 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
   <defs>
     <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
-      <feGaussianBlur in="SourceGraphic" stdDeviation="8" result="blur"/>
+      <feGaussianBlur in="SourceGraphic" stdDeviation="6" result="blur"/>
       <feColorMatrix in="blur" type="matrix"
-        values="0.1 0 0 0 0  0.27 0 0 0 0  0.84 0 0 0 0  0 0 0 0.6 0"/>
+        values="0.23 0 0 0 0  0.42 0 0 0 0  0.96 0 0 0 0  0 0 0 0.5 0"/>
       <feMerge>
         <feMergeNode/>
         <feMergeNode in="SourceGraphic"/>
       </feMerge>
     </filter>
-    <linearGradient id="hexFill" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#0A1543"/>
-      <stop offset="100%" stop-color="#060D2E"/>
-    </linearGradient>
   </defs>
 
-  <rect width="512" height="512" rx="108" fill="#0C0C0F"/>
+  <!-- Background -->
+  <rect width="512" height="512" rx="108" fill="#0a0b10"/>
 
-  <g filter="url(#glow)">
-    <polygon
-      points="256,80 400,163 400,329 256,412 112,329 112,163"
-      fill="url(#hexFill)"
-      stroke="#1B45D7"
-      stroke-width="4"
-    />
-  </g>
+  <!-- Circle border with glow -->
+  <circle cx="256" cy="256" r="190" fill="none" stroke="#3b6cf6" stroke-width="3" filter="url(#glow)"/>
 
-  <defs>
-    <clipPath id="hexClip">
-      <polygon points="256,80 400,163 400,329 256,412 112,329 112,163"/>
-    </clipPath>
-    <pattern id="scanlines" patternUnits="userSpaceOnUse" width="512" height="4">
-      <rect width="512" height="2" fill="transparent"/>
-      <rect y="2" width="512" height="2" fill="rgba(27,69,215,0.06)"/>
-    </pattern>
-  </defs>
-  <rect width="512" height="512" fill="url(#scanlines)" clip-path="url(#hexClip)"/>
+  <!-- Dagger blade — angular geometric upward-pointing -->
+  <path
+    d="M256 100 L288 300 L272 320 L256 340 L240 320 L224 300 Z"
+    fill="#e8eaf0"
+  />
 
-  <text
-    x="256" y="280"
-    font-family="Arial, Helvetica, sans-serif"
-    font-size="200"
-    font-weight="700"
-    fill="#1B45D7"
-    text-anchor="middle"
-    dominant-baseline="middle"
-    letter-spacing="-5"
-  >S</text>
+  <!-- Crossguard -->
+  <path
+    d="M208 300 L304 300 L296 316 L216 316 Z"
+    fill="#e8eaf0"
+  />
+
+  <!-- Grip -->
+  <rect x="246" y="320" width="20" height="50" rx="3" fill="#e8eaf0"/>
+
+  <!-- Pommel -->
+  <circle cx="256" cy="384" r="12" fill="#e8eaf0"/>
 </svg>

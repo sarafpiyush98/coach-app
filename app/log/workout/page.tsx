@@ -7,6 +7,7 @@ import { motion } from "framer-motion"
 import { SystemPanel } from "@/components/ui/system-panel"
 import { useToastStore } from "@/components/ui/system-toast"
 import { playQuestComplete } from "@/lib/sounds"
+import { useCacheStore } from "@/lib/cache"
 import { ChevronLeft } from "lucide-react"
 
 const WORKOUT_TYPES = [
@@ -98,6 +99,7 @@ export default function LogWorkoutPage() {
       })
       playQuestComplete()
       addToast({ title: "MOVEMENT PROTOCOL — COMPLETE", variant: "success" })
+      useCacheStore.getState().invalidateAll()
       setTimeout(() => router.push("/"), 1000)
     } catch {
       setSaving(false)

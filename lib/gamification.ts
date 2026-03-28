@@ -477,7 +477,7 @@ export const ACHIEVEMENTS: Achievement[] = [
     category: "nutrition",
     condition: "total_meals >= 1",
     icon: "utensils",
-    flavor: "A journey of a thousand miles begins with a single step.",
+    flavor: "Your first entry in the System's records.",
     hidden: false,
   },
   {
@@ -488,7 +488,7 @@ export const ACHIEVEMENTS: Achievement[] = [
     category: "strength",
     condition: "total_workouts >= 1",
     icon: "dumbbell",
-    flavor: "The muscles grow when you challenge them. The spirit, too.",
+    flavor: "The System has acknowledged your physical capabilities.",
     hidden: false,
   },
   {
@@ -499,7 +499,7 @@ export const ACHIEVEMENTS: Achievement[] = [
     category: "mental",
     condition: "total_checkins >= 1",
     icon: "brain",
-    flavor: "Know thyself — Oracle at Delphi",
+    flavor: "Status Window accessed for the first time.",
     hidden: false,
   },
   {
@@ -510,7 +510,7 @@ export const ACHIEVEMENTS: Achievement[] = [
     category: "consistency",
     condition: "exercise_streak >= 3",
     icon: "flame",
-    flavor: "Three days. Three steps out of the valley.",
+    flavor: "Three consecutive days. The System is watching.",
     hidden: false,
   },
   {
@@ -521,7 +521,7 @@ export const ACHIEVEMENTS: Achievement[] = [
     category: "nutrition",
     condition: "logging_streak >= 7",
     icon: "clipboard",
-    flavor: "You can't manage what you don't measure.",
+    flavor: "A week of data. The System learns.",
     hidden: false,
   },
 
@@ -534,7 +534,7 @@ export const ACHIEVEMENTS: Achievement[] = [
     category: "consistency",
     condition: "exercise_streak >= 7",
     icon: "flame",
-    flavor: "Seven days of training. Goku would be proud.",
+    flavor: "Seven days without breaking formation. E-Rank progress.",
     hidden: false,
   },
   {
@@ -545,7 +545,7 @@ export const ACHIEVEMENTS: Achievement[] = [
     category: "nutrition",
     condition: "no_late_eating_streak >= 7",
     icon: "moon",
-    flavor: "The kitchen closes at 10. No exceptions.",
+    flavor: "The vessel was sealed for seven days.",
     hidden: false,
   },
   {
@@ -556,7 +556,7 @@ export const ACHIEVEMENTS: Achievement[] = [
     category: "strength",
     condition: "total_prs >= 1",
     icon: "trophy",
-    flavor: "Power comes in response to a need, not a desire — Goku",
+    flavor: "A new record has been set. The System has recorded this.",
     hidden: false,
   },
   {
@@ -578,7 +578,7 @@ export const ACHIEVEMENTS: Achievement[] = [
     category: "strength",
     condition: "total_workouts >= 10",
     icon: "dumbbell",
-    flavor: "The tenth rep is where it begins.",
+    flavor: "Double digits. The Gatekeeper takes notice.",
     hidden: false,
   },
 
@@ -591,7 +591,7 @@ export const ACHIEVEMENTS: Achievement[] = [
     category: "consistency",
     condition: "exercise_streak >= 30",
     icon: "flame",
-    flavor: "I'll surpass my limits. Right here, right now — Asta",
+    flavor: "Thirty days. Most hunters break long before this.",
     hidden: false,
   },
   {
@@ -602,7 +602,7 @@ export const ACHIEVEMENTS: Achievement[] = [
     category: "nutrition",
     condition: "no_late_eating_streak >= 30",
     icon: "moon",
-    flavor: "Discipline is the bridge between goals and accomplishment.",
+    flavor: "A full moon cycle of discipline.",
     hidden: false,
   },
   {
@@ -613,7 +613,7 @@ export const ACHIEVEMENTS: Achievement[] = [
     category: "strength",
     condition: "total_prs >= 5",
     icon: "zap",
-    flavor: "The only one who can beat me, is me — Aomine",
+    flavor: "Five records broken. Your body exceeds its limits.",
     hidden: false,
   },
   {
@@ -648,7 +648,7 @@ export const ACHIEVEMENTS: Achievement[] = [
     category: "strength",
     condition: "total_workouts >= 100",
     icon: "crown",
-    flavor: "100 workouts. Not talent. Just showing up.",
+    flavor: "Century mark. The shadows stir.",
     hidden: false,
   },
   {
@@ -659,7 +659,7 @@ export const ACHIEVEMENTS: Achievement[] = [
     category: "consistency",
     condition: "exercise_streak >= 60",
     icon: "flame",
-    flavor: "Hesitation is defeat — Isshin Ashina",
+    flavor: "Sixty days. The penalty zone has never seen you.",
     hidden: false,
   },
   {
@@ -694,7 +694,7 @@ export const ACHIEVEMENTS: Achievement[] = [
     category: "secret",
     condition: "comeback_after_3_missed",
     icon: "rotate-ccw",
-    flavor: "Giving up is what kills people — Sanji",
+    flavor: "You returned from the darkness. The System remembers.",
     hidden: true,
   },
   {
@@ -705,7 +705,7 @@ export const ACHIEVEMENTS: Achievement[] = [
     category: "secret",
     condition: "workout_before_7am",
     icon: "sunrise",
-    flavor: "The early bird doesn't just get the worm. It gets the XP.",
+    flavor: "Training before the sun rises. The strongest start before the world wakes.",
     hidden: true,
   },
   {
@@ -716,7 +716,7 @@ export const ACHIEVEMENTS: Achievement[] = [
     category: "secret",
     condition: "weekly_grade == S",
     icon: "star",
-    flavor: "A lesson without pain is meaningless — FMA",
+    flavor: "Seven for seven. S-Rank potential detected.",
     hidden: true,
   },
   {
@@ -727,7 +727,7 @@ export const ACHIEVEMENTS: Achievement[] = [
     category: "secret",
     condition: "combo_days >= 15",
     icon: "zap",
-    flavor: "C-C-C-COMBO BREAKER! ...wait, it didn't break.",
+    flavor: "Fifteen days of unbroken will. The combo multiplier maxes.",
     hidden: true,
   },
   {
@@ -738,7 +738,7 @@ export const ACHIEVEMENTS: Achievement[] = [
     category: "secret",
     condition: "received_legendary_drop",
     icon: "sparkles",
-    flavor: "Believe in the you that believes in yourself — Kamina",
+    flavor: "The rarest of finds. Fortune favors the persistent.",
     hidden: true,
   },
 ];
@@ -773,28 +773,28 @@ export const BOSS_FIGHTS: BossFight[] = [
   {
     targetWeight: 120,
     name: "The Gatekeeper",
-    taunt: "You've never beaten me before.",
-    defeatedQuote: "First time for everything. The gate is open.",
+    taunt: "Every hunter starts at this gate. Most never pass.",
+    defeatedQuote: "The gate opens. But the dungeon goes deeper.",
     tier: "mini",
   },
   {
     targetWeight: 110,
     name: "The Plateau",
-    taunt: "Everyone quits here. Will you?",
-    defeatedQuote: "They quit. You didn't. Remember that.",
+    taunt: "This is where hunters stop. This is where they tell themselves it's enough.",
+    defeatedQuote: "You didn't stop. Remember that when the next wall appears.",
     tier: "mid",
   },
   {
     targetWeight: 100,
     name: "The Centurion",
     taunt: "Double digits are a myth for people like you.",
-    defeatedQuote: "Two digits. The myth is now your reality.",
+    defeatedQuote: "Two digits. The myth is now your record.",
     tier: "mid",
   },
   {
     targetWeight: 95,
     name: "The Final Boss",
-    taunt: "I am the version of you that gives up.",
+    taunt: "I am the version of you that quits.",
     defeatedQuote: "You beat yourself. The hardest fight there is.",
     tier: "final",
   },
@@ -954,6 +954,22 @@ const QUOTES: Quote[] = [
   { text: "Would you kindly... keep going?", source: "BioShock", category: "game" },
   { text: "Don't you dare go hollow.", source: "Dark Souls", category: "game" },
   { text: "Praise the sun!", source: "Solaire, Dark Souls", category: "game" },
+
+  // Solo Leveling
+  { text: "I alone level up.", source: "Sung Jin-Woo", category: "anime" },
+  { text: "Arise.", source: "Shadow Monarch", category: "anime" },
+  { text: "I'm used to being the weakest. But I refuse to stay that way.", source: "Sung Jin-Woo", category: "anime" },
+  { text: "The strong do not need to prove themselves. They simply exist.", source: "The System", category: "anime" },
+  { text: "Daily Quest: Failure to complete will result in an appropriate penalty.", source: "The System", category: "anime" },
+  { text: "You have acquired a new skill.", source: "The System", category: "anime" },
+  { text: "Warning: This action cannot be undone.", source: "The System", category: "anime" },
+  { text: "Player has leveled up.", source: "The System", category: "anime" },
+  { text: "The penalty zone awaits those who do not complete their daily quest.", source: "The System", category: "anime" },
+  { text: "I don't need a reason to become stronger.", source: "Sung Jin-Woo", category: "anime" },
+  { text: "The gap between E-rank and S-rank is not talent. It's will.", source: "Unknown Hunter", category: "anime" },
+  { text: "Status Window.", source: "Sung Jin-Woo", category: "anime" },
+  { text: "Every floor of the dungeon tested something different.", source: "Narrator", category: "anime" },
+  { text: "The shadows remember what the light forgets.", source: "Shadow Monarch", category: "anime" },
 
   // Personal / Philosophy
   { text: "The ceiling was never the problem. The floor was.", source: "You", category: "personal" },

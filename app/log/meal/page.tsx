@@ -7,6 +7,7 @@ import { motion } from "framer-motion"
 import { SystemPanel } from "@/components/ui/system-panel"
 import { useToastStore } from "@/components/ui/system-toast"
 import { playQuestComplete } from "@/lib/sounds"
+import { useCacheStore } from "@/lib/cache"
 
 const MEAL_NUMBERS = [1, 2, 3] as const
 const MEAL_LABELS = ["MEAL I", "MEAL II", "MEAL III"] as const
@@ -41,6 +42,7 @@ export default function LogMealPage() {
       })
       playQuestComplete()
       addToast({ title: "FUEL THE VESSEL — LOGGED", variant: "success" })
+      useCacheStore.getState().invalidateAll()
       setTimeout(() => router.push("/"), 1000)
     } catch {
       setSaving(false)

@@ -7,6 +7,7 @@ import { motion } from "framer-motion"
 import { SystemPanel } from "@/components/ui/system-panel"
 import { useToastStore } from "@/components/ui/system-toast"
 import { playQuestComplete } from "@/lib/sounds"
+import { useCacheStore } from "@/lib/cache"
 
 const RATINGS = [1, 2, 3, 4, 5] as const
 
@@ -82,6 +83,7 @@ export default function CheckinPage() {
       })
       playQuestComplete()
       addToast({ title: "SYSTEM DIAGNOSTIC — COMPLETE", variant: "success" })
+      useCacheStore.getState().invalidateAll()
       setTimeout(() => router.push("/"), 1000)
     } catch {
       setSaving(false)

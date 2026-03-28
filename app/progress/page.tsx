@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useMemo } from "react";
 import { format, subDays, startOfWeek, isWithinInterval } from "date-fns";
 import {
   AreaChart,
@@ -22,6 +22,7 @@ import {
   CheckCircle2,
   Lock,
 } from "lucide-react";
+import { useCachedFetch } from "@/lib/use-cached-fetch";
 import type { DailyLog } from "@/lib/types";
 import {
   type BossFight,
@@ -70,32 +71,44 @@ const GRADE_COLORS: Record<WeeklyGrade, string> = {
   F: "text-[var(--danger)]",
 };
 
-export default function DungeonPage() {
-  const [gData, setGData] = useState<GamificationData | null>(null);
-  const [history, setHistory] = useState<DailyLog[]>([]);
-  const [weights, setWeights] = useState<{ date: string; weight_kg: number }[]>([]);
-  const [loading, setLoading] = useState(true);
+interface HistoryResponse {
+  data?: DailyLog[];
+  days?: DailyLog[];
+}
 
-  useEffect(() => {
-    const today = new Date();
+interface ProgressResponse {
+  data?: { weight_history: { date: string; weight_kg: number }[] };
+  weight_history?: { date: string; weight_kg: number }[];
+}
+
+export default function DungeonPage() {
+  const today = useMemo(() => new Date(), []);
+  const historyUrl = useMemo(() => {
     const start = format(subDays(today, 89), "yyyy-MM-dd");
     const end = format(today, "yyyy-MM-dd");
+    return `/api/history?start=${start}&end=${end}`;
+  }, [today]);
 
-    Promise.all([
-      fetch("/api/gamification").then((r) => r.json()),
-      fetch(`/api/history?start=${start}&end=${end}`).then((r) => r.json()),
-      fetch("/api/progress").then((r) => r.json()),
-    ])
-      .then(([gam, hist, prog]) => {
-        setGData(gam.data ?? gam);
-        const histData = hist.data ?? hist;
-        setHistory(Array.isArray(histData) ? histData : []);
-        const progData = prog.data ?? prog;
-        setWeights(progData?.weight_history ?? []);
-        setLoading(false);
-      })
-      .catch(() => setLoading(false));
-  }, []);
+  const { data: gData, loading: gLoading } = useCachedFetch<GamificationData>(
+    "/api/gamification",
+    { maxAge: 30000 }
+  );
+  const { data: histRaw, loading: hLoading } = useCachedFetch<HistoryResponse | DailyLog[]>(
+    historyUrl,
+    { maxAge: 30000 }
+  );
+  const { data: progRaw, loading: pLoading } = useCachedFetch<ProgressResponse>(
+    "/api/progress",
+    { maxAge: 30000 }
+  );
+
+  const loading = gLoading || hLoading || pLoading;
+  const history: DailyLog[] = Array.isArray(histRaw)
+    ? histRaw
+    : (histRaw as HistoryResponse)?.data ?? (histRaw as HistoryResponse)?.days ?? [];
+  const weights: { date: string; weight_kg: number }[] =
+    (progRaw as ProgressResponse)?.weight_history ??
+    (progRaw as ProgressResponse)?.data?.weight_history ?? [];
 
   if (loading) {
     return (
@@ -127,7 +140,6 @@ export default function DungeonPage() {
       : boss?.currentWeight ?? START_WEIGHT;
 
   // Heatmap data
-  const today = new Date();
   type DayStatus = "good" | "ok" | "missed" | "future" | "rest";
   const heatmapDays: { date: Date; status: DayStatus }[] = [];
   for (let i = 89; i >= 0; i--) {

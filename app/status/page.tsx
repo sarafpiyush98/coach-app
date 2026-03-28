@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useState, useCallback } from "react";
 import { motion } from "framer-motion";
 import { Lock, Sword, ChevronRight } from "lucide-react";
 import { SystemPanel } from "@/components/ui/system-panel";
 import { XPRing } from "@/components/ui/xp-ring";
 import { StatBar } from "@/components/ui/stat-bar";
 import { STAT_COLORS } from "@/lib/stats";
+import { useCachedFetch } from "@/lib/use-cached-fetch";
 import type { PlayerStats } from "@/lib/stats";
 import type { HunterRank } from "@/lib/ranks";
 
@@ -123,23 +124,11 @@ function LoadingSkeleton() {
 }
 
 export default function StatusPage() {
-  const [data, setData] = useState<StatusData | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { data, loading, refresh } = useCachedFetch<StatusData>(
+    "/api/gamification",
+    { maxAge: 30000 }
+  );
   const [allocating, setAllocating] = useState<string | null>(null);
-
-  const fetchData = useCallback(() => {
-    fetch("/api/gamification")
-      .then((r) => r.json())
-      .then((res) => {
-        setData(res.data);
-        setLoading(false);
-      })
-      .catch(() => setLoading(false));
-  }, []);
-
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
 
   const allocateStat = async (stat: keyof PlayerStats) => {
     if (allocating) return;
@@ -151,7 +140,7 @@ export default function StatusPage() {
         body: JSON.stringify({ stat, points: 1 }),
       });
       if (res.ok) {
-        fetchData();
+        refresh();
       }
     } finally {
       setAllocating(null);

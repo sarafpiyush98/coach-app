@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
+  UtensilsCrossed,
   User,
   Swords,
   ScrollText,
@@ -11,7 +12,7 @@ import {
 
 const NAV_ITEMS = [
   { href: "/", label: "SYSTEM", icon: LayoutDashboard },
-  { href: "/log/meal", label: "FUEL", icon: LayoutDashboard },
+  { href: "/log/meal", label: "FUEL", icon: UtensilsCrossed },
   { href: "/status", label: "STATUS", icon: User },
   { href: "/progress", label: "DUNGEON", icon: Swords },
   { href: "/history", label: "RECORDS", icon: ScrollText },

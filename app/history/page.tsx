@@ -14,7 +14,7 @@ import {
   isFuture as isFutureDate,
 } from "date-fns"
 import { motion } from "framer-motion"
-import { ChevronLeft, ChevronRight } from "lucide-react"
+import { ChevronLeft, ChevronRight, Check, X } from "lucide-react"
 import { SystemPanel } from "@/components/ui/system-panel"
 import type { DailyLog, Meal, Workout } from "@/lib/types"
 
@@ -198,10 +198,10 @@ export default function HistoryPage() {
 
           {/* Padding cells */}
           {paddingDays.map((i) => (
-            <div key={`pad-${i}`} className="w-10 h-10" />
+            <div key={`pad-${i}`} className="w-11 h-11" />
           ))}
 
-          {/* Day cells — 40x40 with 4px gap */}
+          {/* Day cells — 44x44 with 3px gap */}
           {allDays.map((date) => {
             const dateStr = format(date, "yyyy-MM-dd")
             const log = days.find((d) => d.date === dateStr)
@@ -217,25 +217,25 @@ export default function HistoryPage() {
                 whileTap={!isFuture ? { scale: 0.9 } : undefined}
                 onClick={() => handleSelectDay(date)}
                 disabled={isFuture}
-                className={`relative w-10 h-10 rounded-lg flex items-center justify-center text-sm transition-all ${
-                  // Today: filled accent bg
+                className={`relative w-11 h-11 rounded-lg flex items-center justify-center text-sm transition-all ${
+                  // Today: accent ring (not fill)
                   isToday && !isSelected
-                    ? "bg-[var(--accent-blue)] text-white"
+                    ? "ring-[1.5px] ring-[var(--accent-blue)]"
                     : ""
                 } ${
-                  // Selected: accent border
+                  // Selected: surface-3 bg + accent bottom border
                   isSelected
-                    ? "border-2 border-[var(--accent-blue)]"
+                    ? "bg-[var(--surface-3)] border-b-2 border-b-[var(--accent-blue)]"
                     : ""
                 } ${
                   // Background based on status (not today, not selected)
                   !isToday && !isSelected
                     ? status === "good"
-                      ? "bg-[var(--accent-blue)]/30"
+                      ? "bg-[var(--surface-3)]"
                       : status === "ok"
                         ? "bg-[var(--surface-2)]"
                         : status === "rest"
-                          ? "bg-[var(--surface-1)]/50"
+                          ? "bg-[var(--surface-1)]"
                           : status === "future"
                             ? "bg-transparent"
                             : ""
@@ -244,21 +244,19 @@ export default function HistoryPage() {
               >
                 <span
                   className={`font-[family-name:var(--font-geist-mono)] text-xs tabular-nums ${
-                    isToday
-                      ? "text-white font-semibold"
-                      : status === "good"
-                        ? "text-[var(--text-primary)] font-semibold"
-                        : status === "future"
-                          ? "text-[var(--text-muted)]/40"
-                          : status === "rest"
-                            ? "text-[var(--text-muted)]/60"
-                            : "text-[var(--text-primary)]"
+                    status === "good"
+                      ? "text-[var(--text-primary)] font-semibold"
+                      : status === "future"
+                        ? "text-[var(--text-muted)]/40"
+                        : status === "rest"
+                          ? "text-[var(--text-muted)]/60 italic"
+                          : "text-[var(--text-primary)]"
                   }`}
                 >
                   {format(date, "d")}
                 </span>
                 {status === "missed" && (
-                  <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-[var(--danger)]/60" />
+                  <span className="absolute bottom-1 right-1 w-[3px] h-[3px] rounded-full bg-[var(--danger)]/60" />
                 )}
               </motion.button>
             )
@@ -289,19 +287,22 @@ export default function HistoryPage() {
                 {format(selectedDate, "MMMM d, yyyy")}
               </h3>
 
-              {/* Quest completion status */}
-              <div className="flex flex-col gap-1.5">
+              {/* Quest completion — compact list */}
+              <div className="flex flex-col gap-1">
                 {getQuestStatus(dayDetail.log, dayDetail.meals).map((quest) => (
                   <div key={quest.name} className="flex items-center justify-between">
-                    <span className="font-[family-name:var(--font-rajdhani)] text-[11px] font-bold uppercase tracking-wider text-[var(--text-primary)]/80">
-                      {quest.name}
-                    </span>
-                    <span
-                      className={`font-[family-name:var(--font-rajdhani)] text-[10px] font-bold uppercase tracking-widest ${
-                        quest.complete ? "text-[var(--success)]" : "text-[var(--danger)]/60"
-                      }`}
-                    >
-                      {quest.complete ? "COMPLETE" : "INCOMPLETE"}
+                    <div className="flex items-center gap-2">
+                      {quest.complete ? (
+                        <Check size={12} className="text-[var(--text-primary)]" />
+                      ) : (
+                        <X size={12} className="text-[var(--text-muted)]" />
+                      )}
+                      <span className={`font-[family-name:var(--font-rajdhani)] text-[11px] font-bold uppercase tracking-wider ${quest.complete ? "text-[var(--text-primary)]" : "text-[var(--text-muted)]"}`}>
+                        {quest.name}
+                      </span>
+                    </div>
+                    <span className={`font-[family-name:var(--font-geist-mono)] text-[10px] tabular-nums ${quest.complete ? "text-[var(--accent-blue)]" : "text-[var(--text-muted)]"}`}>
+                      {quest.complete ? "+15 XP" : "\u2014"}
                     </span>
                   </div>
                 ))}

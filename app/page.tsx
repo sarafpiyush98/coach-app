@@ -153,23 +153,13 @@ export default function CommandCenter() {
       {/* Active Quests */}
       <QuestList quests={quests} />
 
-      {/* Streak Row — no card, just inline data */}
-      <div className="grid grid-cols-3 gap-3 py-2">
-        <StreakIndicator
-          label="EXERCISE"
-          count={streaks.exercise}
-          danger={streaks.exerciseDanger}
-        />
-        <StreakIndicator
-          label="LOGGING"
-          count={streaks.logging}
-          danger={streaks.loggingDanger}
-        />
-        <StreakIndicator
-          label="FASTING"
-          count={streaks.noLateEating}
-          danger={streaks.noLateEatingDanger}
-        />
+      {/* Streak Row — single-line readout */}
+      <div className="flex items-center justify-center gap-4 py-2">
+        <StreakReadout label="EXERCISE" count={streaks.exercise} danger={streaks.exerciseDanger} />
+        <span className="text-[var(--text-muted)]/30 font-[family-name:var(--font-geist-mono)] text-xs">|</span>
+        <StreakReadout label="LOGGING" count={streaks.logging} danger={streaks.loggingDanger} />
+        <span className="text-[var(--text-muted)]/30 font-[family-name:var(--font-geist-mono)] text-xs">|</span>
+        <StreakReadout label="FASTING" count={streaks.noLateEating} danger={streaks.noLateEatingDanger} />
       </div>
 
       {/* Quick Actions — surface-2, functional */}
@@ -182,7 +172,7 @@ export default function CommandCenter() {
   );
 }
 
-function StreakIndicator({
+function StreakReadout({
   label,
   count,
   danger,
@@ -194,29 +184,23 @@ function StreakIndicator({
   const active = count > 0;
 
   return (
-    <div className="text-center">
-      <div className="flex items-center justify-center gap-1">
-        <span
-          className={`font-[family-name:var(--font-geist-mono)] text-2xl font-semibold tabular-nums ${
-            active
-              ? "text-[var(--text-primary)]"
-              : danger
-                ? "text-[var(--danger)]"
-                : "text-[var(--text-muted)]"
-          }`}
-        >
-          {count}
-        </span>
-        {active && (
-          <Flame size={14} className="text-[var(--warning)]" />
-        )}
-        {danger && !active && (
-          <AlertTriangle size={12} className="text-[var(--danger)]" />
-        )}
-      </div>
-      <p className="font-[family-name:var(--font-rajdhani)] text-[10px] font-bold uppercase tracking-widest text-[var(--text-muted)]">
+    <div className="flex items-center gap-1.5">
+      <span className="font-[family-name:var(--font-rajdhani)] text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)]">
         {label}
-      </p>
+      </span>
+      <span
+        className={`font-[family-name:var(--font-geist-mono)] text-sm font-semibold tabular-nums ${
+          active
+            ? "text-[var(--text-primary)]"
+            : danger
+              ? "text-[var(--danger)]"
+              : "text-[var(--text-muted)]"
+        }`}
+      >
+        {count}
+      </span>
+      {active && <Flame size={11} className="text-[var(--warning)]" />}
+      {danger && !active && <AlertTriangle size={10} className="text-[var(--danger)]" />}
     </div>
   );
 }

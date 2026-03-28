@@ -70,7 +70,7 @@ export function QuestCard({ quest, index, isFirstIncomplete = false }: QuestCard
         variant={variant}
         className={`p-3 ${
           isFirstIncomplete && !quest.completed
-            ? "border-l-4 !border-l-[var(--accent-blue)]"
+            ? "border-l-[3px] !border-l-[var(--accent-blue)]"
             : ""
         }`}
       >

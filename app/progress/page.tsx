@@ -12,6 +12,7 @@ import {
   CartesianGrid,
 } from "recharts";
 import { SystemPanel } from "@/components/ui/system-panel";
+import { SystemFrame } from "@/components/ui/system-frame";
 import {
   Swords,
   TrendingDown,
@@ -25,7 +26,6 @@ import {
 import { useCachedFetch } from "@/lib/use-cached-fetch";
 import type { DailyLog } from "@/lib/types";
 import {
-  type BossFight,
   type ComebackStatus,
   type WeeklyGrade,
   BOSS_FIGHTS,
@@ -147,7 +147,6 @@ export default function DungeonPage() {
     const dateStr = format(d, "yyyy-MM-dd");
     const log = history.find((h) => h.date === dateStr);
 
-    // Before start date = future style
     if (d < START_DATE) {
       heatmapDays.push({ date: d, status: "future" });
     } else if (i === 0 && !log) {
@@ -189,9 +188,9 @@ export default function DungeonPage() {
         DUNGEON
       </h1>
 
-      {/* Active Boss Fight */}
+      {/* Active Boss Fight — SystemFrame */}
       {allBossesDefeated ? (
-        <SystemPanel variant="gold" className="p-5">
+        <SystemFrame>
           <div className="text-center space-y-2">
             <div className="font-[family-name:var(--font-rajdhani)] text-xl font-bold text-[var(--warning)]">
               ALL BOSSES DEFEATED.
@@ -200,34 +199,36 @@ export default function DungeonPage() {
               THE DUNGEON IS CLEAR.
             </div>
           </div>
-        </SystemPanel>
+        </SystemFrame>
       ) : boss ? (
-        <SystemPanel variant="danger" className="p-5 overflow-hidden relative">
-          {/* Boss tier badge */}
-          <div className="absolute top-3 right-3 font-[family-name:var(--font-geist-mono)] text-[10px] uppercase tracking-wider px-2 py-0.5 rounded border border-[var(--danger)]/20 text-[var(--danger)]/50 bg-[var(--danger)]/5">
-            {boss.tier}
-          </div>
-
-          <div className="font-[family-name:var(--font-rajdhani)] text-2xl font-bold text-[var(--text-primary)] uppercase tracking-wide mb-1">
-            {boss.name}
-          </div>
-          <div className="text-sm italic text-[var(--text-muted)] mb-4">
-            &ldquo;{boss.taunt}&rdquo;
-          </div>
-
-          {/* HP Bar — thin and elegant */}
-          <div className="space-y-1.5">
-            <div className="relative h-1.5 w-full rounded-full bg-[var(--surface-0)] overflow-hidden">
-              <div
-                className="h-full rounded-full bg-gradient-to-r from-[var(--danger)] to-[#ff6666] transition-all duration-700"
-                style={{ width: `${boss.hpPercent}%` }}
-              />
+        <SystemFrame>
+          <div className="relative">
+            {/* Boss tier badge */}
+            <div className="absolute top-0 right-0 font-[family-name:var(--font-geist-mono)] text-[10px] uppercase tracking-wider px-2 py-0.5 rounded border border-[var(--danger)]/20 text-[var(--danger)]/50 bg-[var(--danger)]/5">
+              {boss.tier}
             </div>
-            <div className="font-[family-name:var(--font-geist-mono)] text-xs text-[var(--danger)]/60">
-              HP: {boss.kgRemaining.toFixed(1)} kg remaining
+
+            <div className="font-[family-name:var(--font-rajdhani)] text-2xl font-bold text-[var(--text-primary)] uppercase tracking-wide mb-1">
+              {boss.name}
+            </div>
+            <div className="text-sm italic text-[var(--text-muted)] mb-4">
+              &ldquo;{boss.taunt}&rdquo;
+            </div>
+
+            {/* HP Bar with shimmer */}
+            <div className="space-y-1.5">
+              <div className="relative h-1.5 w-full rounded-full bg-[var(--surface-0)] overflow-hidden">
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-[var(--danger)] to-[#ff6666] transition-all duration-700 hp-shimmer"
+                  style={{ width: `${boss.hpPercent}%` }}
+                />
+              </div>
+              <div className="font-[family-name:var(--font-geist-mono)] text-xs text-[var(--danger)]/60">
+                HP: {boss.kgRemaining.toFixed(1)} kg remaining
+              </div>
             </div>
           </div>
-        </SystemPanel>
+        </SystemFrame>
       ) : null}
 
       {/* Boss Progression Timeline */}
@@ -297,8 +298,8 @@ export default function DungeonPage() {
       {/* 90-Day Heatmap */}
       <HeatmapCard days={heatmapDays} />
 
-      {/* Weekly Grade — letter dominates */}
-      <SystemPanel className="p-5">
+      {/* Weekly Grade — SystemFrame */}
+      <SystemFrame>
         <div className="text-center space-y-1">
           <div className="font-[family-name:var(--font-rajdhani)] text-[11px] font-semibold tracking-[0.15em] uppercase text-[var(--text-muted)]">
             WEEK GRADE
@@ -312,30 +313,57 @@ export default function DungeonPage() {
             {weekScore}/100
           </div>
         </div>
-      </SystemPanel>
+      </SystemFrame>
 
-      {/* Stats Grid — no borders, bg difference IS the card */}
-      <div className="grid grid-cols-2 gap-3">
-        <StatCard
+      {/* Stats Grid — ONE container, divided by thin lines */}
+      <div className="rounded-lg bg-[var(--surface-1)] grid grid-cols-2">
+        <StatCell
           label="Total Workouts"
           value={profile.totalWorkouts}
-          icon={<Dumbbell size={16} className="text-[var(--accent-blue)]" />}
+          icon={<Dumbbell size={14} className="text-[var(--accent-blue)]" />}
+          className="border-r border-b border-[var(--border-subtle)]"
         />
-        <StatCard
+        <StatCell
           label="Personal Records"
           value={profile.totalPrs}
-          icon={<Trophy size={16} className="text-[var(--warning)]" />}
+          icon={<Trophy size={14} className="text-[var(--warning)]" />}
+          className="border-b border-[var(--border-subtle)]"
         />
-        <StatCard
+        <StatCell
           label="Best Streak"
           value={profile.bestExerciseStreak}
-          icon={<Flame size={16} className="text-[var(--danger)]" />}
+          icon={<Flame size={14} className="text-[var(--danger)]" />}
+          className="border-r border-[var(--border-subtle)]"
         />
-        <StatCard
+        <StatCell
           label="Best Combo"
           value={profile.bestCombo}
-          icon={<Zap size={16} className="text-[var(--purple)]" />}
+          icon={<Zap size={14} className="text-[var(--purple)]" />}
         />
+      </div>
+    </div>
+  );
+}
+
+function StatCell({
+  label,
+  value,
+  icon,
+  className = "",
+}: {
+  label: string;
+  value: number;
+  icon: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className={`p-4 ${className}`}>
+      <div className="flex items-center gap-1.5 mb-1">{icon}</div>
+      <div className="font-[family-name:var(--font-geist-mono)] text-2xl font-bold text-[var(--text-primary)] tabular-nums">
+        {value}
+      </div>
+      <div className="font-[family-name:var(--font-rajdhani)] text-[10px] font-bold tracking-widest uppercase text-[var(--text-muted)] mt-0.5">
+        {label}
       </div>
     </div>
   );
@@ -392,21 +420,13 @@ function WeightChart({
             />
             <XAxis
               dataKey="date"
-              tick={{
-                fill: "var(--text-muted)",
-                fontSize: 10,
-                fontFamily: "var(--font-geist-mono)",
-              }}
+              tick={{ fill: "var(--text-muted)", fontSize: 10, fontFamily: "var(--font-geist-mono)" }}
               axisLine={false}
               tickLine={false}
             />
             <YAxis
               domain={[minW, maxW]}
-              tick={{
-                fill: "var(--text-muted)",
-                fontSize: 10,
-                fontFamily: "var(--font-geist-mono)",
-              }}
+              tick={{ fill: "var(--text-muted)", fontSize: 10, fontFamily: "var(--font-geist-mono)" }}
               axisLine={false}
               tickLine={false}
               width={32}
@@ -425,15 +445,10 @@ function WeightChart({
               type="monotone"
               dataKey="weight"
               stroke="var(--accent-blue)"
-              strokeWidth={2}
+              strokeWidth={1.5}
               fill="url(#wGradBlue)"
-              dot={{ fill: "var(--accent-blue)", r: 3, strokeWidth: 0 }}
-              activeDot={{
-                r: 6,
-                fill: "#5b8cff",
-                stroke: "var(--accent-blue)",
-                strokeWidth: 2,
-              }}
+              dot={{ fill: "var(--accent-blue)", r: 2, strokeWidth: 0 }}
+              activeDot={{ r: 5, fill: "#5b8cff", stroke: "var(--accent-blue)", strokeWidth: 1.5 }}
             />
           </AreaChart>
         </ResponsiveContainer>
@@ -491,27 +506,5 @@ function HeatmapCard({
         </span>
       </div>
     </SystemPanel>
-  );
-}
-
-function StatCard({
-  label,
-  value,
-  icon,
-}: {
-  label: string;
-  value: number;
-  icon: React.ReactNode;
-}) {
-  return (
-    <div className="rounded-lg bg-[var(--surface-1)] p-4">
-      <div className="flex items-center gap-1.5 mb-2">{icon}</div>
-      <div className="font-[family-name:var(--font-geist-mono)] text-3xl font-bold text-[var(--text-primary)] tabular-nums">
-        {value}
-      </div>
-      <div className="font-[family-name:var(--font-rajdhani)] text-[10px] font-bold tracking-widest uppercase text-[var(--text-muted)] mt-1">
-        {label}
-      </div>
-    </div>
   );
 }

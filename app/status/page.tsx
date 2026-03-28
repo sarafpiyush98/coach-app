@@ -1,11 +1,10 @@
 "use client";
 
-import { useState, useCallback } from "react";
-import { motion } from "framer-motion";
+import { useState } from "react";
 import { Lock, Sword, ChevronRight } from "lucide-react";
-import { SystemPanel } from "@/components/ui/system-panel";
+import { SystemFrame } from "@/components/ui/system-frame";
+import { RadarChart } from "@/components/ui/radar-chart";
 import { XPRing } from "@/components/ui/xp-ring";
-import { StatBar } from "@/components/ui/stat-bar";
 import { STAT_COLORS } from "@/lib/stats";
 import { useCachedFetch } from "@/lib/use-cached-fetch";
 import type { PlayerStats } from "@/lib/stats";
@@ -41,26 +40,23 @@ interface StatusData {
 function HunterRankBadge({ rank }: { rank: HunterRank }) {
   return (
     <div
-      className="flex items-center justify-center w-20 h-24"
+      className="flex items-center justify-center"
       style={{
         filter:
           rank.glow !== "none"
-            ? `drop-shadow(0 0 8px ${rank.color}80) drop-shadow(0 0 16px ${rank.color}40)`
+            ? `drop-shadow(0 0 6px ${rank.color}60)`
             : undefined,
       }}
     >
       <div
-        className="w-18 h-20 flex items-center justify-center"
+        className="w-14 h-16 flex items-center justify-center"
         style={{
           clipPath: "polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)",
           background: `linear-gradient(135deg, ${rank.color}33, ${rank.color}88)`,
-          border: `1px solid ${rank.color}`,
-          width: "4.5rem",
-          height: "5.5rem",
         }}
       >
         <span
-          className="font-[family-name:var(--font-rajdhani)] text-sm font-bold uppercase tracking-wide"
+          className="font-[family-name:var(--font-rajdhani)] text-xs font-bold uppercase tracking-wide"
           style={{ color: rank.color }}
         >
           {rank.title.split("-")[0] || rank.title.split(" ")[0]}
@@ -70,55 +66,11 @@ function HunterRankBadge({ rank }: { rank: HunterRank }) {
   );
 }
 
-function ShadowCard({
-  shadow,
-  index,
-}: {
-  shadow: ShadowSoldier;
-  index: number;
-}) {
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: 0.1 * index, duration: 0.3 }}
-      className={`flex flex-col items-center gap-1 p-3 rounded-lg ${
-        shadow.unlocked
-          ? "bg-[var(--surface-1)] border-l-4 border-l-[var(--purple)]"
-          : "bg-[var(--surface-1)] opacity-50"
-      }`}
-    >
-      <div
-        className={`w-10 h-10 rounded-full flex items-center justify-center ${
-          shadow.unlocked
-            ? "bg-[var(--purple)]/15"
-            : "bg-[var(--surface-2)]"
-        }`}
-      >
-        {shadow.unlocked ? (
-          <Sword size={18} className="text-[var(--purple)]" />
-        ) : (
-          <Lock size={14} className="text-[var(--text-muted)]" />
-        )}
-      </div>
-      <span className="font-[family-name:var(--font-rajdhani)] text-[11px] font-bold uppercase tracking-wider text-[var(--text-primary)]">
-        {shadow.unlocked ? shadow.name : "???"}
-      </span>
-      <span className="text-[9px] text-[var(--text-muted)] text-center leading-tight">
-        {shadow.unlocked ? shadow.benefit : shadow.unlockCondition}
-      </span>
-    </motion.div>
-  );
-}
-
 function LoadingSkeleton() {
   return (
     <div className="flex flex-col gap-4 p-4 max-w-lg mx-auto pt-6 pb-24 animate-pulse">
       <div className="h-5 w-40 mx-auto bg-[var(--surface-1)] rounded" />
-      <div className="h-48 bg-[var(--surface-1)] rounded-lg" />
-      <div className="h-40 bg-[var(--surface-1)] rounded-lg" />
-      <div className="h-32 bg-[var(--surface-1)] rounded-lg" />
-      <div className="h-10 bg-[var(--surface-1)] rounded-lg" />
+      <div className="h-[600px] bg-[var(--surface-1)] rounded-lg" />
     </div>
   );
 }
@@ -149,104 +101,140 @@ export default function StatusPage() {
 
   if (loading || !data) return <LoadingSkeleton />;
 
-  const { profile, hunterRank, nextHunterRank, stats, statTotal, distributablePoints, shadows, unlockedCount, totalAchievements } = data;
+  const { profile, hunterRank, stats, statTotal, distributablePoints, shadows, unlockedCount, totalAchievements } = data;
   const statMax = Math.max(profile.level * 5, 20);
+  const statKeys = Object.keys(stats) as (keyof PlayerStats)[];
+
+  const radarStats = statKeys.map((key) => ({
+    label: key,
+    value: stats[key],
+    max: statMax,
+  }));
 
   return (
-    <div className="flex flex-col gap-6 p-4 max-w-lg mx-auto pt-8 pb-24">
-      {/* Header */}
-      <h1 className="font-[family-name:var(--font-rajdhani)] text-[11px] font-semibold uppercase tracking-[0.15em] text-center text-[var(--text-muted)]">
-        Status Window
-      </h1>
-
-      {/* Player Card */}
-      <SystemPanel variant="hero" className="p-5">
-        <div className="flex items-center gap-5">
+    <div className="max-w-lg mx-auto px-4 pt-8 pb-24">
+      {/* ONE SystemFrame containing the entire character sheet */}
+      <SystemFrame>
+        {/* Section 1: Identity Block */}
+        <div className="flex items-start justify-between">
+          <div className="space-y-2">
+            <h1 className="font-[family-name:var(--font-rajdhani)] text-[11px] font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)]">
+              STATUS WINDOW
+            </h1>
+            <div className="space-y-1">
+              <div className="flex gap-6">
+                <span className="font-[family-name:var(--font-rajdhani)] text-[11px] uppercase tracking-wider text-[var(--text-muted)] w-12">LV</span>
+                <span className="font-[family-name:var(--font-geist-mono)] text-sm text-[var(--text-primary)]">{profile.level}</span>
+              </div>
+              <div className="flex gap-6">
+                <span className="font-[family-name:var(--font-rajdhani)] text-[11px] uppercase tracking-wider text-[var(--text-muted)] w-12">CLASS</span>
+                <span className="font-[family-name:var(--font-rajdhani)] text-sm font-bold uppercase text-[var(--text-primary)]">HUNTER</span>
+              </div>
+              <div className="flex gap-6">
+                <span className="font-[family-name:var(--font-rajdhani)] text-[11px] uppercase tracking-wider text-[var(--text-muted)] w-12">RANK</span>
+                <span className="font-[family-name:var(--font-rajdhani)] text-sm font-bold uppercase text-[var(--text-primary)]">{hunterRank.title}</span>
+              </div>
+            </div>
+          </div>
           <HunterRankBadge rank={hunterRank} />
-          <div className="flex-1 flex flex-col items-center">
-            <XPRing
-              level={profile.level}
-              xpProgress={profile.levelProgress / 100}
-              rank={hunterRank.title}
-              size={120}
+        </div>
+
+        {/* XP Bar */}
+        <div className="mt-4">
+          <div className="h-[3px] w-full rounded-full bg-[var(--surface-3)] overflow-hidden">
+            <div
+              className="h-full rounded-full bg-[var(--accent-blue)]"
+              style={{ width: `${profile.levelProgress}%` }}
             />
           </div>
-        </div>
-        {nextHunterRank && (
-          <p className="mt-3 text-center font-[family-name:var(--font-rajdhani)] text-xs font-bold uppercase tracking-widest text-[var(--text-muted)]">
-            Next: {nextHunterRank.rank.title} — {nextHunterRank.levelsRemaining} levels
+          <p className="mt-1 font-[family-name:var(--font-geist-mono)] text-xs text-[var(--text-secondary)]">
+            XP  {profile.xpIntoLevel} / {profile.xpNeeded}
           </p>
-        )}
-      </SystemPanel>
+        </div>
 
-      {/* Stat Panel */}
-      <SystemPanel className="p-5">
-        <div className="flex flex-col gap-3">
-          {(Object.keys(stats) as (keyof PlayerStats)[]).map((stat) => (
-            <div key={stat} className="flex items-center gap-2">
-              <div className="flex-1">
-                <StatBar
-                  label={stat}
-                  value={stats[stat]}
-                  max={statMax}
-                  color={STAT_COLORS[stat]}
-                />
-              </div>
+        {/* Divider */}
+        <div className="border-t border-[var(--border-subtle)] my-6" />
+
+        {/* Section 2: Radar Chart */}
+        <div className="flex flex-col items-center">
+          <RadarChart stats={radarStats} size={220} />
+          <div className="mt-3 text-center">
+            <span className="font-[family-name:var(--font-rajdhani)] text-[11px] uppercase tracking-[0.15em] text-[var(--text-muted)]">POWER  </span>
+            <span className="font-[family-name:var(--font-geist-mono)] text-base font-semibold text-[var(--text-primary)]">{statTotal}</span>
+          </div>
+          {distributablePoints > 0 && (
+            <p className="mt-1 font-[family-name:var(--font-geist-mono)] text-xs text-[var(--accent-blue)]">
+              +{distributablePoints} AVAILABLE
+            </p>
+          )}
+        </div>
+
+        {/* Divider */}
+        <div className="border-t border-[var(--border-subtle)] my-6" />
+
+        {/* Section 3: Stat Readout */}
+        <div className="grid grid-cols-2 gap-x-8 gap-y-3">
+          {statKeys.map((stat) => (
+            <div key={stat} className="flex items-center gap-3">
+              <span className="font-[family-name:var(--font-rajdhani)] text-[11px] uppercase tracking-wider text-[var(--text-muted)] w-8">{stat}</span>
+              <span className="font-[family-name:var(--font-geist-mono)] text-sm tabular-nums text-[var(--text-primary)] w-6 text-right">{stats[stat]}</span>
               {distributablePoints > 0 && (
                 <button
                   onClick={() => allocateStat(stat)}
                   disabled={allocating !== null}
-                  className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--surface-3)] text-[var(--accent-blue)] text-xs font-bold transition-all hover:bg-[var(--accent-blue)]/20 active:scale-90 disabled:opacity-40"
+                  className="font-[family-name:var(--font-geist-mono)] text-xs text-[var(--accent-blue)] hover:text-[var(--accent-blue)]/80 active:scale-90 disabled:opacity-40 transition-all"
                 >
-                  +
+                  [+]
                 </button>
               )}
             </div>
           ))}
         </div>
-        <div className="mt-4 flex items-center justify-between">
-          <span className="font-[family-name:var(--font-rajdhani)] text-[11px] font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)]">
-            Power
-          </span>
-          <span className="font-[family-name:var(--font-geist-mono)] text-lg font-semibold text-[var(--text-primary)]">
-            {statTotal}
-          </span>
-        </div>
-        {distributablePoints > 0 && (
-          <div className="mt-2 text-center">
-            <span className="inline-block font-[family-name:var(--font-rajdhani)] text-xs font-bold uppercase tracking-widest text-[var(--warning)]">
-              Unallocated: {distributablePoints}
+
+        {/* Divider */}
+        <div className="border-t border-[var(--border-subtle)] my-6" />
+
+        {/* Section 4: Shadow Army */}
+        <div>
+          <div className="flex items-baseline gap-2 mb-4">
+            <span className="font-[family-name:var(--font-rajdhani)] text-[11px] font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)]">SHADOW ARMY</span>
+            <span className="font-[family-name:var(--font-geist-mono)] text-xs text-[var(--text-muted)]">
+              {shadows.filter((s) => s.unlocked).length}/{shadows.length}
             </span>
           </div>
-        )}
-      </SystemPanel>
-
-      {/* Shadow Army */}
-      <div>
-        <h2 className="px-1 mb-3 font-[family-name:var(--font-rajdhani)] text-[11px] font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)]">
-          Shadow Army
-        </h2>
-        <div className="grid grid-cols-3 gap-2">
-          {shadows.map((s, i) => (
-            <ShadowCard key={s.id} shadow={s} index={i} />
-          ))}
+          <div className="grid grid-cols-3 gap-4">
+            {shadows.map((s) => (
+              <div key={s.id} className="flex flex-col items-center gap-1 text-center">
+                {s.unlocked ? (
+                  <Sword size={20} className="text-[var(--accent-blue)]" />
+                ) : (
+                  <Lock size={20} className="text-[var(--text-muted)]" />
+                )}
+                <span className={`font-[family-name:var(--font-rajdhani)] text-[11px] font-bold uppercase tracking-wider ${s.unlocked ? "text-[var(--text-primary)]" : "text-[var(--text-muted)]"}`}>
+                  {s.unlocked ? s.name : "???"}
+                </span>
+                <span className="text-[9px] text-[var(--text-muted)] leading-tight">
+                  {s.unlocked ? s.benefit : s.unlockCondition}
+                </span>
+              </div>
+            ))}
+          </div>
         </div>
-      </div>
 
-      {/* Achievements summary */}
-      <SystemPanel className="p-4">
+        {/* Divider */}
+        <div className="border-t border-[var(--border-subtle)] my-6" />
+
+        {/* Section 5: Achievements */}
         <div className="flex items-center justify-between">
-          <span className="font-[family-name:var(--font-rajdhani)] text-sm font-bold uppercase tracking-[0.15em] text-[var(--text-primary)]">
-            Achievements
-          </span>
-          <div className="flex items-center gap-2">
-            <span className="font-[family-name:var(--font-geist-mono)] text-sm text-[var(--text-muted)]">
+          <div className="flex items-baseline gap-2">
+            <span className="font-[family-name:var(--font-rajdhani)] text-[11px] font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)]">ACHIEVEMENTS</span>
+            <span className="font-[family-name:var(--font-geist-mono)] text-xs text-[var(--text-muted)]">
               {unlockedCount}/{totalAchievements}
             </span>
-            <ChevronRight size={14} className="text-[var(--text-muted)]" />
           </div>
+          <ChevronRight size={14} className="text-[var(--text-muted)]" />
         </div>
-      </SystemPanel>
+      </SystemFrame>
     </div>
   );
 }

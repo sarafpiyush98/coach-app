@@ -4,7 +4,6 @@ import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { format } from "date-fns"
 import { motion } from "framer-motion"
-import { SystemPanel } from "@/components/ui/system-panel"
 import { useToastStore } from "@/components/ui/system-toast"
 import { playQuestComplete } from "@/lib/sounds"
 import { useCacheStore } from "@/lib/cache"
@@ -111,162 +110,154 @@ export default function LogWorkoutPage() {
   // Step 1: pick type
   if (!workoutType) {
     return (
-      <div className="flex flex-col gap-5 p-4 max-w-lg mx-auto pt-6 pb-24">
-        <h1 className="font-[family-name:var(--font-rajdhani)] text-xl font-bold uppercase tracking-[0.15em] text-[#FBEFFA]">
+      <div className="max-w-lg mx-auto px-4 pt-8 pb-24">
+        <h1 className="font-[family-name:var(--font-rajdhani)] text-[11px] font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-6">
           Movement Protocol
         </h1>
-        <SystemPanel className="p-4">
-          <span className="block font-[family-name:var(--font-rajdhani)] text-[10px] font-bold uppercase tracking-widest text-[#4A5568] mb-3">
+        <div className="rounded-lg bg-[var(--surface-1)] border border-[var(--border-subtle)] p-4">
+          <span className="block font-[family-name:var(--font-rajdhani)] text-[10px] font-bold uppercase tracking-widest text-[var(--text-muted)] mb-3">
             Select Protocol
           </span>
-          <div className="grid grid-cols-2 gap-3">
-            {WORKOUT_TYPES.map((t, i) => (
-              <motion.button
+          <div className="grid grid-cols-2 gap-2">
+            {WORKOUT_TYPES.map((t) => (
+              <button
                 key={t}
                 type="button"
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.05 }}
-                whileTap={{ scale: 0.95 }}
                 onClick={() => setWorkoutType(t)}
-                className="h-16 rounded-lg bg-[#0D1117] border border-[#1A1A2E] font-[family-name:var(--font-rajdhani)] text-sm font-bold uppercase tracking-wider text-[#4A5568] hover:border-[#1B45D7]/30 hover:text-[#FBEFFA] transition-all"
+                className="h-14 rounded-lg bg-[var(--surface-2)] font-[family-name:var(--font-rajdhani)] text-sm font-bold uppercase tracking-wider text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-3)] transition-all"
               >
                 {t}
-              </motion.button>
+              </button>
             ))}
           </div>
-        </SystemPanel>
+        </div>
       </div>
     )
   }
 
   // Step 2: details
   return (
-    <div className="flex flex-col gap-5 p-4 max-w-lg mx-auto pt-6 pb-24">
-      <div className="flex items-center gap-3">
-        <motion.button
+    <div className="max-w-lg mx-auto px-4 pt-8 pb-24">
+      <div className="flex items-center gap-3 mb-6">
+        <button
           type="button"
-          whileTap={{ scale: 0.9 }}
           onClick={() => setWorkoutType(null)}
-          className="text-[#4A5568] hover:text-[#FBEFFA] transition-colors"
+          className="text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
         >
-          <ChevronLeft size={20} />
-        </motion.button>
-        <h1 className="font-[family-name:var(--font-rajdhani)] text-xl font-bold uppercase tracking-[0.15em] text-[#FBEFFA]">
+          <ChevronLeft size={18} />
+        </button>
+        <h1 className="font-[family-name:var(--font-rajdhani)] text-[11px] font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)]">
           {workoutType}
         </h1>
       </div>
 
-      {/* Strength: exercise list */}
-      {isStrength && (
-        <SystemPanel className="p-4">
-          <span className="block font-[family-name:var(--font-rajdhani)] text-[10px] font-bold uppercase tracking-widest text-[#4A5568] mb-3">
-            Exercises
-          </span>
-          <div className="flex flex-col gap-2">
-            {PRESET_EXERCISES.map((name) => {
-              const idx = exercises.findIndex((e) => e.exercise_name === name)
-              const isActive = idx >= 0
-              const isExpanded = expandedIndex === idx
+      <div className="rounded-lg bg-[var(--surface-1)] border border-[var(--border-subtle)] p-4 space-y-4">
+        {/* Strength: exercise list */}
+        {isStrength && (
+          <div>
+            <span className="block font-[family-name:var(--font-rajdhani)] text-[10px] font-bold uppercase tracking-widest text-[var(--text-muted)] mb-3">
+              Exercises
+            </span>
+            <div className="flex flex-col gap-2">
+              {PRESET_EXERCISES.map((name) => {
+                const idx = exercises.findIndex((e) => e.exercise_name === name)
+                const isActive = idx >= 0
+                const isExpanded = expandedIndex === idx
 
-              return (
-                <div key={name} className="flex flex-col">
-                  <motion.button
-                    type="button"
-                    whileTap={{ scale: 0.98 }}
-                    onClick={() => toggleExercise(name)}
-                    className={`h-12 rounded-lg text-sm font-[family-name:var(--font-rajdhani)] font-bold uppercase tracking-wider text-left px-4 transition-all ${
-                      isActive
-                        ? "bg-[#1B45D7]/20 border border-[#1B45D7]/50 text-[#FBEFFA]"
-                        : "bg-[#0D1117] border border-[#1A1A2E] text-[#4A5568] hover:border-[#1B45D7]/30"
-                    }`}
-                  >
-                    {name}
-                    {isActive && (
-                      <span className="text-[10px] text-[#1B45D7] ml-2 font-[family-name:var(--font-geist-mono)] normal-case">
-                        {exercises[idx].sets && exercises[idx].reps
-                          ? `${exercises[idx].sets}x${exercises[idx].reps} @ ${exercises[idx].weight_kg || 0}kg`
-                          : "tap to edit"}
-                      </span>
-                    )}
-                  </motion.button>
-                  {isActive && isExpanded && (
-                    <div className="mt-1 p-3 rounded-lg bg-[#0D1117] border border-[#1B45D7]/20">
-                      <div className="grid grid-cols-3 gap-2">
-                        {(["weight_kg", "reps", "sets"] as const).map((field) => (
-                          <div key={field} className="flex flex-col gap-1">
-                            <span className="font-[family-name:var(--font-rajdhani)] text-[9px] font-bold uppercase tracking-widest text-[#4A5568]">
-                              {field === "weight_kg" ? "Weight (kg)" : field === "reps" ? "Reps" : "Sets"}
-                            </span>
-                            <input
-                              type="number"
-                              inputMode="numeric"
-                              placeholder={field === "weight_kg" ? "100" : field === "reps" ? "10" : "3"}
-                              value={exercises[idx][field]}
-                              onChange={(e) => updateExercise(idx, field, e.target.value)}
-                              className="h-10 px-2 rounded-lg bg-[#0A1543] border border-[#1A1A2E] text-[#FBEFFA] text-base font-[family-name:var(--font-geist-mono)] placeholder:text-[#4A5568]/50 focus:border-[#1B45D7] focus:outline-none transition-colors"
-                            />
-                          </div>
-                        ))}
+                return (
+                  <div key={name} className="flex flex-col">
+                    <button
+                      type="button"
+                      onClick={() => toggleExercise(name)}
+                      className={`h-11 rounded-lg text-sm font-[family-name:var(--font-rajdhani)] font-bold uppercase tracking-wider text-left px-4 transition-all ${
+                        isActive
+                          ? "border border-[var(--accent-blue)] text-[var(--text-primary)]"
+                          : "bg-[var(--surface-2)] text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                      }`}
+                    >
+                      {name}
+                      {isActive && (
+                        <span className="text-[10px] text-[var(--accent-blue)] ml-2 font-[family-name:var(--font-geist-mono)] normal-case">
+                          {exercises[idx].sets && exercises[idx].reps
+                            ? `${exercises[idx].sets}x${exercises[idx].reps} @ ${exercises[idx].weight_kg || 0}kg`
+                            : "tap to edit"}
+                        </span>
+                      )}
+                    </button>
+                    {isActive && isExpanded && (
+                      <div className="mt-1 p-3 rounded-lg bg-[var(--surface-2)]">
+                        <div className="grid grid-cols-3 gap-2">
+                          {(["weight_kg", "reps", "sets"] as const).map((field) => (
+                            <div key={field} className="flex flex-col gap-1">
+                              <span className="font-[family-name:var(--font-rajdhani)] text-[9px] font-bold uppercase tracking-widest text-[var(--text-muted)]">
+                                {field === "weight_kg" ? "Weight (kg)" : field === "reps" ? "Reps" : "Sets"}
+                              </span>
+                              <input
+                                type="number"
+                                inputMode="numeric"
+                                placeholder={field === "weight_kg" ? "100" : field === "reps" ? "10" : "3"}
+                                value={exercises[idx][field]}
+                                onChange={(e) => updateExercise(idx, field, e.target.value)}
+                                className="h-10 px-2 rounded-lg bg-[var(--surface-0)] border border-[var(--border-subtle)] text-[var(--text-primary)] text-base font-[family-name:var(--font-geist-mono)] placeholder:text-[var(--text-muted)]/50 focus:border-[var(--border-accent)] focus:outline-none transition-colors"
+                              />
+                            </div>
+                          ))}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => removeExercise(idx)}
+                          className="mt-2 font-[family-name:var(--font-rajdhani)] text-[10px] font-bold uppercase tracking-widest text-[var(--danger)] hover:text-[var(--danger)]/80"
+                        >
+                          Remove
+                        </button>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => removeExercise(idx)}
-                        className="mt-2 font-[family-name:var(--font-rajdhani)] text-[10px] font-bold uppercase tracking-widest text-[#D50000] hover:text-[#FF5252]"
-                      >
-                        Remove
-                      </button>
-                    </div>
-                  )}
-                </div>
-              )
-            })}
+                    )}
+                  </div>
+                )
+              })}
+            </div>
           </div>
-        </SystemPanel>
-      )}
+        )}
 
-      {/* Duration */}
-      <SystemPanel className="p-4">
-        <label className="block font-[family-name:var(--font-rajdhani)] text-[10px] font-bold uppercase tracking-widest text-[#4A5568] mb-2">
-          Duration (minutes)
-        </label>
-        <input
-          type="number"
-          inputMode="numeric"
-          placeholder="45"
-          value={duration}
-          onChange={(e) => setDuration(e.target.value)}
-          className="w-full h-11 px-3 rounded-lg bg-[#0D1117] border border-[#1A1A2E] text-[#FBEFFA] text-base font-[family-name:var(--font-geist-mono)] placeholder:text-[#4A5568]/50 focus:border-[#1B45D7] focus:outline-none transition-colors"
-        />
-      </SystemPanel>
+        {/* Duration */}
+        <div>
+          <label className="block font-[family-name:var(--font-rajdhani)] text-[10px] font-bold uppercase tracking-widest text-[var(--text-muted)] mb-2">
+            Duration (minutes)
+          </label>
+          <input
+            type="number"
+            inputMode="numeric"
+            placeholder="45"
+            value={duration}
+            onChange={(e) => setDuration(e.target.value)}
+            className="w-full h-11 px-3 rounded-lg bg-[var(--surface-2)] border border-[var(--border-subtle)] text-[var(--text-primary)] text-base font-[family-name:var(--font-geist-mono)] placeholder:text-[var(--text-muted)]/50 focus:border-[var(--border-accent)] focus:outline-none transition-colors"
+          />
+        </div>
 
-      {/* Notes */}
-      <SystemPanel className="p-4">
-        <label className="block font-[family-name:var(--font-rajdhani)] text-[10px] font-bold uppercase tracking-widest text-[#4A5568] mb-2">
-          Notes (optional)
-        </label>
-        <textarea
-          placeholder="How did it feel?"
-          value={notes}
-          onChange={(e) => setNotes(e.target.value)}
-          className="w-full min-h-[60px] px-3 py-2 rounded-lg bg-[#0D1117] border border-[#1A1A2E] text-[#FBEFFA] text-sm placeholder:text-[#4A5568]/50 focus:border-[#1B45D7] focus:outline-none transition-colors resize-none"
-        />
-      </SystemPanel>
+        {/* Notes */}
+        <div>
+          <label className="block font-[family-name:var(--font-rajdhani)] text-[10px] font-bold uppercase tracking-widest text-[var(--text-muted)] mb-2">
+            Notes (optional)
+          </label>
+          <textarea
+            placeholder="How did it feel?"
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            className="w-full min-h-[60px] px-3 py-2 rounded-lg bg-[var(--surface-2)] border border-[var(--border-subtle)] text-[var(--text-primary)] text-sm placeholder:text-[var(--text-muted)]/50 focus:border-[var(--border-accent)] focus:outline-none transition-colors resize-none"
+          />
+        </div>
+      </div>
 
       {/* Submit */}
-      <SystemPanel
-        className={`p-0 overflow-hidden ${!duration || saving ? "opacity-40" : ""}`}
+      <motion.button
+        type="button"
+        whileTap={{ scale: 0.97 }}
+        onClick={handleSave}
+        disabled={!duration || saving}
+        className="w-full h-12 mt-4 rounded-lg bg-[var(--accent-blue)] font-[family-name:var(--font-rajdhani)] text-base font-bold uppercase tracking-[0.15em] text-[var(--surface-0)] cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed transition-opacity"
       >
-        <motion.button
-          type="button"
-          whileTap={{ scale: 0.97 }}
-          onClick={handleSave}
-          disabled={!duration || saving}
-          className="w-full h-14 font-[family-name:var(--font-rajdhani)] text-lg font-bold uppercase tracking-[0.15em] text-[#FBEFFA] bg-transparent cursor-pointer disabled:cursor-not-allowed"
-        >
-          {saving ? "Executing..." : "Execute Protocol"}
-        </motion.button>
-      </SystemPanel>
+        {saving ? "Executing..." : "Execute Protocol"}
+      </motion.button>
     </div>
   )
 }

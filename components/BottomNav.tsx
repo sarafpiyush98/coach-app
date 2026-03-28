@@ -22,26 +22,26 @@ export function BottomNav() {
   const pathname = usePathname();
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-[var(--border-subtle)] bg-[var(--surface-1)]/95 backdrop-blur-lg">
-      <div className="flex justify-around items-center h-16 max-w-lg mx-auto">
+    <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-[var(--border-subtle)] bg-[var(--surface-0)]">
+      <div className="flex justify-around items-center h-14 max-w-lg mx-auto">
         {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
           const isActive = pathname === href;
           return (
             <Link
               key={href}
               href={href}
-              className={`flex flex-col items-center gap-0.5 px-4 py-2 rounded-lg transition-colors duration-200 cursor-pointer ${
+              className={`flex flex-col items-center gap-0.5 px-4 py-2 transition-colors duration-200 cursor-pointer ${
                 isActive
                   ? "text-[var(--accent-blue)]"
                   : "text-[var(--text-muted)] hover:text-[var(--text-secondary)]"
               }`}
             >
               <Icon
-                size={22}
+                size={20}
                 strokeWidth={isActive ? 2.5 : 1.5}
               />
               <span
-                className={`font-[family-name:var(--font-rajdhani)] text-[10px] font-bold uppercase tracking-wider`}
+                className="font-[family-name:var(--font-rajdhani)] text-[9px] font-bold uppercase tracking-wider"
               >
                 {label}
               </span>

@@ -1,6 +1,6 @@
 "use client";
 
-import { SystemPanel } from "@/components/ui/system-panel";
+import { SystemFrame } from "@/components/ui/system-frame";
 import { XPRing } from "@/components/ui/xp-ring";
 import type { LootRarity } from "@/lib/gamification";
 import { LOOT_COLORS } from "@/lib/gamification";
@@ -36,9 +36,9 @@ export function DailyProgress({
     : "None";
 
   return (
-    <SystemPanel variant="hero" className="p-5">
+    <SystemFrame>
       <div className="flex flex-col items-center gap-5">
-        {/* XP Ring — hero size */}
+        {/* XP Ring */}
         <XPRing
           level={level}
           xpProgress={levelProgress / 100}
@@ -46,9 +46,8 @@ export function DailyProgress({
           size={140}
         />
 
-        {/* Stats row — inline, no card wrapping */}
+        {/* Stats row — monospace readout */}
         <div className="flex w-full justify-around text-center">
-          {/* Combo */}
           <div>
             <p className="font-[family-name:var(--font-geist-mono)] text-lg font-semibold text-[var(--text-primary)]">
               {comboDay}
@@ -63,7 +62,6 @@ export function DailyProgress({
             )}
           </div>
 
-          {/* Loot */}
           <div>
             <p className={`font-[family-name:var(--font-geist-mono)] text-lg font-semibold ${lootColor}`}>
               {lootMultiplier.toFixed(1)}x
@@ -74,7 +72,6 @@ export function DailyProgress({
             <p className={`text-[10px] ${lootColor}`}>{lootLabel}</p>
           </div>
 
-          {/* Quest completion */}
           <div>
             <p className="font-[family-name:var(--font-geist-mono)] text-lg font-semibold text-[var(--text-primary)]">
               {questsCompleted}/{questsTotal}
@@ -85,7 +82,7 @@ export function DailyProgress({
           </div>
         </div>
 
-        {/* Today's XP — visual anchor */}
+        {/* Today's XP */}
         <div className="text-center">
           <span className="font-[family-name:var(--font-geist-mono)] text-4xl font-bold text-[var(--text-primary)]">
             {todayXp}
@@ -95,6 +92,6 @@ export function DailyProgress({
           </span>
         </div>
       </div>
-    </SystemPanel>
+    </SystemFrame>
   );
 }

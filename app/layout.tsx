@@ -1,7 +1,10 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { Rajdhani } from "next/font/google";
 import { ServiceWorkerRegistration } from "@/components/ServiceWorkerRegistration";
 import { BottomNav } from "@/components/BottomNav";
+import { ParticlesBg } from "@/components/particles-bg";
+import { SystemToastContainer } from "@/components/ui/system-toast";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -14,19 +17,25 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+const rajdhani = Rajdhani({
+  variable: "--font-rajdhani",
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+});
+
 export const metadata: Metadata = {
-  title: "Coach",
-  description: "Personal fitness tracker",
+  title: "THE SYSTEM",
+  description: "The System assigns. The System records.",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "Coach",
+    title: "THE SYSTEM",
   },
 };
 
 export const viewport: Viewport = {
-  themeColor: "#030712",
+  themeColor: "#0C0C0F",
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
@@ -41,11 +50,13 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} dark h-full antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable} ${rajdhani.variable} dark h-full antialiased`}
     >
       <body className="min-h-full flex flex-col bg-background">
         <ServiceWorkerRegistration />
-        <main className="flex-1 pb-20">{children}</main>
+        <SystemToastContainer />
+        <ParticlesBg />
+        <main className="relative z-10 flex-1 pb-20">{children}</main>
         <BottomNav />
       </body>
     </html>

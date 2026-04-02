@@ -4,6 +4,7 @@ import { SystemFrame } from "@/components/ui/system-frame";
 import { XPRing } from "@/components/ui/xp-ring";
 import type { LootRarity } from "@/lib/gamification";
 import { LOOT_COLORS } from "@/lib/gamification";
+import { getComboTheme, getConsistencyTitle } from "@/lib/consistency";
 
 interface DailyProgressProps {
   questsCompleted: number;
@@ -34,6 +35,8 @@ export function DailyProgress({
   const lootLabel = lootRarity
     ? lootRarity.charAt(0).toUpperCase() + lootRarity.slice(1)
     : "None";
+  const comboTheme = getComboTheme(comboDay);
+  const consistencyTitle = getConsistencyTitle(comboDay);
 
   return (
     <SystemFrame>
@@ -49,12 +52,26 @@ export function DailyProgress({
         {/* Stats row — monospace readout */}
         <div className="flex w-full justify-around text-center">
           <div>
-            <p className="font-[family-name:var(--font-geist-mono)] text-lg font-semibold text-[var(--text-primary)]">
+            <p
+              className="font-[family-name:var(--font-geist-mono)] text-lg font-semibold"
+              style={{
+                color: comboTheme.accent,
+                textShadow: comboDay >= 7 ? `0 0 20px ${comboTheme.accent}60` : undefined,
+              }}
+            >
               {comboDay}
             </p>
             <p className="font-[family-name:var(--font-rajdhani)] text-[10px] font-bold uppercase tracking-widest text-[var(--text-secondary)]">
               COMBO
             </p>
+            {consistencyTitle && (
+              <p
+                className="font-[family-name:var(--font-rajdhani)] text-[8px] font-bold uppercase tracking-widest mt-0.5"
+                style={{ color: consistencyTitle.color }}
+              >
+                {consistencyTitle.title}
+              </p>
+            )}
             {comboMultiplier > 1 && (
               <p className="font-[family-name:var(--font-geist-mono)] text-[10px] text-[var(--warning)]">
                 {comboMultiplier.toFixed(1)}x

@@ -15,9 +15,12 @@ import {
 import { SystemPanel } from "@/components/ui/system-panel";
 import { DailyProgress } from "@/components/daily-progress";
 import { QuestList } from "@/components/quest-list";
+import { ComboMilestone } from "@/components/combo-milestone";
+import { ShadowGreeting } from "@/components/shadow-greeting";
 import { useToastStore } from "@/components/ui/system-toast";
 import { useCacheStore } from "@/lib/cache";
 import { useCachedFetch } from "@/lib/use-cached-fetch";
+import { isComboMilestone, getShadowGreeting, getStreakIntensity } from "@/lib/consistency";
 import type { Quest } from "@/lib/quests";
 import type { LootRarity } from "@/lib/gamification";
 import { useLevelStore } from "@/lib/level-store";
@@ -62,6 +65,7 @@ interface DashboardData {
   quests: Quest[];
   questCompletionPercent: number;
   gamification: Gamification;
+  unlockedShadows?: string[];
   rewards?: Array<{
     id: string;
     type: string;
@@ -150,6 +154,9 @@ export default function CommandCenter() {
     { maxAge: 15000 }
   );
   const addToast = useToastStore((s) => s.add);
+  const [showMilestone, setShowMilestone] = useState(false);
+  const [showShadow, setShowShadow] = useState(false);
+  const [shadowMsg, setShadowMsg] = useState<{ name: string; message: string } | null>(null);
 
   const today = new Date();
   const dayNumber = differenceInDays(today, START_DATE) + 1;
@@ -189,6 +196,25 @@ export default function CommandCenter() {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data?.gamification?.level]);
+
+  // Combo milestone overlay + shadow greeting
+  useEffect(() => {
+    if (!data) return;
+    const combo = data.gamification.comboDay;
+    const milestoneKey = `combo_milestone_${combo}`;
+    if (isComboMilestone(combo) && !localStorage.getItem(milestoneKey)) {
+      localStorage.setItem(milestoneKey, "1");
+      setShowMilestone(true);
+      // Check for shadow greeting after milestone
+      const shadows = data.unlockedShadows ?? [];
+      const greeting = getShadowGreeting(shadows, combo);
+      if (greeting) {
+        setShadowMsg(greeting);
+        setTimeout(() => setShowShadow(true), 3800); // After milestone overlay
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data?.gamification?.comboDay]);
 
   if (loading || !data) return <LoadingSkeleton />;
 
@@ -295,6 +321,17 @@ export default function CommandCenter() {
           </SystemPanel>
         </Link>
       )}
+
+      <ComboMilestone
+        comboDay={data.gamification.comboDay}
+        show={showMilestone}
+        onDone={() => setShowMilestone(false)}
+      />
+      <ShadowGreeting
+        show={showShadow}
+        shadow={shadowMsg}
+        onDone={() => setShowShadow(false)}
+      />
     </div>
   );
 }
@@ -326,7 +363,16 @@ function StreakReadout({
       >
         {count}
       </span>
-      {active && <Flame size={11} className="text-[var(--warning)]" />}
+      {active && (
+        <Flame
+          size={11}
+          className="text-[var(--warning)]"
+          style={{
+            filter: getStreakIntensity(count) > 0.3 ? `drop-shadow(0 0 ${getStreakIntensity(count) * 8}px #f59e0b)` : undefined,
+            animation: getStreakIntensity(count) > 0.5 ? "pulse 2s infinite" : undefined,
+          }}
+        />
+      )}
       {danger && !active && <AlertTriangle size={10} className="text-[var(--danger)]" />}
     </div>
   );

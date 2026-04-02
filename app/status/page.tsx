@@ -8,6 +8,7 @@ import { SystemPanel } from "@/components/ui/system-panel";
 import { RadarChart } from "@/components/ui/radar-chart";
 import { XPRing } from "@/components/ui/xp-ring";
 import { STAT_COLORS } from "@/lib/stats";
+import { getConsistencyTitle } from "@/lib/consistency";
 import { useCachedFetch } from "@/lib/use-cached-fetch";
 import type { PlayerStats } from "@/lib/stats";
 import type { HunterRank } from "@/lib/ranks";
@@ -28,6 +29,7 @@ interface StatusData {
     xpNeeded: number;
     levelProgress: number;
     rank: { title: string };
+    best_combo?: number;
   };
   hunterRank: HunterRank;
   nextHunterRank: { rank: HunterRank; levelsRemaining: number } | null;
@@ -119,6 +121,7 @@ export default function StatusPage() {
   if (loading || !data) return <LoadingSkeleton />;
 
   const { profile, hunterRank, nextHunterRank, stats, statTotal, distributablePoints, shadows, unlockedCount, totalAchievements } = data;
+  const consistencyTitle = getConsistencyTitle(profile.best_combo ?? 0);
   const statMax = Math.max(profile.level * 5, 20);
   const statKeys = Object.keys(stats) as (keyof PlayerStats)[];
 
@@ -174,6 +177,14 @@ export default function StatusPage() {
                   {nextHunterRank && (
                     <p className="font-[family-name:var(--font-geist-mono)] text-[10px] tabular-nums text-[var(--text-muted)]">
                       NEXT: {nextHunterRank.rank.title} — {nextHunterRank.levelsRemaining} levels
+                    </p>
+                  )}
+                  {consistencyTitle && (
+                    <p
+                      className="font-[family-name:var(--font-rajdhani)] text-[10px] font-bold uppercase tracking-[0.15em] mt-1"
+                      style={{ color: consistencyTitle.color }}
+                    >
+                      &quot;{consistencyTitle.title}&quot;
                     </p>
                   )}
                 </div>

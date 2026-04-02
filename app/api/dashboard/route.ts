@@ -120,6 +120,21 @@ export async function GET() {
       }
     : null;
 
+  // Unlocked shadows for greeting system
+  const unlockedShadows: string[] = [];
+  const pRaw = profileRes.data as Record<string, unknown> | null;
+  const tw = (pRaw?.total_workouts as number) ?? 0;
+  const bes = (pRaw?.best_exercise_streak as number) ?? 0;
+  const bls = (pRaw?.best_logging_streak as number) ?? 0;
+  const tc = (pRaw?.total_checkins as number) ?? 0;
+  const pl = levelInfo.level;
+  if (tw >= 50) unlockedShadows.push("Iron");
+  if (bes >= 14) unlockedShadows.push("Igris");
+  if (bls >= 21) unlockedShadows.push("Tank");
+  if (tc >= 30) unlockedShadows.push("Beru");
+  if (pl >= 18) unlockedShadows.push("Tusk");
+  if (pl >= 40) unlockedShadows.push("Bellion");
+
   return Response.json({
     data: {
       dailyLog,
@@ -140,6 +155,7 @@ export async function GET() {
         lootRarity: loot.rarity,
         lootMultiplier: loot.multiplier,
       },
+      unlockedShadows,
       rewards: unclaimedRewards,
     },
   });

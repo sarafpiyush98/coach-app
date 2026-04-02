@@ -34,7 +34,7 @@ import {
 } from "@/lib/gamification";
 
 const START_WEIGHT = 128;
-const START_DATE = new Date(2026, 2, 29); // March 29, 2026
+const START_DATE = new Date(2026, 3, 6); // April 6, 2026
 
 interface GamificationData {
   profile: {

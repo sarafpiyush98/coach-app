@@ -25,7 +25,7 @@ import type { Quest } from "@/lib/quests";
 import type { LootRarity } from "@/lib/gamification";
 import { useLevelStore } from "@/lib/level-store";
 
-const START_DATE = new Date(2026, 2, 29); // March 29, 2026
+const START_DATE = new Date(2026, 3, 6); // April 6, 2026
 
 const UNLOCK_THRESHOLDS = [
   { level: 3, message: "The System now tracks your consistency." },

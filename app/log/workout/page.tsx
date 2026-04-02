@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { format } from "date-fns"
 import { motion } from "framer-motion"
-import { ChevronDown, ChevronUp, Check, ArrowRight } from "lucide-react"
+import { ChevronDown, ChevronUp, ChevronLeft, Check, ArrowRight, Dumbbell, Flame, Zap, Waves, Footprints, Activity } from "lucide-react"
 import { SystemFrame } from "@/components/ui/system-frame"
 import { SystemPanel } from "@/components/ui/system-panel"
 import { useToastStore } from "@/components/ui/system-toast"
@@ -209,6 +209,11 @@ function ExerciseCard({
           actualWeight: s.actualWeight,
         }),
       })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        addToast({ title: "SET LOG FAILED", message: err.error || "The System encountered an error.", variant: "danger" })
+        return
+      }
       const result = await res.json()
       const isPR = result.data?.isPR ?? false
 
@@ -234,7 +239,7 @@ function ExerciseCard({
         setResting(true)
       }
     } catch {
-      // silent fail — user can retry
+      addToast({ title: "NETWORK ERROR", message: "Connection lost. Try again.", variant: "danger" })
     }
   }
 
@@ -419,14 +424,377 @@ function ExerciseCard({
 }
 
 // ============================================================
+// Bodyweight Circuit Data
+// ============================================================
+
+const BODYWEIGHT_CIRCUIT = [
+  { name: "Push-Ups", targetSets: 3, targetReps: 15, restSeconds: 60, formCues: ["Chest to floor", "Elbows at 45\u00B0"], isTime: false },
+  { name: "Bodyweight Squats", targetSets: 3, targetReps: 20, restSeconds: 60, formCues: ["Below parallel", "Knees track toes"], isTime: false },
+  { name: "Lunges", targetSets: 3, targetReps: 12, restSeconds: 60, formCues: ["Step far enough", "Rear knee near floor"], isTime: false },
+  { name: "Plank Hold", targetSets: 3, targetReps: 30, restSeconds: 45, formCues: ["Hips level", "Core engaged"], isTime: true },
+  { name: "Mountain Climbers", targetSets: 3, targetReps: 20, restSeconds: 60, formCues: ["Fast pace", "Core tight"], isTime: false },
+]
+
+// ============================================================
+// Bodyweight Workout Component
+// ============================================================
+
+function BodyweightWorkout({ onBack }: { onBack: () => void }) {
+  const router = useRouter()
+  const addToast = useToastStore((s) => s.add)
+  const [exerciseIdx, setExerciseIdx] = useState(0)
+  const [currentSet, setCurrentSet] = useState(1)
+  const [resting, setResting] = useState(false)
+  const [restTime, setRestTime] = useState(0)
+  const [completed, setCompleted] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [startTime] = useState(Date.now())
+
+  const exercise = BODYWEIGHT_CIRCUIT[exerciseIdx]
+  const allExercisesDone = exerciseIdx >= BODYWEIGHT_CIRCUIT.length
+
+  // Rest countdown
+  useEffect(() => {
+    if (!resting || restTime <= 0) return
+    const t = setTimeout(() => setRestTime((r) => r - 1), 1000)
+    return () => clearTimeout(t)
+  }, [resting, restTime])
+
+  // Stop resting when timer hits 0
+  useEffect(() => {
+    if (resting && restTime <= 0) {
+      setResting(false)
+      if (typeof navigator !== "undefined" && navigator.vibrate) {
+        navigator.vibrate([200, 100, 400])
+      }
+    }
+  }, [resting, restTime])
+
+  const handleCompleteSet = () => {
+    playQuestComplete()
+    if (currentSet >= exercise.targetSets) {
+      // Move to next exercise
+      const nextIdx = exerciseIdx + 1
+      if (nextIdx >= BODYWEIGHT_CIRCUIT.length) {
+        setCompleted(true)
+      } else {
+        setExerciseIdx(nextIdx)
+        setCurrentSet(1)
+      }
+    } else {
+      // Start rest, then next set
+      setResting(true)
+      setRestTime(exercise.restSeconds)
+      setCurrentSet((s) => s + 1)
+    }
+  }
+
+  const handleLogSession = async () => {
+    if (saving) return
+    setSaving(true)
+    try {
+      const today = format(new Date(), "yyyy-MM-dd")
+      const res = await fetch("/api/workouts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          date: today,
+          type: "other",
+          duration_minutes: Math.round((Date.now() - startTime) / 60000),
+          notes: "Bodyweight circuit",
+        }),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        addToast({ title: "LOG FAILED", message: err.error || "The System encountered an error.", variant: "danger" })
+        setSaving(false)
+        return
+      }
+      await fetch("/api/complete-workout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ date: today }),
+      })
+      playQuestComplete()
+      addToast({ title: "BODYWEIGHT PROTOCOL — COMPLETE", variant: "success" })
+      useCacheStore.getState().invalidateAll()
+      setTimeout(() => router.push("/"), 1000)
+    } catch {
+      addToast({ title: "NETWORK ERROR", message: "Connection lost. Try again.", variant: "danger" })
+      setSaving(false)
+    }
+  }
+
+  if (completed || allExercisesDone) {
+    return (
+      <div className="flex flex-col gap-4 p-4 max-w-lg mx-auto pt-8 pb-24">
+        <button onClick={onBack} className="flex items-center gap-1 text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors mb-4">
+          <ChevronLeft size={16} />
+          <span className="font-[family-name:var(--font-rajdhani)] text-[10px] font-bold uppercase tracking-widest">Back</span>
+        </button>
+        <SystemFrame>
+          <div className="text-center py-8 space-y-4">
+            <h1 className="font-[family-name:var(--font-rajdhani)] text-2xl font-bold uppercase tracking-wider text-[var(--text-primary)]">
+              ALL PROTOCOLS EXECUTED.
+            </h1>
+            <p className="font-[family-name:var(--font-rajdhani)] text-sm uppercase tracking-wider text-[var(--text-muted)]">
+              The System has recorded this session.
+            </p>
+            <motion.button
+              whileTap={{ scale: 0.97 }}
+              onClick={handleLogSession}
+              disabled={saving}
+              className="w-full h-12 mt-4 rounded-lg bg-[var(--accent-blue)] font-[family-name:var(--font-rajdhani)] text-base font-bold uppercase tracking-[0.15em] text-[var(--surface-0)] disabled:opacity-40 transition-opacity"
+            >
+              {saving ? "Processing..." : "LOG SESSION"}
+            </motion.button>
+          </div>
+        </SystemFrame>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex flex-col gap-4 p-4 max-w-lg mx-auto pt-8 pb-24">
+      <button onClick={onBack} className="flex items-center gap-1 text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors">
+        <ChevronLeft size={16} />
+        <span className="font-[family-name:var(--font-rajdhani)] text-[10px] font-bold uppercase tracking-widest">Back</span>
+      </button>
+
+      {/* Progress dots */}
+      <div className="flex justify-center gap-1.5 mb-2">
+        {BODYWEIGHT_CIRCUIT.map((_, i) => (
+          <div
+            key={i}
+            className={`w-2 h-2 rounded-full transition-colors ${
+              i === exerciseIdx
+                ? "bg-[var(--accent-blue)]"
+                : i < exerciseIdx
+                  ? "bg-[var(--success)]"
+                  : "bg-[var(--surface-3)]"
+            }`}
+          />
+        ))}
+      </div>
+
+      <SystemFrame className="min-h-[50vh]">
+        <div className="mb-4">
+          <span className="font-[family-name:var(--font-geist-mono)] text-[10px] text-[var(--text-muted)]">
+            EXERCISE {exerciseIdx + 1} OF {BODYWEIGHT_CIRCUIT.length}
+          </span>
+          <h2 className="font-[family-name:var(--font-rajdhani)] text-xl font-bold uppercase tracking-wider text-[var(--text-primary)] mt-1">
+            {exercise.name}
+          </h2>
+        </div>
+
+        <div className="border-t border-b border-[var(--border-subtle)] py-3 mb-4">
+          <div className="flex gap-4">
+            <span className="font-[family-name:var(--font-rajdhani)] text-[10px] uppercase tracking-wider text-[var(--text-muted)] w-12">TARGET</span>
+            <span className="font-[family-name:var(--font-geist-mono)] text-sm text-[var(--text-primary)]">
+              {exercise.targetSets} x {exercise.targetReps}{exercise.isTime ? "s" : " reps"}
+            </span>
+          </div>
+        </div>
+
+        {/* Form Cues */}
+        {exercise.formCues.length > 0 && (
+          <div className="mb-4">
+            <span className="font-[family-name:var(--font-rajdhani)] text-[10px] font-bold uppercase tracking-widest text-[var(--text-muted)] mb-2 block">
+              FORM CUES
+            </span>
+            <ul className="space-y-1">
+              {exercise.formCues.map((cue, i) => (
+                <li key={i} className="text-[13px] text-[var(--text-muted)] pl-3 relative before:content-['\2022'] before:absolute before:left-0 before:text-[var(--text-muted)]/40">
+                  {cue}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {/* Rest Timer */}
+        {resting && (
+          <div className="flex flex-col items-center gap-1 py-3">
+            <span className="font-[family-name:var(--font-rajdhani)] text-[10px] font-bold uppercase tracking-widest text-[var(--text-muted)]">
+              REST
+            </span>
+            <span className="font-[family-name:var(--font-geist-mono)] text-5xl font-bold tabular-nums text-[var(--accent-blue)]">
+              {Math.floor(restTime / 60)}:{(restTime % 60).toString().padStart(2, "0")}
+            </span>
+          </div>
+        )}
+
+        {/* Set tracker */}
+        {!resting && (
+          <div className="text-center py-6 space-y-4">
+            <span className="font-[family-name:var(--font-rajdhani)] text-[10px] font-bold uppercase tracking-widest text-[var(--text-muted)]">
+              SET {currentSet} / {exercise.targetSets}
+            </span>
+            <div className="font-[family-name:var(--font-geist-mono)] text-4xl font-bold text-[var(--text-primary)]">
+              {exercise.targetReps}{exercise.isTime ? "s" : " reps"}
+            </div>
+            <motion.button
+              whileTap={{ scale: 0.97 }}
+              onClick={handleCompleteSet}
+              className="w-full h-12 rounded-lg bg-[var(--accent-blue)] font-[family-name:var(--font-rajdhani)] text-base font-bold uppercase tracking-[0.15em] text-[var(--surface-0)] transition-opacity"
+            >
+              COMPLETE SET
+            </motion.button>
+          </div>
+        )}
+      </SystemFrame>
+    </div>
+  )
+}
+
+// ============================================================
+// Free Movement Data & Component
+// ============================================================
+
+const FREE_ACTIVITIES = [
+  { type: "badminton", label: "Badminton", Icon: Activity },
+  { type: "swim", label: "Swim", Icon: Waves },
+  { type: "walk", label: "Walk", Icon: Footprints },
+  { type: "other", label: "Other", Icon: Zap },
+] as const
+
+function FreeMovement({ onBack }: { onBack: () => void }) {
+  const router = useRouter()
+  const addToast = useToastStore((s) => s.add)
+  const [selectedType, setSelectedType] = useState<string>("badminton")
+  const [duration, setDuration] = useState("")
+  const [notes, setNotes] = useState("")
+  const [saving, setSaving] = useState(false)
+
+  const handleSubmit = async () => {
+    if (saving || !duration) return
+    setSaving(true)
+    try {
+      const today = format(new Date(), "yyyy-MM-dd")
+      const res = await fetch("/api/workouts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          date: today,
+          type: selectedType,
+          duration_minutes: Number(duration),
+          notes: notes || undefined,
+        }),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        addToast({ title: "LOG FAILED", message: err.error || "The System encountered an error.", variant: "danger" })
+        setSaving(false)
+        return
+      }
+      await fetch("/api/complete-workout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ date: today }),
+      })
+      playQuestComplete()
+      addToast({ title: "FREE MOVEMENT — LOGGED", variant: "success" })
+      useCacheStore.getState().invalidateAll()
+      setTimeout(() => router.push("/"), 1000)
+    } catch {
+      addToast({ title: "NETWORK ERROR", message: "Connection lost. Try again.", variant: "danger" })
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-4 p-4 max-w-lg mx-auto pt-8 pb-24">
+      <button onClick={onBack} className="flex items-center gap-1 text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors">
+        <ChevronLeft size={16} />
+        <span className="font-[family-name:var(--font-rajdhani)] text-[10px] font-bold uppercase tracking-widest">Back</span>
+      </button>
+
+      <SystemFrame>
+        <h2 className="font-[family-name:var(--font-rajdhani)] text-[11px] font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-4">
+          Free Movement
+        </h2>
+
+        {/* Activity selector */}
+        <div className="mb-6">
+          <span className="font-[family-name:var(--font-rajdhani)] text-[10px] font-bold uppercase tracking-widest text-[var(--text-muted)] mb-2 block">
+            ACTIVITY
+          </span>
+          <div className="grid grid-cols-4 gap-2">
+            {FREE_ACTIVITIES.map(({ type, label, Icon }) => (
+              <button
+                key={type}
+                onClick={() => setSelectedType(type)}
+                className={`flex flex-col items-center gap-1.5 py-3 rounded-lg border transition-colors ${
+                  selectedType === type
+                    ? "border-[var(--accent-blue)] bg-[var(--accent-blue)]/10"
+                    : "border-[var(--border-subtle)] bg-[var(--surface-2)]"
+                }`}
+              >
+                <Icon size={18} className={selectedType === type ? "text-[var(--accent-blue)]" : "text-[var(--text-muted)]"} />
+                <span className={`font-[family-name:var(--font-rajdhani)] text-[10px] font-bold uppercase tracking-wider ${
+                  selectedType === type ? "text-[var(--text-primary)]" : "text-[var(--text-muted)]"
+                }`}>
+                  {label}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Duration */}
+        <div className="mb-4">
+          <span className="font-[family-name:var(--font-rajdhani)] text-[10px] font-bold uppercase tracking-widest text-[var(--text-muted)] mb-2 block">
+            DURATION
+          </span>
+          <div className="flex items-center gap-3">
+            <input
+              type="number"
+              inputMode="numeric"
+              value={duration}
+              onChange={(e) => setDuration(e.target.value)}
+              placeholder="0"
+              className="w-24 h-10 px-3 rounded-lg bg-[var(--surface-2)] border border-[var(--border-subtle)] text-[var(--text-primary)] text-sm font-[family-name:var(--font-geist-mono)] text-center focus:border-[var(--border-accent)] focus:outline-none"
+            />
+            <span className="font-[family-name:var(--font-geist-mono)] text-xs text-[var(--text-muted)]">minutes</span>
+          </div>
+        </div>
+
+        {/* Notes */}
+        <div className="mb-6">
+          <span className="font-[family-name:var(--font-rajdhani)] text-[10px] font-bold uppercase tracking-widest text-[var(--text-muted)] mb-2 block">
+            NOTES (OPTIONAL)
+          </span>
+          <textarea
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            rows={2}
+            className="w-full px-3 py-2 rounded-lg bg-[var(--surface-2)] border border-[var(--border-subtle)] text-[var(--text-primary)] text-sm font-[family-name:var(--font-geist-mono)] focus:border-[var(--border-accent)] focus:outline-none resize-none"
+          />
+        </div>
+
+        <motion.button
+          whileTap={{ scale: 0.97 }}
+          onClick={handleSubmit}
+          disabled={saving || !duration}
+          className="w-full h-12 rounded-lg bg-[var(--accent-blue)] font-[family-name:var(--font-rajdhani)] text-base font-bold uppercase tracking-[0.15em] text-[var(--surface-0)] disabled:opacity-40 transition-opacity"
+        >
+          {saving ? "Logging..." : "LOG SESSION"}
+        </motion.button>
+      </SystemFrame>
+    </div>
+  )
+}
+
+// ============================================================
 // Main Page
 // ============================================================
 
 export default function LogWorkoutPage() {
   const router = useRouter()
   const addToast = useToastStore((s) => s.add)
+  const [mode, setMode] = useState<"select" | "prescribed" | "bodyweight" | "free">("select")
   const [prescription, setPrescription] = useState<PrescribedWorkout | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(false)
   const [currentExercise, setCurrentExercise] = useState(0)
   const [completing, setCompleting] = useState(false)
 
@@ -437,6 +805,8 @@ export default function LogWorkoutPage() {
   const [cardioSaving, setCardioSaving] = useState(false)
 
   useEffect(() => {
+    if (mode !== "prescribed") return
+    setLoading(true)
     fetch("/api/workout-prescription")
       .then((r) => r.json())
       .then((res) => {
@@ -451,22 +821,29 @@ export default function LogWorkoutPage() {
       })
       .catch(() => {})
       .finally(() => setLoading(false))
-  }, [])
+  }, [mode])
 
   const handleCompleteWorkout = useCallback(async () => {
     if (!prescription || completing) return
     setCompleting(true)
     try {
-      await fetch("/api/complete-workout", {
+      const res = await fetch("/api/complete-workout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ date: prescription.date }),
       })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        addToast({ title: "COMPLETION FAILED", message: err.error || "The System encountered an error.", variant: "danger" })
+        setCompleting(false)
+        return
+      }
       playQuestComplete()
       addToast({ title: "MOVEMENT PROTOCOL — COMPLETE", variant: "success" })
       useCacheStore.getState().invalidateAll()
       setTimeout(() => router.push("/"), 1000)
     } catch {
+      addToast({ title: "NETWORK ERROR", message: "Connection lost. Try again.", variant: "danger" })
       setCompleting(false)
     }
   }, [prescription, completing, addToast, router])
@@ -475,7 +852,7 @@ export default function LogWorkoutPage() {
     if (!prescription || cardioSaving) return
     setCardioSaving(true)
     try {
-      await fetch("/api/log-cardio", {
+      const res = await fetch("/api/log-cardio", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -486,14 +863,92 @@ export default function LogWorkoutPage() {
           speedKmh: Number(cardioSpeed),
         }),
       })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        addToast({ title: "LOG FAILED", message: err.error || "The System encountered an error.", variant: "danger" })
+        setCardioSaving(false)
+        return
+      }
       playQuestComplete()
       addToast({ title: "MOVEMENT PROTOCOL — COMPLETE", variant: "success" })
       useCacheStore.getState().invalidateAll()
       setTimeout(() => router.push("/"), 1000)
     } catch {
+      addToast({ title: "NETWORK ERROR", message: "Connection lost. Try again.", variant: "danger" })
       setCardioSaving(false)
     }
   }
+
+  // ── MODE: BODYWEIGHT ──
+  if (mode === "bodyweight") {
+    return <BodyweightWorkout onBack={() => setMode("select")} />
+  }
+
+  // ── MODE: FREE ──
+  if (mode === "free") {
+    return <FreeMovement onBack={() => setMode("select")} />
+  }
+
+  // ── MODE: SELECT ──
+  if (mode === "select") {
+    return (
+      <div className="flex flex-col gap-4 p-4 max-w-lg mx-auto pt-8 pb-24">
+        <h1 className="text-center font-[family-name:var(--font-rajdhani)] text-[11px] font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)]">
+          Movement Protocol
+        </h1>
+
+        <div className="cursor-pointer" onClick={() => setMode("prescribed")}>
+          <SystemPanel className="p-4">
+            <div className="flex items-center gap-3">
+              <Dumbbell size={20} className="text-[var(--accent-blue)]" />
+              <div>
+                <p className="font-[family-name:var(--font-rajdhani)] text-sm font-bold uppercase tracking-wider text-[var(--text-primary)]">
+                  Prescribed Protocol
+                </p>
+                <p className="font-[family-name:var(--font-rajdhani)] text-[10px] uppercase tracking-widest text-[var(--text-muted)]">
+                  System-assigned strength or cardio
+                </p>
+              </div>
+            </div>
+          </SystemPanel>
+        </div>
+
+        <div className="cursor-pointer" onClick={() => setMode("bodyweight")}>
+          <SystemPanel className="p-4">
+            <div className="flex items-center gap-3">
+              <Flame size={20} className="text-[#EF4444]" />
+              <div>
+                <p className="font-[family-name:var(--font-rajdhani)] text-sm font-bold uppercase tracking-wider text-[var(--text-primary)]">
+                  Bodyweight Protocol
+                </p>
+                <p className="font-[family-name:var(--font-rajdhani)] text-[10px] uppercase tracking-widest text-[var(--text-muted)]">
+                  Guided circuit — no equipment required
+                </p>
+              </div>
+            </div>
+          </SystemPanel>
+        </div>
+
+        <div className="cursor-pointer" onClick={() => setMode("free")}>
+          <SystemPanel className="p-4">
+            <div className="flex items-center gap-3">
+              <Zap size={20} className="text-[#22C55E]" />
+              <div>
+                <p className="font-[family-name:var(--font-rajdhani)] text-sm font-bold uppercase tracking-wider text-[var(--text-primary)]">
+                  Free Movement
+                </p>
+                <p className="font-[family-name:var(--font-rajdhani)] text-[10px] uppercase tracking-widest text-[var(--text-muted)]">
+                  Badminton, swim, dance, walk — any movement counts
+                </p>
+              </div>
+            </div>
+          </SystemPanel>
+        </div>
+      </div>
+    )
+  }
+
+  // ── MODE: PRESCRIBED ──
 
   if (loading) {
     return (
@@ -507,6 +962,10 @@ export default function LogWorkoutPage() {
   if (!prescription) {
     return (
       <div className="max-w-lg mx-auto px-4 pt-8 pb-24">
+        <button onClick={() => setMode("select")} className="flex items-center gap-1 text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors mb-4">
+          <ChevronLeft size={16} />
+          <span className="font-[family-name:var(--font-rajdhani)] text-[10px] font-bold uppercase tracking-widest">Back</span>
+        </button>
         <p className="font-[family-name:var(--font-geist-mono)] text-sm text-[var(--text-muted)] text-center py-12">
           No prescription available. Run the workout schema first.
         </p>
@@ -520,6 +979,10 @@ export default function LogWorkoutPage() {
   if (prescription.type === "rest") {
     return (
       <div className="max-w-lg mx-auto px-4 pt-8 pb-24">
+        <button onClick={() => setMode("select")} className="flex items-center gap-1 text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors mb-4">
+          <ChevronLeft size={16} />
+          <span className="font-[family-name:var(--font-rajdhani)] text-[10px] font-bold uppercase tracking-widest">Back</span>
+        </button>
         <SystemFrame>
           <h1 className="font-[family-name:var(--font-rajdhani)] text-[11px] font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-6">
             Rest Protocol
@@ -545,6 +1008,10 @@ export default function LogWorkoutPage() {
     const target = prescription.cardioTarget
     return (
       <div className="max-w-lg mx-auto px-4 pt-8 pb-24">
+        <button onClick={() => setMode("select")} className="flex items-center gap-1 text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors mb-4">
+          <ChevronLeft size={16} />
+          <span className="font-[family-name:var(--font-rajdhani)] text-[10px] font-bold uppercase tracking-widest">Back</span>
+        </button>
         <SystemFrame>
           <span className="font-[family-name:var(--font-rajdhani)] text-[10px] font-bold uppercase tracking-widest text-[var(--text-muted)]">
             MOVEMENT PROTOCOL — CARDIO
@@ -649,6 +1116,11 @@ export default function LogWorkoutPage() {
 
   return (
     <div className="max-w-lg mx-auto px-4 pt-8 pb-24">
+      <button onClick={() => setMode("select")} className="flex items-center gap-1 text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors mb-4">
+        <ChevronLeft size={16} />
+        <span className="font-[family-name:var(--font-rajdhani)] text-[10px] font-bold uppercase tracking-widest">Back</span>
+      </button>
+
       {/* Navigation dots */}
       <div className="flex justify-center gap-1.5 mb-4">
         {exercises.map((_, i) => (

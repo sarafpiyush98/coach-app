@@ -249,7 +249,22 @@ export async function recalculateAndWriteXP(date: string): Promise<void> {
     );
     const bestCombo = Math.max(comboDay, profile?.best_combo ?? 0);
 
-    // 13. Update player_profile
+    // 13. Ensure player_profile row exists
+    let profileId = profile?.id;
+    if (!profileId) {
+      const { data: newProfile, error: insertError } = await supabase
+        .from("player_profile")
+        .insert({ total_xp: 0, level: 1 } as never)
+        .select("id")
+        .single();
+      if (insertError || !newProfile) {
+        console.error("[xp-engine] Failed to create player_profile:", insertError?.message);
+        return;
+      }
+      profileId = (newProfile as { id: string }).id;
+    }
+
+    // 14. Update player_profile
     const { error: profileError } = await supabase
       .from("player_profile")
       .update({
@@ -265,7 +280,7 @@ export async function recalculateAndWriteXP(date: string): Promise<void> {
         best_combo: bestCombo,
         last_active_date: date,
       } as never)
-      .eq("id", profile?.id as never);
+      .eq("id", profileId as never);
 
     if (profileError) {
       console.error(

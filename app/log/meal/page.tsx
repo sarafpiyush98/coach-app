@@ -33,7 +33,7 @@ function LogMealContent() {
   const [description, setDescription] = useState("")
   const [calories, setCalories] = useState("")
   const [proteinG, setProteinG] = useState("")
-  const [isEatingOut, setIsEatingOut] = useState(true)
+  const [isEatingOut, setIsEatingOut] = useState(false)
   const [restaurant, setRestaurant] = useState("")
   const [saving, setSaving] = useState(false)
 
@@ -58,7 +58,7 @@ function LogMealContent() {
     if (!mealNumber || !calories) return
     setSaving(true)
     try {
-      await fetch("/api/meals", {
+      const res = await fetch("/api/meals", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -71,11 +71,18 @@ function LogMealContent() {
           restaurant: isEatingOut ? restaurant : "",
         }),
       })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        addToast({ title: "LOG FAILED", message: err.error || "The System encountered an error.", variant: "danger" })
+        setSaving(false)
+        return
+      }
       playQuestComplete()
       addToast({ title: "FUEL THE VESSEL — LOGGED", variant: "success" })
       useCacheStore.getState().invalidateAll()
       setTimeout(() => router.push("/"), 1000)
     } catch {
+      addToast({ title: "NETWORK ERROR", message: "Connection lost. Try again.", variant: "danger" })
       setSaving(false)
     }
   }

@@ -53,7 +53,7 @@ function getQuestStatus(log: DailyLog, meals: Meal[]) {
   quests.push({ name: QUEST_NAMES.fuel_vessel_3, complete: meals.some((m) => m.meal_number === 3) })
   quests.push({ name: QUEST_NAMES.movement_protocol, complete: log.workout_done === true })
   quests.push({ name: QUEST_NAMES.system_diagnostic, complete: log.sleep_hours != null })
-  quests.push({ name: QUEST_NAMES.fasting_seal, complete: log.ate_after_10pm === false })
+  quests.push({ name: QUEST_NAMES.fasting_seal, complete: log.ate_after_10pm === false && log.sleep_hours != null })
   return quests
 }
 
@@ -74,7 +74,7 @@ export default function HistoryPage() {
     try {
       const res = await fetch(`/api/history?start=${start}&end=${end}`)
       const data = await res.json()
-      setDays(Array.isArray(data) ? data : data.days || [])
+      setDays(Array.isArray(data) ? data : data.data || [])
     } catch {
       setDays([])
     }
@@ -113,13 +113,16 @@ export default function HistoryPage() {
     }
 
     try {
-      const res = await fetch(`/api/history?start=${dateStr}&end=${dateStr}`)
-      const data = await res.json()
-      const dayData = Array.isArray(data) ? data[0] : data.days?.[0]
+      const [mealsRes, workoutsRes] = await Promise.all([
+        fetch(`/api/meals?date=${dateStr}`),
+        fetch(`/api/workouts?date=${dateStr}`),
+      ])
+      const mealsData = await mealsRes.json()
+      const workoutsData = await workoutsRes.json()
       setDayDetail({
-        log: dayData || log,
-        meals: data.meals || [],
-        workouts: data.workouts || [],
+        log: log,
+        meals: mealsData.data || [],
+        workouts: workoutsData.data || [],
       })
     } catch {
       setDayDetail({ log, meals: [], workouts: [] })

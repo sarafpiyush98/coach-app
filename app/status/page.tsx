@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Lock, Sword, ChevronRight } from "lucide-react";
 import { SystemFrame } from "@/components/ui/system-frame";
+import { SystemPanel } from "@/components/ui/system-panel";
 import { RadarChart } from "@/components/ui/radar-chart";
 import { XPRing } from "@/components/ui/xp-ring";
 import { STAT_COLORS } from "@/lib/stats";
@@ -36,6 +37,14 @@ interface StatusData {
   unlockedCount: number;
   totalAchievements: number;
 }
+
+const STAT_DRIVERS: Record<string, string> = {
+  STR: "Workouts + PRs",
+  AGI: "Workouts + Check-ins",
+  VIT: "Fasting Streaks + Logging",
+  INT: "Meals Logged + Good Weeks",
+  DSC: "Streaks + Combo + Level",
+};
 
 function HunterRankBadge({ rank }: { rank: HunterRank }) {
   return (
@@ -101,7 +110,7 @@ export default function StatusPage() {
 
   if (loading || !data) return <LoadingSkeleton />;
 
-  const { profile, hunterRank, stats, statTotal, distributablePoints, shadows, unlockedCount, totalAchievements } = data;
+  const { profile, hunterRank, nextHunterRank, stats, statTotal, distributablePoints, shadows, unlockedCount, totalAchievements } = data;
   const statMax = Math.max(profile.level * 5, 20);
   const statKeys = Object.keys(stats) as (keyof PlayerStats)[];
 
@@ -113,6 +122,23 @@ export default function StatusPage() {
 
   return (
     <div className="max-w-lg mx-auto px-4 pt-8 pb-24">
+      {/* Level-up banner when distributable points are available */}
+      {distributablePoints > 0 && (
+        <SystemPanel className="p-3 border-[var(--accent-gold)] border mb-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="font-[family-name:var(--font-rajdhani)] text-xs font-bold uppercase tracking-[0.15em] text-[#FFC107]">
+                {distributablePoints} Stat Points Available
+              </p>
+              <p className="font-[family-name:var(--font-rajdhani)] text-[9px] uppercase tracking-widest text-[var(--text-muted)]">
+                The System grants power. Distribute wisely.
+              </p>
+            </div>
+            <span className="text-[#FFC107] text-lg">+</span>
+          </div>
+        </SystemPanel>
+      )}
+
       {/* ONE SystemFrame containing the entire character sheet */}
       <SystemFrame>
         {/* Section 1: Identity Block */}
@@ -132,7 +158,17 @@ export default function StatusPage() {
               </div>
               <div className="flex gap-6">
                 <span className="font-[family-name:var(--font-rajdhani)] text-[11px] uppercase tracking-wider text-[var(--text-muted)] w-12">RANK</span>
-                <span className="font-[family-name:var(--font-rajdhani)] text-sm font-bold uppercase text-[var(--text-primary)]">{hunterRank.title}</span>
+                <div>
+                  <span className="font-[family-name:var(--font-rajdhani)] text-sm font-bold uppercase text-[var(--text-primary)]">{hunterRank.title}</span>
+                  <p className="font-[family-name:var(--font-rajdhani)] text-[9px] uppercase tracking-widest text-[var(--text-muted)]/60">
+                    {hunterRank.benefit}
+                  </p>
+                  {nextHunterRank && (
+                    <p className="font-[family-name:var(--font-geist-mono)] text-[10px] tabular-nums text-[var(--text-muted)]">
+                      NEXT: {nextHunterRank.rank.title} — {nextHunterRank.levelsRemaining} levels
+                    </p>
+                  )}
+                </div>
               </div>
             </div>
           </div>
@@ -176,7 +212,12 @@ export default function StatusPage() {
         <div className="grid grid-cols-2 gap-x-8 gap-y-3">
           {statKeys.map((stat) => (
             <div key={stat} className="flex items-center gap-3">
-              <span className="font-[family-name:var(--font-rajdhani)] text-[11px] uppercase tracking-wider text-[var(--text-muted)] w-8">{stat}</span>
+              <div className="w-8">
+                <span className="font-[family-name:var(--font-rajdhani)] text-[11px] uppercase tracking-wider text-[var(--text-muted)]">{stat}</span>
+                <p className="font-[family-name:var(--font-rajdhani)] text-[8px] uppercase tracking-widest text-[var(--text-muted)]/60">
+                  {STAT_DRIVERS[stat]}
+                </p>
+              </div>
               <span className="font-[family-name:var(--font-geist-mono)] text-sm tabular-nums text-[var(--text-primary)] w-6 text-right">{stats[stat]}</span>
               {distributablePoints > 0 && (
                 <button

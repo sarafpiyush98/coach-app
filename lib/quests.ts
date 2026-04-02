@@ -135,7 +135,8 @@ function isQuestComplete(
     case "system_diagnostic":
       return dailyLog?.sleep_hours != null;
     case "fasting_seal":
-      return dailyLog?.ate_after_10pm === false;
+      // Only complete after check-in confirms it (sleep_hours is required on check-in form)
+      return dailyLog?.ate_after_10pm === false && dailyLog?.sleep_hours != null;
     case "protein_synthesis":
       return (dailyLog?.protein_g ?? 0) >= 150;
     case "energy_calibration": {

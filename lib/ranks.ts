@@ -7,17 +7,18 @@ export interface HunterRank {
   minLevel: number;
   color: string;
   glow: string;
+  benefit: string;
 }
 
 export const HUNTER_RANKS: HunterRank[] = [
-  { title: "E-Rank", minLevel: 1, color: "#4A5568", glow: "none" },
-  { title: "D-Rank", minLevel: 5, color: "#0891B2", glow: "teal" },
-  { title: "C-Rank", minLevel: 10, color: "#1B45D7", glow: "blue" },
-  { title: "B-Rank", minLevel: 18, color: "#4F46E5", glow: "indigo" },
-  { title: "A-Rank", minLevel: 28, color: "#7C3AED", glow: "purple" },
-  { title: "S-Rank", minLevel: 40, color: "#FFC107", glow: "gold" },
-  { title: "National Level", minLevel: 55, color: "#F8FAFC", glow: "white" },
-  { title: "Shadow Monarch", minLevel: 75, color: "#463671", glow: "purple" },
+  { title: "E-Rank", minLevel: 1, color: "#4A5568", glow: "none", benefit: "The journey begins" },
+  { title: "D-Rank", minLevel: 5, color: "#0891B2", glow: "teal", benefit: "Stat allocation expands" },
+  { title: "C-Rank", minLevel: 10, color: "#1B45D7", glow: "blue", benefit: "Bonus quest variety grows" },
+  { title: "B-Rank", minLevel: 18, color: "#4F46E5", glow: "indigo", benefit: "Shadow soldier Tusk awakens" },
+  { title: "A-Rank", minLevel: 28, color: "#7C3AED", glow: "purple", benefit: "Grade thresholds relax" },
+  { title: "S-Rank", minLevel: 40, color: "#FFC107", glow: "gold", benefit: "Shadow soldier Bellion awakens" },
+  { title: "National Level", minLevel: 55, color: "#F8FAFC", glow: "white", benefit: "Emergency quest XP tripled" },
+  { title: "Shadow Monarch", minLevel: 75, color: "#463671", glow: "purple", benefit: "The System bows to none" },
 ];
 
 export function getHunterRank(level: number): HunterRank {

@@ -65,7 +65,7 @@ export default function CheckinPage() {
     if (!sleepHours || sleepQuality === null || energyLevel === null || mood === null || ateAfter10pm === null) return
     setSaving(true)
     try {
-      await fetch("/api/checkin", {
+      const res = await fetch("/api/checkin", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -79,11 +79,18 @@ export default function CheckinPage() {
           notes: notes.trim() || null,
         }),
       })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        addToast({ title: "DIAGNOSTIC FAILED", message: err.error || "The System encountered an error.", variant: "danger" })
+        setSaving(false)
+        return
+      }
       playQuestComplete()
       addToast({ title: "SYSTEM DIAGNOSTIC — COMPLETE", variant: "success" })
       useCacheStore.getState().invalidateAll()
       setTimeout(() => router.push("/"), 1000)
     } catch {
+      addToast({ title: "NETWORK ERROR", message: "Connection lost. Try again.", variant: "danger" })
       setSaving(false)
     }
   }

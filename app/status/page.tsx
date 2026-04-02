@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { Lock, Sword, ChevronRight } from "lucide-react";
 import { SystemFrame } from "@/components/ui/system-frame";
 import { SystemPanel } from "@/components/ui/system-panel";
@@ -85,11 +86,18 @@ function LoadingSkeleton() {
 }
 
 export default function StatusPage() {
+  const router = useRouter();
   const { data, loading, refresh } = useCachedFetch<StatusData>(
     "/api/gamification",
     { maxAge: 30000 }
   );
   const [allocating, setAllocating] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (data && (data.profile?.level ?? 1) < 5) {
+      router.push("/");
+    }
+  }, [data, router]);
 
   const allocateStat = async (stat: keyof PlayerStats) => {
     if (allocating) return;
@@ -122,8 +130,8 @@ export default function StatusPage() {
 
   return (
     <div className="max-w-lg mx-auto px-4 pt-8 pb-24">
-      {/* Level-up banner when distributable points are available */}
-      {distributablePoints > 0 && (
+      {/* Level-up banner when distributable points are available (level 18+) */}
+      {distributablePoints > 0 && (profile.level ?? 1) >= 18 && (
         <SystemPanel className="p-3 border-[var(--accent-gold)] border mb-4">
           <div className="flex items-center justify-between">
             <div>
@@ -198,7 +206,7 @@ export default function StatusPage() {
             <span className="font-[family-name:var(--font-rajdhani)] text-[11px] uppercase tracking-[0.15em] text-[var(--text-muted)]">POWER  </span>
             <span className="font-[family-name:var(--font-geist-mono)] text-base font-semibold text-[var(--text-primary)]">{statTotal}</span>
           </div>
-          {distributablePoints > 0 && (
+          {distributablePoints > 0 && (profile.level ?? 1) >= 18 && (
             <p className="mt-1 font-[family-name:var(--font-geist-mono)] text-xs text-[var(--accent-blue)]">
               +{distributablePoints} AVAILABLE
             </p>
@@ -219,7 +227,7 @@ export default function StatusPage() {
                 </p>
               </div>
               <span className="font-[family-name:var(--font-geist-mono)] text-sm tabular-nums text-[var(--text-primary)] w-6 text-right">{stats[stat]}</span>
-              {distributablePoints > 0 && (
+              {distributablePoints > 0 && (profile.level ?? 1) >= 18 && (
                 <button
                   onClick={() => allocateStat(stat)}
                   disabled={allocating !== null}
@@ -232,35 +240,38 @@ export default function StatusPage() {
           ))}
         </div>
 
-        {/* Divider */}
-        <div className="border-t border-[var(--border-subtle)] my-6" />
-
-        {/* Section 4: Shadow Army */}
-        <div>
-          <div className="flex items-baseline gap-2 mb-4">
-            <span className="font-[family-name:var(--font-rajdhani)] text-[11px] font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)]">SHADOW ARMY</span>
-            <span className="font-[family-name:var(--font-geist-mono)] text-xs text-[var(--text-muted)]">
-              {shadows.filter((s) => s.unlocked).length}/{shadows.length}
-            </span>
+        {/* Section 4: Shadow Army (level 15+) */}
+        {(profile.level ?? 1) >= 15 && (
+          <>
+          {/* Divider */}
+          <div className="border-t border-[var(--border-subtle)] my-6" />
+          <div>
+            <div className="flex items-baseline gap-2 mb-4">
+              <span className="font-[family-name:var(--font-rajdhani)] text-[11px] font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)]">SHADOW ARMY</span>
+              <span className="font-[family-name:var(--font-geist-mono)] text-xs text-[var(--text-muted)]">
+                {shadows.filter((s) => s.unlocked).length}/{shadows.length}
+              </span>
+            </div>
+            <div className="grid grid-cols-3 gap-4">
+              {shadows.map((s) => (
+                <div key={s.id} className="flex flex-col items-center gap-1 text-center">
+                  {s.unlocked ? (
+                    <Sword size={20} className="text-[var(--accent-blue)]" />
+                  ) : (
+                    <Lock size={20} className="text-[var(--text-muted)]" />
+                  )}
+                  <span className={`font-[family-name:var(--font-rajdhani)] text-[11px] font-bold uppercase tracking-wider ${s.unlocked ? "text-[var(--text-primary)]" : "text-[var(--text-muted)]"}`}>
+                    {s.unlocked ? s.name : "???"}
+                  </span>
+                  <span className="text-[9px] text-[var(--text-muted)] leading-tight">
+                    {s.unlocked ? s.benefit : s.unlockCondition}
+                  </span>
+                </div>
+              ))}
+            </div>
           </div>
-          <div className="grid grid-cols-3 gap-4">
-            {shadows.map((s) => (
-              <div key={s.id} className="flex flex-col items-center gap-1 text-center">
-                {s.unlocked ? (
-                  <Sword size={20} className="text-[var(--accent-blue)]" />
-                ) : (
-                  <Lock size={20} className="text-[var(--text-muted)]" />
-                )}
-                <span className={`font-[family-name:var(--font-rajdhani)] text-[11px] font-bold uppercase tracking-wider ${s.unlocked ? "text-[var(--text-primary)]" : "text-[var(--text-muted)]"}`}>
-                  {s.unlocked ? s.name : "???"}
-                </span>
-                <span className="text-[9px] text-[var(--text-muted)] leading-tight">
-                  {s.unlocked ? s.benefit : s.unlockCondition}
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
+          </>
+        )}
 
         {/* Divider */}
         <div className="border-t border-[var(--border-subtle)] my-6" />

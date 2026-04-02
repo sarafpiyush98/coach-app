@@ -2,14 +2,17 @@
 
 import type { Quest } from "@/lib/quests";
 import { QuestCard } from "./quest-card";
+import { useLevelStore } from "@/lib/level-store";
 
 interface QuestListProps {
   quests: Quest[];
 }
 
 export function QuestList({ quests }: QuestListProps) {
-  const daily = quests.filter((q) => q.category === "daily");
-  const bonus = quests.filter((q) => q.category === "bonus");
+  const level = useLevelStore((s) => s.level);
+  const visibleQuests = level >= 8 ? quests : quests.filter((q) => q.category === "daily");
+  const daily = visibleQuests.filter((q) => q.category === "daily");
+  const bonus = visibleQuests.filter((q) => q.category === "bonus");
   const completedCount = daily.filter((q) => q.completed).length;
 
   // Track the first incomplete quest across both lists
@@ -47,25 +50,29 @@ export function QuestList({ quests }: QuestListProps) {
         </div>
       </div>
 
-      {/* Divider */}
-      <div className="border-t border-[var(--border-subtle)]" />
+      {/* Bonus quests — unlocked at level 8 */}
+      {bonus.length > 0 && (
+        <>
+          {/* Divider */}
+          <div className="border-t border-[var(--border-subtle)]" />
 
-      {/* Bonus quests */}
-      <div className="space-y-2">
-        <h2 className="px-1 font-[family-name:var(--font-rajdhani)] text-[11px] font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)]">
-          BONUS OBJECTIVES
-        </h2>
-        <div className="space-y-2">
-          {bonus.map((quest, i) => (
-            <QuestCard
-              key={quest.id}
-              quest={quest}
-              index={daily.length + i}
-              isFirstIncomplete={isFirstIncomplete(quest)}
-            />
-          ))}
-        </div>
-      </div>
+          <div className="space-y-2">
+            <h2 className="px-1 font-[family-name:var(--font-rajdhani)] text-[11px] font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)]">
+              BONUS OBJECTIVES
+            </h2>
+            <div className="space-y-2">
+              {bonus.map((quest, i) => (
+                <QuestCard
+                  key={quest.id}
+                  quest={quest}
+                  index={daily.length + i}
+                  isFirstIncomplete={isFirstIncomplete(quest)}
+                />
+              ))}
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }

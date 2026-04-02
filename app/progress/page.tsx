@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { format, subDays, startOfWeek, isWithinInterval } from "date-fns";
 import {
   AreaChart,
@@ -82,6 +83,7 @@ interface ProgressResponse {
 }
 
 export default function DungeonPage() {
+  const router = useRouter();
   const today = useMemo(() => new Date(), []);
   const historyUrl = useMemo(() => {
     const start = format(subDays(today, 89), "yyyy-MM-dd");
@@ -109,6 +111,13 @@ export default function DungeonPage() {
   const weights: { date: string; weight_kg: number }[] =
     (progRaw as ProgressResponse)?.weight_history ??
     (progRaw as ProgressResponse)?.data?.weight_history ?? [];
+
+  // Level gate: redirect if below level 10
+  useEffect(() => {
+    if (gData && (gData.profile?.level ?? 1) < 10) {
+      router.push("/");
+    }
+  }, [gData, router]);
 
   if (loading) {
     return (

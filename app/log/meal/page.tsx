@@ -36,6 +36,14 @@ function LogMealContent() {
   const [isEatingOut, setIsEatingOut] = useState(false)
   const [restaurant, setRestaurant] = useState("")
   const [saving, setSaving] = useState(false)
+  const [recentMeals, setRecentMeals] = useState<Array<{
+    description: string;
+    calories: number;
+    protein_g: number;
+    is_eating_out: boolean;
+    restaurant: string | null;
+    frequency: number;
+  }>>([])
 
   // Today's running totals
   const [todayCals, setTodayCals] = useState(0)
@@ -53,6 +61,21 @@ function LogMealContent() {
       })
       .catch(() => {})
   }, [])
+
+  useEffect(() => {
+    fetch("/api/meals?recent=true")
+      .then((r) => r.json())
+      .then((d) => setRecentMeals(d.data || []))
+      .catch(() => {})
+  }, [])
+
+  function fillFromRecent(meal: typeof recentMeals[0]) {
+    setDescription(meal.description || "")
+    setCalories(String(meal.calories || ""))
+    setProteinG(String(meal.protein_g || ""))
+    setIsEatingOut(meal.is_eating_out || false)
+    setRestaurant(meal.restaurant || "")
+  }
 
   async function handleSave() {
     if (!mealNumber || !calories) return
@@ -146,6 +169,37 @@ function LogMealContent() {
           </div>
         )}
       </div>
+
+      {/* Recent Fuel */}
+      {recentMeals.length > 0 && (
+        <div className="space-y-2 mb-4">
+          <h3 className="font-[family-name:var(--font-rajdhani)] text-[10px] font-bold uppercase tracking-widest text-[var(--text-muted)]">
+            Recent Fuel
+          </h3>
+          <div className="flex gap-2 overflow-x-auto pb-2 -mx-1 px-1 scrollbar-hide">
+            {recentMeals.map((meal, i) => (
+              <button
+                key={i}
+                type="button"
+                onClick={() => fillFromRecent(meal)}
+                className="min-w-[140px] shrink-0 rounded-lg bg-[var(--surface-2)] border border-[var(--border-subtle)] p-3 text-left hover:border-[var(--accent-blue)] transition-colors relative"
+              >
+                <p className="font-[family-name:var(--font-rajdhani)] text-[11px] font-bold uppercase tracking-wider text-[var(--text-primary)] truncate">
+                  {meal.description}
+                </p>
+                <p className="font-[family-name:var(--font-geist-mono)] text-[10px] tabular-nums text-[var(--text-muted)] mt-1">
+                  {meal.calories} cal · {meal.protein_g}g
+                </p>
+                {meal.frequency > 1 && (
+                  <span className="absolute top-1.5 right-1.5 font-[family-name:var(--font-geist-mono)] text-[8px] tabular-nums text-[var(--accent-blue)] bg-[var(--accent-blue)]/10 px-1 rounded">
+                    x{meal.frequency}
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Single form container */}
       <div className="rounded-lg bg-[var(--surface-1)] border border-[var(--border-subtle)] p-4 space-y-4">

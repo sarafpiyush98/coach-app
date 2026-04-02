@@ -92,6 +92,11 @@ export async function GET() {
   const levelInfo = levelFromTotalXp(totalXp);
   const rank = getRank(levelInfo.level);
 
+  // Rewards
+  const { parseRewardsState, getUnclaimedRewards } = await import("@/lib/rewards");
+  const rewardsState = parseRewardsState((profile as Record<string, unknown>).rewards);
+  const unclaimedRewards = getUnclaimedRewards(rewardsState);
+
   // Combo day — use logging streak as proxy for consecutive active days
   const comboDay = streakStatus.logging;
   const comboMultiplier = Math.min(1 + comboDay * 0.1, 2.5);
@@ -135,6 +140,7 @@ export async function GET() {
         lootRarity: loot.rarity,
         lootMultiplier: loot.multiplier,
       },
+      rewards: unclaimedRewards,
     },
   });
 }

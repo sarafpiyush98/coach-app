@@ -369,6 +369,40 @@ export async function recalculateAndWriteXP(date: string): Promise<void> {
         );
       }
     }
+
+    // 16. Check reward conditions
+    try {
+      const { parseRewardsState, checkAndGrantRewards } = await import("@/lib/rewards");
+      const { getHunterRank } = await import("@/lib/ranks");
+
+      const rewardsRaw = (profile as unknown as Record<string, unknown>)?.rewards;
+      const rewardsState = parseRewardsState(rewardsRaw);
+
+      const currentRank = getHunterRank(levelInfo.level).title;
+
+      // Determine defeated bosses (weight milestones where current weight is below target)
+      const currentWeight = dailyLog?.weight_kg ?? null;
+      const bossTargets = [120, 110, 105, 95]; // Gatekeeper, Plateau, Centurion, Final Boss
+      const defeatedBossWeights = currentWeight
+        ? bossTargets.filter((t) => currentWeight <= t)
+        : [];
+
+      const { newState, newRewards } = checkAndGrantRewards(rewardsState, {
+        consecutiveGoodWeeks: profile?.consecutive_good_weeks ?? 0,
+        exerciseStreak: bestExerciseStreak,
+        currentRank,
+        defeatedBossWeights,
+      });
+
+      if (newRewards.length > 0) {
+        await supabase
+          .from("player_profile")
+          .update({ rewards: newState } as never)
+          .eq("id", profileId as never);
+      }
+    } catch (rewardErr) {
+      console.error("[xp-engine] Reward check failed:", rewardErr);
+    }
   } catch (err) {
     console.error("[xp-engine] Unexpected error:", err);
     // Do NOT rethrow — parent API request must not fail

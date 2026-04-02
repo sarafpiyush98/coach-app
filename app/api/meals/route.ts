@@ -1,10 +1,48 @@
 import { supabase } from "@/lib/supabase";
 import { recalculateAndWriteXP } from "@/lib/xp-engine";
+import { format, subDays } from "date-fns";
 import type { Meal } from "@/lib/types";
 
 export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url);
-  const date = searchParams.get("date");
+  const url = new URL(request.url);
+
+  // Handle recent meals request
+  const recent = url.searchParams.get("recent");
+  if (recent === "true") {
+    const fourteenDaysAgo = format(subDays(new Date(), 14), "yyyy-MM-dd");
+    const { data: recentMeals, error } = await supabase
+      .from("meals")
+      .select("description, calories, protein_g, is_eating_out, restaurant")
+      .gte("date", fourteenDaysAgo)
+      .order("date", { ascending: false });
+
+    if (error) {
+      return Response.json({ error: error.message }, { status: 500 });
+    }
+
+    // Deduplicate by normalized description + calorie bucket
+    type RecentMeal = { description: string | null; calories: number | null; protein_g: number | null; is_eating_out: boolean | null; restaurant: string | null };
+    const meals = (recentMeals ?? []) as RecentMeal[];
+    const groups = new Map<string, { meal: RecentMeal; count: number }>();
+    for (const meal of meals) {
+      const key = `${(meal.description || "").toLowerCase().trim()}|${Math.round((meal.calories || 0) / 100) * 100}`;
+      const existing = groups.get(key);
+      if (existing) {
+        existing.count++;
+      } else {
+        groups.set(key, { meal, count: 1 });
+      }
+    }
+
+    const deduplicated = Array.from(groups.values())
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 8)
+      .map(({ meal, count }) => ({ ...meal, frequency: count }));
+
+    return Response.json({ data: deduplicated });
+  }
+
+  const date = url.searchParams.get("date");
 
   if (!date) {
     return Response.json(

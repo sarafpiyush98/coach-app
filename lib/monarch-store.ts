@@ -6,12 +6,16 @@ import {
   autoDetectContext,
   CONTEXTS,
   CORE_SPLIT_ORDER,
+  DEFAULT_WEEKLY_MEAL_PLAN,
   FOOD_PRESETS,
   GATE_RANKS,
   type ArenaId,
   type ContextId,
+  type DayMealPlan,
   type GateRankId,
+  type MealSlot,
   type SplitId,
+  type WeekdayKey,
 } from "./monarch-catalog";
 import { getHunterRank, type HunterRank } from "./ranks";
 import { calculateStats, type PlayerStats } from "./stats";
@@ -109,9 +113,20 @@ export interface FoodLogEntry {
   kcal: number;
   proteinG: number;
   multiplier: number;
+  slot?: MealSlot;
   isAbsRaid?: boolean;
   isSeal?: boolean;
   spot?: string;
+}
+
+export interface SavedFoodItem {
+  id: string;
+  label: string;
+  spot?: string;
+  kcal: number;
+  proteinG: number;
+  defaultSlot?: MealSlot;
+  createdAtIso: string;
 }
 
 export interface WorkoutLogSummary {
@@ -151,6 +166,7 @@ export interface DayRecord {
   workouts: WorkoutLogSummary[];
   movements: MovementLogEntry[];
   dinnerSkipped: boolean;
+  dinnerOutMode?: boolean;
   earlySealXpAwarded: boolean;
   survivalFloorCleared: boolean;
   gluttonyRaidAwarded: boolean;
@@ -222,6 +238,8 @@ export interface MonarchPersistedState {
   webhookUrl: string;
   swappedExercises: Record<string, boolean>;
   activeSession: ActiveWorkoutSession | null;
+  savedFoods: SavedFoodItem[];
+  weeklyMealPlan: Record<WeekdayKey, DayMealPlan>;
   days: Record<string, DayRecord>;
 }
 
@@ -265,12 +283,43 @@ export interface MonarchActions {
     nextSplit: SplitId;
   };
   logQuickMovement: (kind: MovementKind) => { xpAwarded: number; verticalGainM: number };
-  logFoodPreset: (presetId: string, multiplier?: number) => {
+  logFoodPreset: (presetId: string, multiplier?: number, slot?: MealSlot) => {
     xpAwarded: number;
     isAbsRaid: boolean;
     label: string;
   };
-  logCustomFood: (label: string, kcal: number, proteinG: number) => { xpAwarded: number };
+  logCustomFood: (label: string, kcal: number, proteinG: number, slot?: MealSlot) => { xpAwarded: number };
+  logFoodBatch: (
+    items: Array<{
+      presetId?: string;
+      savedFoodId?: string;
+      label: string;
+      kcal: number;
+      proteinG: number;
+      multiplier: number;
+      spot?: string;
+      isAbsRaid?: boolean;
+      isSeal?: boolean;
+    }>,
+    slot?: MealSlot
+  ) => {
+    xpAwarded: number;
+    count: number;
+    totalKcal: number;
+    totalProteinG: number;
+    hasAbsRaid: boolean;
+  };
+  saveCustomFood: (item: {
+    label: string;
+    spot?: string;
+    kcal: number;
+    proteinG: number;
+    defaultSlot?: MealSlot;
+  }) => SavedFoodItem;
+  deleteSavedFood: (id: string) => void;
+  setTodayDinnerOutMode: (enabled: boolean) => void;
+  updateWeeklyPlanDay: (day: WeekdayKey, patch: Partial<DayMealPlan>) => void;
+  resetWeeklyMealPlan: () => void;
   removeFoodEntry: (dateKey: string, entryId: string) => void;
   lockDinnerSkip: () => { xpAwarded: number; alreadyLocked: boolean };
   logScaleWeight: (
@@ -305,6 +354,7 @@ export function createEmptyDay(date: string): DayRecord {
     workouts: [],
     movements: [],
     dinnerSkipped: false,
+    dinnerOutMode: false,
     earlySealXpAwarded: false,
     survivalFloorCleared: false,
     gluttonyRaidAwarded: false,
@@ -731,6 +781,8 @@ const INITIAL_PERSISTED_STATE: MonarchPersistedState = {
   webhookUrl: DEFAULT_WEBHOOK_URL,
   swappedExercises: {},
   activeSession: null,
+  savedFoods: [],
+  weeklyMealPlan: DEFAULT_WEEKLY_MEAL_PLAN,
   days: {},
 };
 
@@ -1098,38 +1150,46 @@ export const useMonarchStore = create<MonarchStore>()(
         return { xpAwarded: spec.xp, verticalGainM: spec.verticalGainM };
       },
 
-      logFoodPreset: (presetId, multiplier = 1) => {
+      logFoodPreset: (presetId, multiplier = 1, slot) => {
+        const state = get();
         const preset = FOOD_PRESETS.find((f) => f.id === presetId);
-        if (!preset) {
+        const saved = !preset ? (state.savedFoods ?? []).find((f) => f.id === presetId) : undefined;
+        if (!preset && !saved) {
           return { xpAwarded: 0, isAbsRaid: false, label: "Unknown" };
         }
         const key = getTodayKey();
-        const state = get();
         const existing = state.days[key] ?? createEmptyDay(key);
 
-        const isAbsRaid = preset.tags.includes("abs_raid");
-        const isSeal = preset.tags.includes("seal");
+        const baseLabel = preset ? preset.shortLabel : saved!.label;
+        const baseKcal = preset ? preset.kcal : saved!.kcal;
+        const baseProtein = preset ? preset.proteinG : saved!.proteinG;
+        const spot = preset ? preset.spot : saved!.spot;
+        const isAbsRaid = preset ? preset.tags.includes("abs_raid") : false;
+        const isSeal = preset ? preset.tags.includes("seal") : slot === "seal";
+
         const entry: FoodLogEntry = {
           id: makeId("fd"),
           timeIso: new Date().toISOString(),
-          label:
-            multiplier === 1 ? preset.shortLabel : `${preset.shortLabel} (${multiplier}x)`,
-          kcal: Math.round(preset.kcal * multiplier),
-          proteinG: Math.round(preset.proteinG * multiplier),
+          label: multiplier === 1 ? baseLabel : `${baseLabel} (${multiplier}x)`,
+          kcal: Math.round(baseKcal * multiplier),
+          proteinG: Math.round(baseProtein * multiplier),
           multiplier,
+          slot: slot ?? saved?.defaultSlot,
           isAbsRaid,
           isSeal,
-          spot: preset.spot,
+          spot,
         };
 
         let xpAwarded = 20;
         let dinnerSkipped = existing.dinnerSkipped;
+        let dinnerOutMode = existing.dinnerOutMode ?? false;
         let gluttonyRaidAwarded = existing.gluttonyRaidAwarded;
         let lateNightsSaved = state.lateNightsSaved;
 
         if (isAbsRaid) {
           if (!dinnerSkipped) {
             dinnerSkipped = true;
+            dinnerOutMode = false;
             lateNightsSaved += 1;
           }
           if (!gluttonyRaidAwarded) {
@@ -1147,6 +1207,7 @@ export const useMonarchStore = create<MonarchStore>()(
             [key]: {
               ...existing,
               dinnerSkipped,
+              dinnerOutMode,
               gluttonyRaidAwarded,
               foods: [...existing.foods, entry],
             },
@@ -1163,7 +1224,7 @@ export const useMonarchStore = create<MonarchStore>()(
         return { xpAwarded, isAbsRaid, label: entry.label };
       },
 
-      logCustomFood: (label, kcal, proteinG) => {
+      logCustomFood: (label, kcal, proteinG, slot) => {
         const key = getTodayKey();
         const state = get();
         const existing = state.days[key] ?? createEmptyDay(key);
@@ -1175,6 +1236,7 @@ export const useMonarchStore = create<MonarchStore>()(
           kcal: Math.max(0, Math.round(kcal)),
           proteinG: Math.max(0, Math.round(proteinG)),
           multiplier: 1,
+          slot,
         };
         set({
           earnedXp: state.earnedXp + xpAwarded,
@@ -1194,6 +1256,157 @@ export const useMonarchStore = create<MonarchStore>()(
           get().syncWithLedger
         );
         return { xpAwarded };
+      },
+
+      logFoodBatch: (items, slot) => {
+        if (!items.length) {
+          return { xpAwarded: 0, count: 0, totalKcal: 0, totalProteinG: 0, hasAbsRaid: false };
+        }
+        const key = getTodayKey();
+        const state = get();
+        const existing = state.days[key] ?? createEmptyDay(key);
+        const nowIso = new Date().toISOString();
+
+        const entries: FoodLogEntry[] = items.map((item) => {
+          const mult = Math.max(0.25, item.multiplier || 1);
+          const cleanLabel = mult === 1 ? item.label : `${item.label} (${mult}x)`;
+          return {
+            id: makeId("fd"),
+            timeIso: nowIso,
+            label: cleanLabel,
+            kcal: Math.max(0, Math.round(item.kcal * mult)),
+            proteinG: Math.max(0, Math.round(item.proteinG * mult)),
+            multiplier: mult,
+            slot,
+            isAbsRaid: Boolean(item.isAbsRaid),
+            isSeal: Boolean(item.isSeal) || slot === "seal",
+            spot: item.spot,
+          };
+        });
+
+        const totalKcal = entries.reduce((acc, e) => acc + e.kcal, 0);
+        const totalProteinG = entries.reduce((acc, e) => acc + e.proteinG, 0);
+        const hasAbsRaid = entries.some((e) => e.isAbsRaid);
+
+        let xpAwarded = items.length >= 2 ? 25 : 20;
+        let dinnerSkipped = existing.dinnerSkipped;
+        let dinnerOutMode = existing.dinnerOutMode ?? false;
+        let gluttonyRaidAwarded = existing.gluttonyRaidAwarded;
+        let lateNightsSaved = state.lateNightsSaved;
+
+        if (hasAbsRaid) {
+          if (!dinnerSkipped) {
+            dinnerSkipped = true;
+            dinnerOutMode = false;
+            lateNightsSaved += 1;
+          }
+          if (!gluttonyRaidAwarded) {
+            gluttonyRaidAwarded = true;
+            xpAwarded += 75;
+          }
+        }
+
+        set({
+          earnedXp: state.earnedXp + xpAwarded,
+          lateNightsSaved,
+          pendingSyncDates: enqueuePending(state.pendingSyncDates, key),
+          days: {
+            ...state.days,
+            [key]: {
+              ...existing,
+              dinnerSkipped,
+              dinnerOutMode,
+              gluttonyRaidAwarded,
+              foods: [...existing.foods, ...entries],
+            },
+          },
+        });
+
+        fireWebhookIfConfigured(
+          state.webhookUrl,
+          "log_food",
+          {
+            date: key,
+            label:
+              entries.length === 1
+                ? entries[0].label
+                : `${entries.length} dishes (${entries.map((e) => e.label).join(", ").slice(0, 80)})`,
+            kcal: totalKcal,
+            proteinG: totalProteinG,
+          },
+          get().syncWithLedger
+        );
+
+        return {
+          xpAwarded,
+          count: entries.length,
+          totalKcal,
+          totalProteinG,
+          hasAbsRaid,
+        };
+      },
+
+      saveCustomFood: (item) => {
+        const state = get();
+        const saved: SavedFoodItem = {
+          id: makeId("sf"),
+          label: item.label.trim() || "Saved Dish",
+          spot: item.spot?.trim() || "My Saved Foods",
+          kcal: Math.max(0, Math.round(item.kcal)),
+          proteinG: Math.max(0, Math.round(item.proteinG)),
+          defaultSlot: item.defaultSlot,
+          createdAtIso: new Date().toISOString(),
+        };
+        set({
+          savedFoods: [saved, ...(state.savedFoods ?? [])],
+        });
+        return saved;
+      },
+
+      deleteSavedFood: (id) => {
+        const state = get();
+        set({
+          savedFoods: (state.savedFoods ?? []).filter((f) => f.id !== id),
+        });
+      },
+
+      setTodayDinnerOutMode: (enabled) => {
+        const key = getTodayKey();
+        const state = get();
+        const existing = state.days[key] ?? createEmptyDay(key);
+        set({
+          pendingSyncDates: enqueuePending(state.pendingSyncDates, key),
+          days: {
+            ...state.days,
+            [key]: {
+              ...existing,
+              dinnerOutMode: enabled,
+              dinnerSkipped: enabled ? false : existing.dinnerSkipped,
+            },
+          },
+        });
+      },
+
+      updateWeeklyPlanDay: (day, patch) => {
+        const state = get();
+        const basePlan = state.weeklyMealPlan ?? DEFAULT_WEEKLY_MEAL_PLAN;
+        const currentDay = basePlan[day] ?? DEFAULT_WEEKLY_MEAL_PLAN[day];
+        set({
+          weeklyMealPlan: {
+            ...DEFAULT_WEEKLY_MEAL_PLAN,
+            ...basePlan,
+            [day]: {
+              ...currentDay,
+              ...patch,
+            },
+          },
+        });
+      },
+
+      resetWeeklyMealPlan: () => {
+        set({
+          weeklyMealPlan: DEFAULT_WEEKLY_MEAL_PLAN,
+        });
       },
 
       removeFoodEntry: (dateKey, entryId) => {
@@ -1222,19 +1435,21 @@ export const useMonarchStore = create<MonarchStore>()(
         const key = getTodayKey();
         const state = get();
         const existing = state.days[key] ?? createEmptyDay(key);
-        if (existing.dinnerSkipped) {
+        if (existing.dinnerSkipped && !existing.dinnerOutMode) {
           return { xpAwarded: 0, alreadyLocked: true };
         }
         const xpAwarded = existing.earlySealXpAwarded ? 0 : 30;
+        const lateNightsDelta = existing.earlySealXpAwarded ? 0 : 1;
         set({
           earnedXp: state.earnedXp + xpAwarded,
-          lateNightsSaved: state.lateNightsSaved + 1,
+          lateNightsSaved: state.lateNightsSaved + lateNightsDelta,
           pendingSyncDates: enqueuePending(state.pendingSyncDates, key),
           days: {
             ...state.days,
             [key]: {
               ...existing,
               dinnerSkipped: true,
+              dinnerOutMode: false,
               earlySealXpAwarded: true,
             },
           },
@@ -1543,6 +1758,8 @@ export const useMonarchStore = create<MonarchStore>()(
           webhookUrl: s.webhookUrl,
           swappedExercises: s.swappedExercises,
           activeSession: s.activeSession,
+          savedFoods: s.savedFoods ?? [],
+          weeklyMealPlan: s.weeklyMealPlan ?? DEFAULT_WEEKLY_MEAL_PLAN,
           days: s.days,
         };
         return JSON.stringify(snapshot, null, 2);
@@ -1560,6 +1777,12 @@ export const useMonarchStore = create<MonarchStore>()(
             split: normalizeSplitId(parsed.split as unknown as string),
             gateRank: normalizeGateRankId(parsed.gateRank as unknown as string),
             exerciseLogs: parsed.exerciseLogs ?? INITIAL_PERSISTED_STATE.exerciseLogs,
+            savedFoods: Array.isArray(parsed.savedFoods)
+              ? parsed.savedFoods
+              : INITIAL_PERSISTED_STATE.savedFoods,
+            weeklyMealPlan: parsed.weeklyMealPlan
+              ? { ...DEFAULT_WEEKLY_MEAL_PLAN, ...parsed.weeklyMealPlan }
+              : INITIAL_PERSISTED_STATE.weeklyMealPlan,
           });
           return { ok: true };
         } catch (err) {
@@ -1577,6 +1800,9 @@ export const useMonarchStore = create<MonarchStore>()(
         if (state) {
           if (!state.webhookUrl?.trim()) {
             state.setWebhookUrl(DEFAULT_WEBHOOK_URL);
+          }
+          if (!state.weeklyMealPlan || !state.weeklyMealPlan.mon) {
+            state.resetWeeklyMealPlan();
           }
           const cleanSplit = normalizeSplitId(state.split as unknown as string);
           const cleanRank = normalizeGateRankId(state.gateRank as unknown as string);
@@ -1626,6 +1852,8 @@ export const useMonarchStore = create<MonarchStore>()(
         webhookUrl: state.webhookUrl,
         swappedExercises: state.swappedExercises,
         activeSession: state.activeSession,
+        savedFoods: state.savedFoods ?? [],
+        weeklyMealPlan: state.weeklyMealPlan ?? DEFAULT_WEEKLY_MEAL_PLAN,
         days: state.days,
       }),
     }

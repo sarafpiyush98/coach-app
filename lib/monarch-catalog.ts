@@ -1741,6 +1741,20 @@ export type FoodTag =
   | "social"
   | "debloat";
 
+export type MealSlot = "primer" | "lunch" | "seal" | "dinner";
+
+export type WeekdayKey = "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
+
+export const WEEKDAY_ORDER: { key: WeekdayKey; short: string; label: string }[] = [
+  { key: "mon", short: "Mon", label: "Monday" },
+  { key: "tue", short: "Tue", label: "Tuesday" },
+  { key: "wed", short: "Wed", label: "Wednesday" },
+  { key: "thu", short: "Thu", label: "Thursday" },
+  { key: "fri", short: "Fri", label: "Friday" },
+  { key: "sat", short: "Sat", label: "Saturday" },
+  { key: "sun", short: "Sun", label: "Sunday" },
+];
+
 export interface FoodPreset {
   id: string;
   shortLabel: string;
@@ -1750,6 +1764,77 @@ export interface FoodPreset {
   contexts: ContextId[];
   note: string;
   tags: FoodTag[];
+  category?: "spot" | "staple" | "dinner_dish";
+}
+
+export interface FoodViability {
+  tier: "S" | "A" | "B" | "C";
+  proteinPer100Kcal: number;
+  proteinCalPct: number;
+  label: string;
+  verdict: string;
+}
+
+export function evaluateFoodViability(kcal: number, proteinG: number): FoodViability {
+  const safeKcal = Math.max(0, kcal);
+  const safeProtein = Math.max(0, proteinG);
+
+  if (safeKcal === 0) {
+    if (safeProtein > 0) {
+      return {
+        tier: "S",
+        proteinPer100Kcal: 25,
+        proteinCalPct: 100,
+        label: "S-Tier Pure P",
+        verdict: "Zero-overhead protein anchor",
+      };
+    }
+    return {
+      tier: "A",
+      proteinPer100Kcal: 0,
+      proteinCalPct: 0,
+      label: "0 kcal Buffer",
+      verdict: "Zero-calorie mixer or late-evening craving crutch",
+    };
+  }
+
+  const proteinPer100Kcal = Math.round(((safeProtein * 100) / safeKcal) * 10) / 10;
+  const proteinCalPct = Math.min(100, Math.round(((safeProtein * 4) / safeKcal) * 100));
+
+  if (proteinPer100Kcal >= 10) {
+    return {
+      tier: "S",
+      proteinPer100Kcal,
+      proteinCalPct,
+      label: "S-Tier Cut Fuel",
+      verdict: "Elite fat-loss density (>=10g P / 100 kcal) - spares muscle on a hard cut",
+    };
+  }
+  if (proteinPer100Kcal >= 7) {
+    return {
+      tier: "A",
+      proteinPer100Kcal,
+      proteinCalPct,
+      label: "A-Tier Balanced",
+      verdict: "Solid macro ratio (7-9.9g P / 100 kcal) - fits cleanly inside daily ceiling",
+    };
+  }
+  if (proteinPer100Kcal >= 4) {
+    return {
+      tier: "B",
+      proteinPer100Kcal,
+      proteinCalPct,
+      label: "B-Tier Moderate",
+      verdict: "Pair with 1-2x Whey or Skyr so daily protein stays above 165g",
+    };
+  }
+  return {
+    tier: "C",
+    proteinPer100Kcal,
+    proteinCalPct,
+    label: "C-Tier Treat / Carb",
+    verdict: "High non-protein energy - buffer earlier with S-tier protein to avoid deficit spill",
+  };
 }
 
 export const FOOD_PRESETS: FoodPreset[] = [
@@ -1762,6 +1847,7 @@ export const FOOD_PRESETS: FoodPreset[] = [
     contexts: ["hsr_office", "cg_home"],
     note: "3 Salsa Eggs (light/no toast) + side Grilled Chicken Breast/Shrimps",
     tags: ["high_protein"],
+    category: "spot",
   },
   {
     id: "hebe_salsa_solo",
@@ -1772,6 +1858,7 @@ export const FOOD_PRESETS: FoodPreset[] = [
     contexts: ["hsr_office"],
     note: "Great base under 400 kcal - pair with 5 PM Whey+Skyr Seal!",
     tags: ["salsa_solo"],
+    category: "spot",
   },
   {
     id: "whey_skyr_seal",
@@ -1782,6 +1869,7 @@ export const FOOD_PRESETS: FoodPreset[] = [
     contexts: ["cg_home", "hsr_office", "raid_social", "travel"],
     note: "Locks 155-175g daytime protein by 7 PM so skipping dinner is effortless",
     tags: ["seal", "high_protein"],
+    category: "spot",
   },
   {
     id: "abs_omad_raid",
@@ -1792,6 +1880,7 @@ export const FOOD_PRESETS: FoodPreset[] = [
     contexts: ["raid_social", "cg_home", "hsr_office"],
     note: "Fish Tikka + Prawns + Chicken skewers + Light-Oil Wish Grill -> Auto-skips dinner!",
     tags: ["abs_raid", "high_protein"],
+    category: "spot",
   },
   {
     id: "am_eggs_whey",
@@ -1802,6 +1891,7 @@ export const FOOD_PRESETS: FoodPreset[] = [
     contexts: ["cg_home", "hsr_office", "travel"],
     note: "Keep Monster White >= 8h before sleep",
     tags: ["high_protein"],
+    category: "spot",
   },
   {
     id: "hebe_chicken_bowl",
@@ -1812,6 +1902,7 @@ export const FOOD_PRESETS: FoodPreset[] = [
     contexts: ["hsr_office"],
     note: "Light rice, extra veg, dip on side",
     tags: ["high_protein"],
+    category: "spot",
   },
   {
     id: "grill_daddy_skewers",
@@ -1822,6 +1913,7 @@ export const FOOD_PRESETS: FoodPreset[] = [
     contexts: ["hsr_office"],
     note: "Butter gravy on side, skip garlic bread & Pinwheel cheese chicken",
     tags: ["high_protein"],
+    category: "spot",
   },
   {
     id: "cal_burrito_bowl",
@@ -1832,6 +1924,7 @@ export const FOOD_PRESETS: FoodPreset[] = [
     contexts: ["hsr_office", "cg_home"],
     note: "Double chicken, salsa, zero Chocodilla / Quesadilla / Popcorn",
     tags: ["high_protein"],
+    category: "spot",
   },
   {
     id: "subway_salad",
@@ -1842,6 +1935,7 @@ export const FOOD_PRESETS: FoodPreset[] = [
     contexts: ["hsr_office", "cg_home"],
     note: "Mustard / sweet onion / light mint only",
     tags: ["high_protein"],
+    category: "spot",
   },
   {
     id: "khan_saheb_tikka",
@@ -1852,6 +1946,7 @@ export const FOOD_PRESETS: FoodPreset[] = [
     contexts: ["cg_home"],
     note: "Boneless Chicken Tikka + Charcoal Peri-Peri + mint onion, skip rolls",
     tags: ["high_protein"],
+    category: "spot",
   },
   {
     id: "kfc_smoky_red",
@@ -1862,6 +1957,7 @@ export const FOOD_PRESETS: FoodPreset[] = [
     contexts: ["cg_home"],
     note: "Pure grilled protein; skip Dunked Zingers & fries",
     tags: ["high_protein"],
+    category: "spot",
   },
   {
     id: "meghana_half",
@@ -1872,6 +1968,7 @@ export const FOOD_PRESETS: FoodPreset[] = [
     contexts: ["cg_home", "raid_social"],
     note: "Box half biryani immediately; eat protein first",
     tags: ["social", "high_protein"],
+    category: "spot",
   },
   {
     id: "pre_social_shield",
@@ -1882,6 +1979,7 @@ export const FOOD_PRESETS: FoodPreset[] = [
     contexts: ["raid_social"],
     note: "Eat before leaving CG so hunger never triggers bar fries",
     tags: ["seal"],
+    category: "spot",
   },
   {
     id: "mangroove_tandoori",
@@ -1892,6 +1990,7 @@ export const FOOD_PRESETS: FoodPreset[] = [
     contexts: ["raid_social"],
     note: "Prawns/Grilled Fish OR Single Smash/Wings w/ Diet Coke (zero fries)",
     tags: ["social"],
+    category: "spot",
   },
   {
     id: "taaza_whey",
@@ -1902,6 +2001,7 @@ export const FOOD_PRESETS: FoodPreset[] = [
     contexts: ["raid_social"],
     note: "Drop Kesari Bath; top up protein at home",
     tags: ["social"],
+    category: "spot",
   },
   {
     id: "hotel_debloat",
@@ -1912,16 +2012,461 @@ export const FOOD_PRESETS: FoodPreset[] = [
     contexts: ["travel"],
     note: "Cucumber-tomato-chicken OR Dry Chilli Chicken + clear soup",
     tags: ["debloat", "high_protein"],
+    category: "spot",
+  },
+  {
+    id: "boiled_eggs_2",
+    shortLabel: "2 Boiled Eggs",
+    spot: "Everyday Staple",
+    kcal: 155,
+    proteinG: 13,
+    contexts: ["cg_home", "hsr_office", "raid_social", "travel"],
+    note: "Easy add-on anywhere to patch a 15-25g protein gap",
+    tags: ["high_protein"],
+    category: "staple",
+  },
+  {
+    id: "whey_1x",
+    shortLabel: "1 Scoop Whey (Water)",
+    spot: "Quick Protein Top-Up",
+    kcal: 120,
+    proteinG: 25,
+    contexts: ["cg_home", "hsr_office", "raid_social", "travel"],
+    note: "20.8g P / 100 kcal - fastest fix when trailing on protein",
+    tags: ["seal", "high_protein"],
+    category: "staple",
+  },
+  {
+    id: "skyr_200g",
+    shortLabel: "Skyr / Greek Yogurt (200g)",
+    spot: "Fridge / Quick Commerce",
+    kcal: 130,
+    proteinG: 20,
+    contexts: ["cg_home", "hsr_office", "travel"],
+    note: "High-satiety dairy bridge before dinner window",
+    tags: ["seal", "high_protein"],
+    category: "staple",
+  },
+  {
+    id: "chicken_breast_200g",
+    shortLabel: "Grilled Chicken Breast (200g)",
+    spot: "Home / Lean Prep",
+    kcal: 310,
+    proteinG: 52,
+    contexts: ["cg_home", "hsr_office", "travel"],
+    note: "Low-oil seasoning - unmatched S-tier protein density",
+    tags: ["high_protein"],
+    category: "staple",
+  },
+  {
+    id: "curd_bowl",
+    shortLabel: "Plain Curd / Dahi (200g)",
+    spot: "Home / Hostel Gut Care",
+    kcal: 140,
+    proteinG: 8,
+    contexts: ["cg_home", "hsr_office", "travel"],
+    note: "Light probiotic bowl - mix 1x whey if sealing evening macros",
+    tags: ["debloat"],
+    category: "staple",
+  },
+  {
+    id: "tandoori_half",
+    shortLabel: "Tandoori Chicken (Half)",
+    spot: "Restaurant / Dinner Out",
+    kcal: 420,
+    proteinG: 56,
+    contexts: ["raid_social", "cg_home", "hsr_office"],
+    note: "Top dinner-out order: skip butter naan, pair mint chutney + onion",
+    tags: ["social", "high_protein"],
+    category: "dinner_dish",
+  },
+  {
+    id: "chicken_tikka_6",
+    shortLabel: "Chicken Tikka (6 pcs)",
+    spot: "Restaurant / Dinner Out",
+    kcal: 320,
+    proteinG: 44,
+    contexts: ["raid_social", "cg_home", "hsr_office"],
+    note: "Dry tandoor boneless cuts keep sauces & cooking oil low",
+    tags: ["social", "high_protein"],
+    category: "dinner_dish",
+  },
+  {
+    id: "fish_tikka",
+    shortLabel: "Tandoori Fish Tikka (1 plate)",
+    spot: "Restaurant / Dinner Out",
+    kcal: 290,
+    proteinG: 42,
+    contexts: ["raid_social", "cg_home"],
+    note: "Ultra-lean dinner starter - easy to stack multiple plates",
+    tags: ["social", "high_protein"],
+    category: "dinner_dish",
+  },
+  {
+    id: "prawns_grill",
+    shortLabel: "Grilled / Tandoori Prawns",
+    spot: "Restaurant / Dinner Out",
+    kcal: 240,
+    proteinG: 38,
+    contexts: ["raid_social", "cg_home"],
+    note: "15.8g P / 100 kcal - elite pub or coastal dinner pick",
+    tags: ["social", "high_protein"],
+    category: "dinner_dish",
+  },
+  {
+    id: "paneer_tikka_6",
+    shortLabel: "Paneer Tikka (6 pcs)",
+    spot: "Restaurant / Veg Option",
+    kcal: 380,
+    proteinG: 24,
+    contexts: ["raid_social", "cg_home"],
+    note: "Filling vegetarian starter; ask for dry roast without malai cream",
+    tags: ["social"],
+    category: "dinner_dish",
+  },
+  {
+    id: "biryani_half",
+    shortLabel: "Chicken Biryani (Half Plate)",
+    spot: "Restaurant / Dinner Out",
+    kcal: 520,
+    proteinG: 32,
+    contexts: ["raid_social", "cg_home", "hsr_office"],
+    note: "Share or box half immediately; eat chicken pieces + raita first",
+    tags: ["social"],
+    category: "dinner_dish",
+  },
+  {
+    id: "dal_2_roti",
+    shortLabel: "Dal Tadka + 2 Phulka/Roti",
+    spot: "Home / Casual Indian",
+    kcal: 420,
+    proteinG: 18,
+    contexts: ["cg_home", "raid_social", "travel"],
+    note: "Ask for no butter/ghee topping on rotis or dal",
+    tags: ["social"],
+    category: "dinner_dish",
+  },
+  {
+    id: "plain_dosa",
+    shortLabel: "Plain Dosa + Sambar",
+    spot: "Darshini / Breakfast",
+    kcal: 280,
+    proteinG: 7,
+    contexts: ["cg_home", "hsr_office", "raid_social"],
+    note: "Light carb base - pair with whey or boiled eggs for density",
+    tags: ["social"],
+    category: "dinner_dish",
+  },
+  {
+    id: "idli_2",
+    shortLabel: "2 Idlis + Sambar",
+    spot: "Darshini / Breakfast",
+    kcal: 190,
+    proteinG: 7,
+    contexts: ["cg_home", "hsr_office", "raid_social"],
+    note: "Steamed & gentle on gut; add protein alongside",
+    tags: ["social"],
+    category: "dinner_dish",
+  },
+  {
+    id: "whisky_peg",
+    shortLabel: "Whisky / Vodka Peg (60 ml)",
+    spot: "Social Drinks",
+    kcal: 140,
+    proteinG: 0,
+    contexts: ["raid_social"],
+    note: "Mix with soda or Diet Coke only; skip bar fries",
+    tags: ["social"],
+    category: "dinner_dish",
+  },
+  {
+    id: "beer_pint",
+    shortLabel: "Beer Pint (330 ml)",
+    spot: "Social Drinks",
+    kcal: 155,
+    proteinG: 1,
+    contexts: ["raid_social"],
+    note: "Log each pint honestly so the week stays on track",
+    tags: ["social"],
+    category: "dinner_dish",
+  },
+  {
+    id: "diet_coke",
+    shortLabel: "Diet Coke / Coke Zero (330 ml)",
+    spot: "Zero-Cal Craving Buffer",
+    kcal: 0,
+    proteinG: 0,
+    contexts: ["cg_home", "hsr_office", "raid_social", "travel"],
+    note: "0 kcal fizz buffer for late evenings or social mixers",
+    tags: ["seal", "debloat"],
+    category: "dinner_dish",
   },
 ];
 
 export function getPresetsForContext(contextId: ContextId): FoodPreset[] {
-  const matched = FOOD_PRESETS.filter((f) => f.contexts.includes(contextId));
+  const matched = FOOD_PRESETS.filter(
+    (f) => (!f.category || f.category === "spot") && f.contexts.includes(contextId)
+  );
   const seal = FOOD_PRESETS.find((f) => f.id === "whey_skyr_seal");
   if (seal && !matched.some((m) => m.id === seal.id)) {
     return [seal, ...matched];
   }
   return matched;
+}
+
+export interface PlannedMealItem {
+  id: string;
+  slot: MealSlot;
+  presetId?: string;
+  label: string;
+  kcal: number;
+  proteinG: number;
+}
+
+export interface DayMealPlan {
+  focus: string;
+  dinnerSkipped: boolean;
+  dinnerOut: boolean;
+  meals: PlannedMealItem[];
+}
+
+export const DEFAULT_WEEKLY_MEAL_PLAN: Record<WeekdayKey, DayMealPlan> = {
+  mon: {
+    focus: "Upper A + HSR Lunch + 5 PM Seal",
+    dinnerSkipped: true,
+    dinnerOut: false,
+    meals: [
+      { id: "mon_1", slot: "primer", presetId: "am_eggs_whey", label: "4 Eggs / 1.5x Whey Primer", kcal: 320, proteinG: 42 },
+      { id: "mon_2", slot: "lunch", presetId: "hebe_salsa_chicken", label: "Hebe's Salsa Egg + Chicken", kcal: 680, proteinG: 65 },
+      { id: "mon_3", slot: "seal", presetId: "whey_skyr_seal", label: "5 PM Seal: 2x Whey + Skyr", kcal: 380, proteinG: 70 },
+    ],
+  },
+  tue: {
+    focus: "Lower A + HSR Skewers + 5 PM Seal",
+    dinnerSkipped: true,
+    dinnerOut: false,
+    meals: [
+      { id: "tue_1", slot: "primer", presetId: "am_eggs_whey", label: "4 Eggs / 1.5x Whey Primer", kcal: 320, proteinG: 42 },
+      { id: "tue_2", slot: "lunch", presetId: "grill_daddy_skewers", label: "Grill Daddy Skewers / 1/2 Roast", kcal: 490, proteinG: 48 },
+      { id: "tue_3", slot: "seal", presetId: "whey_skyr_seal", label: "5 PM Seal: 2x Whey + Skyr", kcal: 380, proteinG: 70 },
+    ],
+  },
+  wed: {
+    focus: "AB's Weekly Proteinmaxx Lunch Raid (OMAD)",
+    dinnerSkipped: true,
+    dinnerOut: false,
+    meals: [
+      { id: "wed_1", slot: "primer", presetId: "boiled_eggs_2", label: "2 Boiled Eggs", kcal: 155, proteinG: 13 },
+      { id: "wed_2", slot: "lunch", presetId: "abs_omad_raid", label: "AB's Proteinmaxx Lunch Raid", kcal: 1550, proteinG: 160 },
+      { id: "wed_3", slot: "seal", presetId: "diet_coke", label: "Diet Coke / Coke Zero (330 ml)", kcal: 0, proteinG: 0 },
+    ],
+  },
+  thu: {
+    focus: "Upper B + Cal Burrito + 5 PM Seal",
+    dinnerSkipped: true,
+    dinnerOut: false,
+    meals: [
+      { id: "thu_1", slot: "primer", presetId: "am_eggs_whey", label: "4 Eggs / 1.5x Whey Primer", kcal: 320, proteinG: 42 },
+      { id: "thu_2", slot: "lunch", presetId: "cal_burrito_bowl", label: "Cal Burrito BBQ Bowl", kcal: 550, proteinG: 48 },
+      { id: "thu_3", slot: "seal", presetId: "whey_skyr_seal", label: "5 PM Seal: 2x Whey + Skyr", kcal: 380, proteinG: 70 },
+    ],
+  },
+  fri: {
+    focus: "Lower B + Social Dinner Out Mode",
+    dinnerSkipped: false,
+    dinnerOut: true,
+    meals: [
+      { id: "fri_1", slot: "primer", presetId: "am_eggs_whey", label: "4 Eggs / 1.5x Whey Primer", kcal: 320, proteinG: 42 },
+      { id: "fri_2", slot: "lunch", presetId: "hebe_chicken_bowl", label: "Hebe's Dbl-Chicken Bowl", kcal: 520, proteinG: 50 },
+      { id: "fri_3", slot: "seal", presetId: "pre_social_shield", label: "Pre-Taproom Curd + Whey", kcal: 220, proteinG: 35 },
+      { id: "fri_4", slot: "dinner", presetId: "tandoori_half", label: "Tandoori Chicken (Half)", kcal: 420, proteinG: 56 },
+    ],
+  },
+  sat: {
+    focus: "Core + Zone 2 + CG Home Grill",
+    dinnerSkipped: true,
+    dinnerOut: false,
+    meals: [
+      { id: "sat_1", slot: "primer", presetId: "am_eggs_whey", label: "4 Eggs / 1.5x Whey Primer", kcal: 320, proteinG: 42 },
+      { id: "sat_2", slot: "lunch", presetId: "khan_saheb_tikka", label: "Khan Saheb Tikka + Charcoal", kcal: 520, proteinG: 65 },
+      { id: "sat_3", slot: "seal", presetId: "whey_skyr_seal", label: "5 PM Seal: 2x Whey + Skyr", kcal: 380, proteinG: 70 },
+    ],
+  },
+  sun: {
+    focus: "Badminton + Taaza + Controlled Meghana",
+    dinnerSkipped: true,
+    dinnerOut: false,
+    meals: [
+      { id: "sun_1", slot: "primer", presetId: "taaza_whey", label: "Taaza 2 Idli + Whey/Eggs", kcal: 540, proteinG: 38 },
+      { id: "sun_2", slot: "lunch", presetId: "meghana_half", label: "Meghana Leg + Eggs + 1/2 Rice", kcal: 720, proteinG: 54 },
+      { id: "sun_3", slot: "seal", presetId: "whey_skyr_seal", label: "5 PM Seal: 2x Whey + Skyr", kcal: 380, proteinG: 70 },
+    ],
+  },
+};
+
+export function getTodayWeekdayKey(date: Date = new Date()): WeekdayKey {
+  const map: WeekdayKey[] = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
+  return map[date.getDay()] ?? "mon";
+}
+
+export interface NutritionCoachAdvice {
+  headline: string;
+  actionTip: string;
+  tone: "emerald" | "amber" | "cobalt" | "violet";
+  remainingKcal: number;
+  remainingProteinG: number;
+  currentDensity: number;
+  projectedDinnerBudgetKcal: number;
+  nextPlannedMeal: PlannedMealItem | null;
+}
+
+export function computeNutritionCoachAdvice(params: {
+  consumedKcal: number;
+  consumedProteinG: number;
+  kcalCeiling: number;
+  proteinTargetG: number;
+  dinnerSkipped: boolean;
+  dinnerOutMode: boolean;
+  loggedLabels: string[];
+  todayPlan?: DayMealPlan;
+  currentHour?: number;
+}): NutritionCoachAdvice {
+  const {
+    consumedKcal,
+    consumedProteinG,
+    kcalCeiling,
+    proteinTargetG,
+    dinnerSkipped,
+    dinnerOutMode,
+    loggedLabels,
+    todayPlan,
+    currentHour = new Date().getHours(),
+  } = params;
+
+  const remainingKcal = Math.max(0, kcalCeiling - consumedKcal);
+  const remainingProteinG = Math.max(0, proteinTargetG - consumedProteinG);
+  const currentDensity =
+    consumedKcal > 0 ? Math.round(((consumedProteinG * 100) / consumedKcal) * 10) / 10 : 0;
+
+  const normLogged = loggedLabels.map((l) => l.toLowerCase());
+  const nextPlannedMeal =
+    todayPlan?.meals.find((m) => {
+      const needle = m.label.toLowerCase().slice(0, 14);
+      return !normLogged.some((logged) => logged.includes(needle));
+    }) ?? null;
+
+  const projectedDinnerBudgetKcal = dinnerOutMode
+    ? remainingKcal
+    : dinnerSkipped
+      ? 0
+      : Math.min(600, remainingKcal);
+
+  if (consumedKcal === 0) {
+    return {
+      headline: nextPlannedMeal
+        ? `Start today clean with ${nextPlannedMeal.label}`
+        : `0 / ${proteinTargetG}g P logged - lock Primer or HSR Lunch first`,
+      actionTip:
+        currentHour >= 18
+          ? "Evening check-in: log today's meals or tap Build Plate for dinner dishes."
+          : currentHour >= 12
+            ? "Midday already: hit a 48-65g P lunch now so evening protein takes zero stress."
+            : "Anchor 40g+ P before noon to make the 5 PM Seal effortless.",
+      tone: "cobalt",
+      remainingKcal,
+      remainingProteinG,
+      currentDensity,
+      projectedDinnerBudgetKcal,
+      nextPlannedMeal,
+    };
+  }
+
+  if (consumedKcal > kcalCeiling) {
+    const overKcal = consumedKcal - kcalCeiling;
+    const recoverySteps = Math.max(1000, Math.round(overKcal / 45) * 1000);
+    return {
+      headline: `+${overKcal} kcal over ${kcalCeiling} ceiling (Protein: ${consumedProteinG}g)`,
+      actionTip: `Stop solid food for today, lean on Diet Coke + water, and add ~${recoverySteps.toLocaleString()} extra steps.`,
+      tone: "amber",
+      remainingKcal: 0,
+      remainingProteinG,
+      currentDensity,
+      projectedDinnerBudgetKcal: 0,
+      nextPlannedMeal: null,
+    };
+  }
+
+  if (remainingProteinG <= 0) {
+    return {
+      headline: `Protein floor locked (${consumedProteinG}g P) with ${remainingKcal} kcal room left`,
+      actionTip: dinnerOutMode
+        ? `Dinner Out budget: up to ${remainingKcal} kcal. Stick to grilled starters or light dinner; skip mindless desserts.`
+        : dinnerSkipped
+          ? "Skip-Dinner Seal holds cleanly - grab Diet Coke or mint tea if a late craving hits."
+          : `You have ${remainingKcal} kcal spare for a light dinner or social flex.`,
+      tone: "emerald",
+      remainingKcal,
+      remainingProteinG: 0,
+      currentDensity,
+      projectedDinnerBudgetKcal,
+      nextPlannedMeal,
+    };
+  }
+
+  if (dinnerOutMode) {
+    const neededDensity =
+      remainingKcal > 0
+        ? Math.round(((remainingProteinG * 100) / remainingKcal) * 10) / 10
+        : 15;
+    return {
+      headline: `Dinner Out budget: ${remainingKcal} kcal left (${remainingProteinG}g P needed)`,
+      actionTip:
+        neededDensity >= 9
+          ? `Need S-tier density (${neededDensity}g P / 100 kcal): order Tandoori Chicken, Fish Tikka, or Prawns; skip naan & creamy gravies.`
+          : `Pick a dry tandoor protein starter first, build multi-dish plate in Fuel, and keep drinks with Diet Coke/soda.`,
+      tone: "violet",
+      remainingKcal,
+      remainingProteinG,
+      currentDensity,
+      projectedDinnerBudgetKcal,
+      nextPlannedMeal,
+    };
+  }
+
+  if (dinnerSkipped && remainingProteinG > 25) {
+    return {
+      headline: `Need ${remainingProteinG}g P inside ${remainingKcal} kcal before Skip-Dinner lock`,
+      actionTip:
+        remainingProteinG >= 55
+          ? "Run the 5 PM Seal (2x Whey + Skyr = 70g P / 380 kcal) before 7 PM to clear target without eating dinner."
+          : `Top up with ${remainingProteinG <= 25 ? "1x Whey" : "Chicken Tikka / Whey + Skyr"} and close the kitchen at 7 PM.`,
+      tone: currentHour >= 17 ? "amber" : "cobalt",
+      remainingKcal,
+      remainingProteinG,
+      currentDensity,
+      projectedDinnerBudgetKcal,
+      nextPlannedMeal,
+    };
+  }
+
+  const reqDensity =
+    remainingKcal > 0
+      ? Math.round(((remainingProteinG * 100) / remainingKcal) * 10) / 10
+      : 12;
+
+  return {
+    headline: `${remainingProteinG}g P & ${remainingKcal} kcal remaining (Avg density: ${currentDensity}g/100)`,
+    actionTip:
+      reqDensity >= 9.5
+        ? `Remaining food needs >= ${reqDensity}g P / 100 kcal (S-tier): lean on Whey, Skyr, Eggs, or Tandoori cuts.`
+        : `On pace for your cut - any A/S-tier plate keeps today's deficit intact.`,
+    tone: reqDensity >= 11 ? "amber" : "emerald",
+    remainingKcal,
+    remainingProteinG,
+    currentDensity,
+    projectedDinnerBudgetKcal,
+    nextPlannedMeal,
+  };
 }
 
 export interface RaidBossDef {

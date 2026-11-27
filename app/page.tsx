@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Bluetooth,
+  Calendar,
   Check,
   ChevronDown,
   ChevronUp,
@@ -13,18 +14,25 @@ import {
   X,
 } from "lucide-react";
 import { CombatSheet, formatRestDuration } from "@/components/combat-sheet";
+import { FuelSheet, tierBadgeStyle } from "@/components/fuel-sheet";
+import { MealPlanSheet } from "@/components/meal-plan-sheet";
 import { MuteToggle } from "@/components/mute-toggle";
 import { useToastStore } from "@/components/ui/system-toast";
 import { canUseWebBluetooth, readBleScaleWeight } from "@/lib/ble-scale";
 import {
   ARENAS,
+  computeNutritionCoachAdvice,
   CONTEXT_LIST,
   CONTEXTS,
+  DEFAULT_WEEKLY_MEAL_PLAN,
+  evaluateFoodViability,
   getPrescribedWorkout,
   getPresetsForContext,
+  getTodayWeekdayKey,
   SPLITS,
   type ArenaId,
   type ContextId,
+  type PlannedMealItem,
   type SplitId,
 } from "@/lib/monarch-catalog";
 import {
@@ -105,19 +113,15 @@ export default function CommandDeckPage() {
   const [combatOpen, setCombatOpen] = useState(false);
   const [switchOpen, setSwitchOpen] = useState(false);
   const [fuelSheetOpen, setFuelSheetOpen] = useState(false);
+  const [mealPlanOpen, setMealPlanOpen] = useState(false);
   const [stepsSheetOpen, setStepsSheetOpen] = useState(false);
   const [contextSheetOpen, setContextSheetOpen] = useState(false);
-  const [portion, setPortion] = useState<0.5 | 1 | 1.5>(1);
   const [weightEditorOpen, setWeightEditorOpen] = useState(false);
   const [draftWeight, setDraftWeight] = useState(112.4);
   const [draftBf, setDraftBf] = useState("");
   const [draftBw, setDraftBw] = useState("");
   const [bleBusy, setBleBusy] = useState(false);
   const [bleReady, setBleReady] = useState(false);
-  const [customOpen, setCustomOpen] = useState(false);
-  const [customLabel, setCustomLabel] = useState("");
-  const [customKcal, setCustomKcal] = useState("");
-  const [customProtein, setCustomProtein] = useState("");
   const [nowMs, setNowMs] = useState<number>(() => Date.now());
   const handledUrlRef = useRef(false);
 
@@ -126,6 +130,36 @@ export default function CommandDeckPage() {
   const totals = getDailyTotals(today);
   const weekly = useMemo(() => computeWeeklyTraining(store.days), [store.days]);
   const directive = getAmbientShadow(store);
+
+  const todayWeekday = getTodayWeekdayKey();
+  const weeklyPlan = store.weeklyMealPlan ?? DEFAULT_WEEKLY_MEAL_PLAN;
+  const todayPlan = weeklyPlan[todayWeekday];
+  const dinnerOutMode = Boolean(
+    today.dinnerOutMode ?? (todayPlan?.dinnerOut && !today.dinnerSkipped)
+  );
+  const coachAdvice = useMemo(
+    () =>
+      computeNutritionCoachAdvice({
+        consumedKcal: totals.kcal,
+        consumedProteinG: totals.proteinG,
+        kcalCeiling: totals.targetKcal,
+        proteinTargetG: totals.targetProteinG,
+        dinnerSkipped: today.dinnerSkipped,
+        dinnerOutMode,
+        loggedLabels: today.foods.map((f) => f.label),
+        todayPlan,
+      }),
+    [
+      totals.kcal,
+      totals.proteinG,
+      totals.targetKcal,
+      totals.targetProteinG,
+      today.dinnerSkipped,
+      dinnerOutMode,
+      today.foods,
+      todayPlan,
+    ]
+  );
 
   const activeResume = useMemo(() => {
     const sess = store.activeSession;
@@ -288,7 +322,7 @@ export default function CommandDeckPage() {
   }
 
   function handleFoodChip(presetId: string) {
-    const res = store.logFoodPreset(presetId, portion);
+    const res = store.logFoodPreset(presetId, 1);
     if (res.isAbsRaid) {
       playShadowArise();
       addToast({
@@ -305,25 +339,45 @@ export default function CommandDeckPage() {
         duration: 2200,
       });
     }
-    setPortion(1);
   }
 
-  function handleCustomSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    const kcal = Number(customKcal);
-    const protein = Number(customProtein) || 0;
-    if (!kcal) return;
-    const res = store.logCustomFood(customLabel || "Custom Meal", kcal, protein);
+  function handleLogNextPlanned(meal: PlannedMealItem) {
+    if (meal.presetId) {
+      const res = store.logFoodPreset(meal.presetId, 1, meal.slot);
+      if (res.label !== "Unknown") {
+        if (res.isAbsRaid) playShadowArise();
+        else playQuestComplete();
+        addToast({
+          title: `${meal.label.toUpperCase()} LOGGED`,
+          message: `${meal.proteinG}g P · ${meal.kcal} kcal · +${res.xpAwarded} XP`,
+          variant: "success",
+          duration: 2200,
+        });
+        return;
+      }
+    }
+    const res = store.logCustomFood(meal.label, meal.kcal, meal.proteinG, meal.slot);
     playQuestComplete();
     addToast({
-      title: "CUSTOM FUEL LOGGED",
-      message: `${kcal} kcal · ${protein}g P · +${res.xpAwarded} XP`,
+      title: `${meal.label.toUpperCase()} LOGGED`,
+      message: `${meal.proteinG}g P · ${meal.kcal} kcal · +${res.xpAwarded} XP`,
       variant: "success",
+      duration: 2200,
     });
-    setCustomLabel("");
-    setCustomKcal("");
-    setCustomProtein("");
-    setCustomOpen(false);
+  }
+
+  function handleToggleDinnerOut() {
+    const next = !dinnerOutMode;
+    store.setTodayDinnerOutMode(next);
+    playSystemPing();
+    addToast({
+      title: next ? "DINNER OUT MODE ACTIVE" : "SKIP DINNER DEFAULT RESTORED",
+      message: next
+        ? "Coach recalculated evening protein & calorie budget."
+        : "Lock Skip Dinner after 5 PM Seal to earn +30 XP.",
+      variant: "info",
+      duration: 2200,
+    });
   }
 
   function handleLockDinnerSkip() {
@@ -763,37 +817,88 @@ export default function CommandDeckPage() {
       </section>
 
       {/* 4. FUEL CARD */}
-      <section className="rounded-2xl bg-[var(--surface-1)] border border-[var(--border-subtle)] p-5">
+      <section className="rounded-2xl bg-[var(--surface-1)] border border-[var(--border-subtle)] p-5 space-y-3.5">
         <div className="flex items-center justify-between gap-2">
           <h2 className="text-base font-semibold text-[var(--text-primary)]">Fuel</h2>
-          <span
-            className={`text-xs font-medium ${
-              today.dinnerSkipped ? "text-[#4ade80]" : "text-[var(--text-muted)]"
-            }`}
-          >
-            {today.dinnerSkipped ? "Dinner skipped ✓" : "Lunch + skip dinner"}
-          </span>
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={handleToggleDinnerOut}
+              className={`px-2.5 py-1 rounded-full text-[11px] font-medium transition-colors ${
+                dinnerOutMode
+                  ? "bg-[#8b5cf6]/20 text-[#c4b5fd] border border-[#8b5cf6]/35"
+                  : today.dinnerSkipped
+                    ? "bg-[#22c55e]/15 text-[#4ade80] border border-[#22c55e]/30"
+                    : "bg-[var(--surface-2)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+              }`}
+              title="Switch today between Skip Dinner & Dinner Out budget"
+            >
+              {dinnerOutMode
+                ? "Dinner out"
+                : today.dinnerSkipped
+                  ? "Dinner skipped ✓"
+                  : "Skip dinner"}
+            </button>
+            <button
+              onClick={() => setMealPlanOpen(true)}
+              className="px-2.5 py-1 rounded-full bg-[var(--surface-2)] hover:bg-[var(--surface-3)] text-[11px] font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] inline-flex items-center gap-1 transition-colors"
+            >
+              <Calendar size={11} />
+              <span>Week plan</span>
+            </button>
+          </div>
         </div>
 
-        <div className="mt-3.5 grid grid-cols-2 gap-2.5">
+        {/* Coach Nutrition Advice */}
+        <div
+          className={`rounded-xl p-3 border flex items-center justify-between gap-3 ${
+            coachAdvice.tone === "amber"
+              ? "bg-[#f59e0b]/10 border-[#f59e0b]/30"
+              : coachAdvice.tone === "emerald"
+                ? "bg-[#22c55e]/10 border-[#22c55e]/30"
+                : coachAdvice.tone === "violet"
+                  ? "bg-[#8b5cf6]/10 border-[#8b5cf6]/30"
+                  : "bg-[var(--surface-0)] border-[var(--border-subtle)]"
+          }`}
+        >
+          <div className="min-w-0">
+            <p className="text-xs font-semibold text-[var(--text-primary)]">
+              {coachAdvice.headline}
+            </p>
+            <p className="text-[11px] text-[var(--text-secondary)] mt-0.5 leading-snug">
+              {coachAdvice.actionTip}
+            </p>
+          </div>
+          {coachAdvice.nextPlannedMeal && (
+            <button
+              onClick={() => handleLogNextPlanned(coachAdvice.nextPlannedMeal!)}
+              className="shrink-0 h-8 px-2.5 rounded-lg bg-[#3b6cf6] hover:bg-[#2f5ee5] text-white text-[11px] font-semibold inline-flex items-center gap-1 transition-colors"
+              title={`Log planned: ${coachAdvice.nextPlannedMeal.label}`}
+            >
+              <Plus size={12} />
+              <span>Next meal</span>
+            </button>
+          )}
+        </div>
+
+        <div className="grid grid-cols-2 gap-2.5">
           <button
             onClick={() => setFuelSheetOpen(true)}
             className="h-11 rounded-xl bg-[var(--surface-2)] hover:bg-[var(--surface-3)] text-sm font-medium text-[var(--text-primary)] flex items-center justify-center gap-1.5 transition-colors"
           >
             <Plus size={15} />
-            <span>Log meal</span>
+            <span>Log / build plate</span>
           </button>
 
           <button
             onClick={handleLockDinnerSkip}
-            disabled={today.dinnerSkipped}
+            disabled={today.dinnerSkipped && !dinnerOutMode}
             className={`h-11 rounded-xl text-sm font-medium flex items-center justify-center gap-1.5 border transition-colors ${
-              today.dinnerSkipped
+              today.dinnerSkipped && !dinnerOutMode
                 ? "bg-[#22c55e]/15 border-[#22c55e]/35 text-[#4ade80]"
                 : "bg-[var(--surface-0)] hover:bg-[var(--surface-2)] border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
             }`}
           >
-            {today.dinnerSkipped ? (
+            {today.dinnerSkipped && !dinnerOutMode ? (
               <>
                 <Check size={15} />
                 <span>Dinner skipped</span>
@@ -808,7 +913,7 @@ export default function CommandDeckPage() {
         </div>
 
         {/* Top 3 Quick-Log Pills */}
-        <div className="mt-3 flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2">
           {quickThreePresets.map((preset) => (
             <button
               key={preset.id}
@@ -822,134 +927,57 @@ export default function CommandDeckPage() {
 
         {/* Clean Single-Column Logged Meals */}
         {today.foods.length > 0 && (
-          <div className="mt-3.5 pt-3.5 border-t border-[var(--border-subtle)] space-y-2">
-            {today.foods.map((entry) => (
-              <div
-                key={entry.id}
-                className="flex items-center justify-between gap-3 text-xs"
-              >
-                <span className="text-[var(--text-primary)] truncate">{entry.label}</span>
-                <div className="flex items-center gap-2.5 shrink-0">
-                  <span className="font-mono tabular-nums text-[var(--text-secondary)]">
-                    {entry.proteinG}g P · {entry.kcal} kcal
-                  </span>
-                  <button
-                    onClick={() => store.removeFoodEntry(todayKey, entry.id)}
-                    className="text-[var(--text-muted)] hover:text-[#ef4444]"
-                    aria-label={`Remove ${entry.label}`}
-                  >
-                    <X size={13} />
-                  </button>
+          <div className="pt-3 border-t border-[var(--border-subtle)] space-y-2">
+            {today.foods.map((entry) => {
+              const v = evaluateFoodViability(entry.kcal, entry.proteinG);
+              return (
+                <div
+                  key={entry.id}
+                  className="flex items-center justify-between gap-3 text-xs"
+                >
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <span
+                      className={`px-1 py-0.2 rounded text-[9px] font-mono font-semibold shrink-0 ${tierBadgeStyle(
+                        v.tier
+                      )}`}
+                    >
+                      {v.tier}
+                    </span>
+                    <span className="text-[var(--text-primary)] truncate">{entry.label}</span>
+                    {entry.slot && (
+                      <span className="text-[10px] text-[var(--text-muted)] shrink-0">
+                        · {entry.slot === "seal" ? "5 PM Seal" : entry.slot}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2.5 shrink-0">
+                    <span className="font-mono tabular-nums text-[var(--text-secondary)]">
+                      {entry.proteinG}g P · {entry.kcal} kcal
+                    </span>
+                    <button
+                      onClick={() => store.removeFoodEntry(todayKey, entry.id)}
+                      className="text-[var(--text-muted)] hover:text-[#ef4444]"
+                      aria-label={`Remove ${entry.label}`}
+                    >
+                      <X size={13} />
+                    </button>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </section>
 
-      {/* BOTTOM SHEET: LOG MEAL */}
-      <SheetModal
+      {/* MODULAR BOTTOM SHEETS: PLATE BUILDER & WEEKLY MEAL PLAN */}
+      <FuelSheet
         open={fuelSheetOpen}
         onClose={() => setFuelSheetOpen(false)}
-        title="Log meal"
-      >
-        <div className="flex items-center justify-between gap-2">
-          <span className="text-xs text-[var(--text-secondary)]">Portion size</span>
-          <div className="bg-[var(--surface-0)] p-1 rounded-xl grid grid-cols-3 gap-1">
-            {([0.5, 1, 1.5] as const).map((mult) => (
-              <button
-                key={mult}
-                onClick={() => setPortion(mult)}
-                className={`px-3 py-1 rounded-lg font-mono text-xs font-medium transition-colors ${
-                  portion === mult
-                    ? "bg-[var(--surface-2)] text-[var(--text-primary)]"
-                    : "text-[var(--text-secondary)]"
-                }`}
-              >
-                {mult}x
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="space-y-2">
-          {contextPresets.map((preset) => {
-            const scaledKcal = Math.round(preset.kcal * portion);
-            const scaledP = Math.round(preset.proteinG * portion);
-            return (
-              <button
-                key={preset.id}
-                onClick={() => {
-                  handleFoodChip(preset.id);
-                  setFuelSheetOpen(false);
-                }}
-                className="w-full p-3.5 rounded-xl bg-[var(--surface-2)] hover:bg-[var(--surface-3)] flex items-center justify-between gap-3 text-left transition-colors"
-              >
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-[var(--text-primary)] truncate">
-                    {preset.shortLabel}
-                  </p>
-                  <p className="text-xs text-[var(--text-muted)] truncate mt-0.5">
-                    {preset.spot}
-                  </p>
-                </div>
-                <div className="text-right shrink-0 font-mono tabular-nums text-xs">
-                  <div className="text-[var(--text-primary)] font-semibold">{scaledP}g P</div>
-                  <div className="text-[var(--text-secondary)]">{scaledKcal} kcal</div>
-                </div>
-              </button>
-            );
-          })}
-        </div>
-
-        <div className="pt-2 border-t border-[var(--border-subtle)]">
-          <button
-            onClick={() => setCustomOpen((v) => !v)}
-            className="text-xs font-medium text-[#60a5fa] hover:text-[#93c5fd]"
-          >
-            {customOpen ? "Hide custom meal" : "+ Custom meal"}
-          </button>
-
-          {customOpen && (
-            <form
-              onSubmit={(e) => {
-                handleCustomSubmit(e);
-                setFuelSheetOpen(false);
-              }}
-              className="mt-3 grid grid-cols-12 gap-2"
-            >
-              <input
-                type="text"
-                placeholder="Meal name"
-                value={customLabel}
-                onChange={(e) => setCustomLabel(e.target.value)}
-                className="col-span-5 px-3 py-2 rounded-xl bg-[var(--surface-0)] border border-[var(--border-subtle)] text-xs"
-              />
-              <input
-                type="number"
-                placeholder="kcal"
-                value={customKcal}
-                onChange={(e) => setCustomKcal(e.target.value)}
-                className="col-span-3 px-2.5 py-2 rounded-xl bg-[var(--surface-0)] border border-[var(--border-subtle)] text-xs font-mono"
-                required
-              />
-              <input
-                type="number"
-                placeholder="P (g)"
-                value={customProtein}
-                onChange={(e) => setCustomProtein(e.target.value)}
-                className="col-span-2 px-2.5 py-2 rounded-xl bg-[var(--surface-0)] border border-[var(--border-subtle)] text-xs font-mono"
-              />
-              <button
-                type="submit"
-                className="col-span-2 rounded-xl bg-[#3b6cf6] text-white text-xs font-semibold"
-              >
-                Add
-              </button>
-            </form>
-          )}
-        </div>
-      </SheetModal>
+      />
+      <MealPlanSheet
+        open={mealPlanOpen}
+        onClose={() => setMealPlanOpen(false)}
+      />
 
       {/* BOTTOM SHEET: SCALE & BODY COMP */}
       <SheetModal

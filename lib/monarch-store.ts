@@ -164,6 +164,17 @@ export interface BenchBest {
   updatedAt?: string;
 }
 
+export interface ActiveWorkoutSession {
+  date: string;
+  split: SplitId;
+  arena: ArenaId;
+  gateRank: GateRankId;
+  completedSets: Record<string, boolean[]>;
+  benchWeight: number;
+  benchReps: number;
+  lastSetAtMs: number | null;
+}
+
 export interface MonarchPersistedState {
   context: ContextId;
   split: SplitId;
@@ -182,6 +193,7 @@ export interface MonarchPersistedState {
   lateNightsSaved: number;
   webhookUrl: string;
   swappedExercises: Record<string, boolean>;
+  activeSession: ActiveWorkoutSession | null;
   days: Record<string, DayRecord>;
 }
 
@@ -195,6 +207,12 @@ export interface MonarchActions {
   toggleLowMana: () => void;
   toggleDebloat: () => void;
   toggleExerciseSwap: (exerciseId: string) => void;
+  syncActiveSession: (patch: Partial<ActiveWorkoutSession> & { reset?: boolean }) => void;
+  toggleActiveSet: (
+    meta: { split: SplitId; arena: ArenaId; gateRank: GateRankId; exId: string; setIdx: number; totalSetsForEx: number }
+  ) => { turnedOn: boolean };
+  clearActiveRestTimer: () => void;
+  discardActiveSession: () => void;
   clearSurvivalFloor: () => { xpAwarded: number; alreadyCleared: boolean };
   completeGateWorkout: (input: {
     split: SplitId;
@@ -537,6 +555,7 @@ const INITIAL_PERSISTED_STATE: MonarchPersistedState = {
   lateNightsSaved: 6,
   webhookUrl: "",
   swappedExercises: {},
+  activeSession: null,
   days: {},
 };
 
@@ -580,6 +599,83 @@ export const useMonarchStore = create<MonarchStore>()(
             [exerciseId]: !s.swappedExercises[exerciseId],
           },
         })),
+
+      syncActiveSession: (patch) => {
+        const key = getTodayKey();
+        const s = get();
+        const current = s.activeSession;
+        const base: ActiveWorkoutSession =
+          !patch.reset && current && current.date === key
+            ? current
+            : {
+                date: key,
+                split: s.split,
+                arena: s.arena,
+                gateRank: s.gateRank,
+                completedSets: {},
+                benchWeight: s.benchBest.weightKg || 55,
+                benchReps: 8,
+                lastSetAtMs: null,
+              };
+        const { reset: _reset, ...rest } = patch;
+        set({
+          activeSession: {
+            ...base,
+            ...rest,
+            date: key,
+          },
+        });
+      },
+
+      toggleActiveSet: ({ split, arena, gateRank, exId, setIdx, totalSetsForEx }) => {
+        const key = getTodayKey();
+        const s = get();
+        const prev =
+          s.activeSession &&
+          s.activeSession.date === key &&
+          s.activeSession.split === split &&
+          s.activeSession.arena === arena &&
+          s.activeSession.gateRank === gateRank
+            ? s.activeSession
+            : {
+                date: key,
+                split,
+                arena,
+                gateRank,
+                completedSets: {},
+                benchWeight: s.benchBest.weightKg || 55,
+                benchReps: 8,
+                lastSetAtMs: null,
+              };
+
+        const existingArr = prev.completedSets[exId] ?? [];
+        const padded = Array.from({ length: totalSetsForEx }, (_, i) =>
+          Boolean(existingArr[i])
+        );
+        const turnedOn = !padded[setIdx];
+        padded[setIdx] = turnedOn;
+
+        set({
+          activeSession: {
+            ...prev,
+            completedSets: {
+              ...prev.completedSets,
+              [exId]: padded,
+            },
+            lastSetAtMs: turnedOn ? Date.now() : prev.lastSetAtMs,
+          },
+        });
+        return { turnedOn };
+      },
+
+      clearActiveRestTimer: () =>
+        set((s) => ({
+          activeSession: s.activeSession
+            ? { ...s.activeSession, lastSetAtMs: null }
+            : null,
+        })),
+
+      discardActiveSession: () => set({ activeSession: null }),
 
       clearSurvivalFloor: () => {
         const key = getTodayKey();
@@ -660,6 +756,7 @@ export const useMonarchStore = create<MonarchStore>()(
           totalPrs: nextTotalPrs,
           benchBest: nextBench,
           kiliMeters: state.kiliMeters + gainM,
+          activeSession: null,
           days: {
             ...state.days,
             [key]: {
@@ -897,6 +994,7 @@ export const useMonarchStore = create<MonarchStore>()(
           lateNightsSaved: s.lateNightsSaved,
           webhookUrl: s.webhookUrl,
           swappedExercises: s.swappedExercises,
+          activeSession: s.activeSession,
           days: s.days,
         };
         return JSON.stringify(snapshot, null, 2);
@@ -945,6 +1043,7 @@ export const useMonarchStore = create<MonarchStore>()(
         lateNightsSaved: state.lateNightsSaved,
         webhookUrl: state.webhookUrl,
         swappedExercises: state.swappedExercises,
+        activeSession: state.activeSession,
         days: state.days,
       }),
     }

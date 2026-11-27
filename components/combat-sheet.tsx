@@ -1,7 +1,16 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Check, RefreshCw, ShieldAlert, Sun, Timer, X } from "lucide-react";
+import {
+  Check,
+  RefreshCw,
+  RotateCcw,
+  ShieldAlert,
+  Sparkles,
+  Sun,
+  Timer,
+  X,
+} from "lucide-react";
 import {
   ARENAS,
   GATE_RANKS,
@@ -11,7 +20,7 @@ import {
   type GateRankId,
   type SplitId,
 } from "@/lib/monarch-catalog";
-import { epley1Rm, useMonarchStore } from "@/lib/monarch-store";
+import { epley1Rm, getTodayKey, useMonarchStore } from "@/lib/monarch-store";
 import {
   playLevelUp,
   playQuestComplete,
@@ -29,13 +38,24 @@ interface WakeLockSentinelLike {
   release: () => Promise<void>;
 }
 
+export function formatRestDuration(sec: number): string {
+  const m = Math.floor(sec / 60);
+  const s = String(sec % 60).padStart(2, "0");
+  return `${m}:${s}`;
+}
+
 export function CombatSheet({ open, onClose }: CombatSheetProps) {
   const split = useMonarchStore((s) => s.split);
   const arena = useMonarchStore((s) => s.arena);
   const gateRank = useMonarchStore((s) => s.gateRank);
   const benchBest = useMonarchStore((s) => s.benchBest);
   const swappedExercises = useMonarchStore((s) => s.swappedExercises);
+  const activeSession = useMonarchStore((s) => s.activeSession);
   const toggleExerciseSwap = useMonarchStore((s) => s.toggleExerciseSwap);
+  const syncActiveSession = useMonarchStore((s) => s.syncActiveSession);
+  const toggleActiveSet = useMonarchStore((s) => s.toggleActiveSet);
+  const clearActiveRestTimer = useMonarchStore((s) => s.clearActiveRestTimer);
+  const discardActiveSession = useMonarchStore((s) => s.discardActiveSession);
   const completeGateWorkout = useMonarchStore((s) => s.completeGateWorkout);
   const addToast = useToastStore((s) => s.add);
 
@@ -44,26 +64,36 @@ export function CombatSheet({ open, onClose }: CombatSheetProps) {
     [arena, split, gateRank]
   );
 
-  const [completedSets, setCompletedSets] = useState<Record<string, boolean[]>>({});
-  const [benchWeight, setBenchWeight] = useState<number>(benchBest.weightKg || 55);
-  const [benchReps, setBenchReps] = useState<number>(8);
-  const [restLeft, setRestLeft] = useState<number>(0);
+  const [nowMs, setNowMs] = useState<number>(() => Date.now());
   const [wakeActive, setWakeActive] = useState<boolean>(false);
   const wakeRef = useRef<WakeLockSentinelLike | null>(null);
+  const pingedRestAtRef = useRef<number | null>(null);
 
-  // Reset checklist state when opening or changing workout key
+  const todayKey = getTodayKey();
+
+  // Initialize or seamlessly resume IndexedDB activeSession
   useEffect(() => {
     if (!open) return;
-    const init: Record<string, boolean[]> = {};
-    exercises.forEach((ex) => {
-      const count = swappedExercises[ex.id] ? ex.swap.sets : ex.sets;
-      init[ex.id] = Array.from({ length: count }, () => false);
-    });
-    setCompletedSets(init);
-    setRestLeft(0);
-  }, [open, arena, split, gateRank]);
+    const hasProgressToday =
+      activeSession &&
+      activeSession.date === todayKey &&
+      Object.values(activeSession.completedSets).some((arr) => arr.some(Boolean));
 
-  // Keep S25 Ultra awake while inside Combat Sheet
+    const matchesCurrent =
+      activeSession &&
+      activeSession.date === todayKey &&
+      activeSession.split === split &&
+      activeSession.arena === arena &&
+      activeSession.gateRank === gateRank;
+
+    if (!activeSession || activeSession.date !== todayKey) {
+      syncActiveSession({ reset: true, split, arena, gateRank });
+    } else if (!matchesCurrent && !hasProgressToday) {
+      syncActiveSession({ reset: true, split, arena, gateRank });
+    }
+  }, [open, arena, split, gateRank, todayKey]);
+
+  // Keep S25 Ultra awake & auto-reacquire when returning from WhatsApp/Spotify
   useEffect(() => {
     if (!open) {
       wakeRef.current?.release().catch(() => {});
@@ -71,48 +101,61 @@ export function CombatSheet({ open, onClose }: CombatSheetProps) {
       setWakeActive(false);
       return;
     }
+
     let cancelled = false;
-    const nav = navigator as unknown as {
-      wakeLock?: { request: (t: "screen") => Promise<WakeLockSentinelLike> };
+    const requestWake = () => {
+      if (cancelled || document.visibilityState !== "visible") return;
+      const nav = navigator as unknown as {
+        wakeLock?: { request: (t: "screen") => Promise<WakeLockSentinelLike> };
+      };
+      nav.wakeLock
+        ?.request("screen")
+        .then((sentinel) => {
+          if (cancelled) {
+            sentinel.release().catch(() => {});
+          } else {
+            wakeRef.current = sentinel;
+            setWakeActive(true);
+          }
+        })
+        .catch(() => setWakeActive(false));
     };
-    nav.wakeLock
-      ?.request("screen")
-      .then((sentinel) => {
-        if (cancelled) {
-          sentinel.release().catch(() => {});
-        } else {
-          wakeRef.current = sentinel;
-          setWakeActive(true);
-        }
-      })
-      .catch(() => setWakeActive(false));
+
+    requestWake();
+    const onVis = () => {
+      if (document.visibilityState === "visible") requestWake();
+    };
+    document.addEventListener("visibilitychange", onVis);
 
     return () => {
       cancelled = true;
+      document.removeEventListener("visibilitychange", onVis);
       wakeRef.current?.release().catch(() => {});
       wakeRef.current = null;
     };
   }, [open]);
 
-  // Countdown rest timer
+  // Wall-clock count-up rest stopwatch (immune to background throttling & never expires)
+  const lastSetAtMs = activeSession?.lastSetAtMs ?? null;
   useEffect(() => {
-    if (restLeft <= 0) return;
+    if (!open || !lastSetAtMs) return;
+    setNowMs(Date.now());
     const id = setInterval(() => {
-      setRestLeft((prev) => {
-        if (prev <= 1) {
-          try {
-            navigator.vibrate?.([140, 80, 220]);
-          } catch {
-            // ignore
-          }
-          playSystemPing();
-          return 0;
+      const now = Date.now();
+      setNowMs(now);
+      const sec = Math.floor((now - lastSetAtMs) / 1000);
+      if (sec >= 150 && pingedRestAtRef.current !== lastSetAtMs) {
+        pingedRestAtRef.current = lastSetAtMs;
+        try {
+          navigator.vibrate?.([120, 60, 120]);
+        } catch {
+          // ignore
         }
-        return prev - 1;
-      });
+        playSystemPing();
+      }
     }, 1000);
     return () => clearInterval(id);
-  }, [restLeft]);
+  }, [open, lastSetAtMs]);
 
   // Dismiss modal cleanly with Escape key
   useEffect(() => {
@@ -126,37 +169,55 @@ export function CombatSheet({ open, onClose }: CombatSheetProps) {
 
   if (!open) return null;
 
+  const benchWeight = activeSession?.benchWeight ?? (benchBest.weightKg || 55);
+  const benchReps = activeSession?.benchReps ?? 8;
+  const completedSets = activeSession?.completedSets ?? {};
+
   const totalSets = exercises.reduce((acc, ex) => {
-    const arr = completedSets[ex.id];
-    return acc + (arr ? arr.length : ex.sets);
+    const count = swappedExercises[ex.id] ? ex.swap.sets : ex.sets;
+    return acc + count;
   }, 0);
 
   const doneSets = exercises.reduce((acc, ex) => {
+    const count = swappedExercises[ex.id] ? ex.swap.sets : ex.sets;
     const arr = completedSets[ex.id] ?? [];
-    return acc + arr.filter(Boolean).length;
+    return acc + arr.slice(0, count).filter(Boolean).length;
   }, 0);
+
+  const elapsedRestSec =
+    lastSetAtMs !== null ? Math.max(0, Math.floor((nowMs - lastSetAtMs) / 1000)) : null;
+
+  const restPhase =
+    elapsedRestSec === null
+      ? null
+      : elapsedRestSec < 120
+        ? { label: "RECOVERING", color: "text-[var(--text-secondary)]", border: "border-[var(--border-subtle)] bg-[var(--surface-2)]" }
+        : elapsedRestSec < 270
+          ? { label: "ATP FULL", color: "text-[#60a5fa]", border: "border-[#3b6cf6]/60 bg-[#3b6cf6]/15" }
+          : { label: "LONG REST · READY", color: "text-[#fbbf24]", border: "border-[#f59e0b]/60 bg-[#f59e0b]/15" };
 
   const arenaSpec = ARENAS.find((a) => a.id === arena) ?? ARENAS[0];
   const splitSpec = SPLITS.find((s) => s.id === split) ?? SPLITS[0];
   const rankSpec = GATE_RANKS.find((g) => g.id === gateRank) ?? GATE_RANKS[1];
 
-  function toggleSet(exId: string, setIdx: number, restSec: number) {
-    setCompletedSets((prev) => {
-      const current = prev[exId] ?? [];
-      const nextArr = [...current];
-      const turningOn = !nextArr[setIdx];
-      nextArr[setIdx] = turningOn;
-      if (turningOn) {
-        try {
-          navigator.vibrate?.(40);
-        } catch {
-          // ignore
-        }
-        playSystemPing();
-        if (restSec > 0) setRestLeft(restSec);
-      }
-      return { ...prev, [exId]: nextArr };
+  function handleSetTap(exId: string, setIdx: number, totalSetsForEx: number) {
+    const { turnedOn } = toggleActiveSet({
+      split,
+      arena,
+      gateRank,
+      exId,
+      setIdx,
+      totalSetsForEx,
     });
+    if (turnedOn) {
+      setNowMs(Date.now());
+      try {
+        navigator.vibrate?.(40);
+      } catch {
+        // ignore
+      }
+      playSystemPing();
+    }
   }
 
   function handleSwap(exId: string, name: string) {
@@ -199,8 +260,6 @@ export function CombatSheet({ open, onClose }: CombatSheetProps) {
   }
 
   const est1Rm = epley1Rm(benchWeight, benchReps);
-  const mins = Math.floor(restLeft / 60);
-  const secs = String(restLeft % 60).padStart(2, "0");
 
   return (
     <div
@@ -223,32 +282,54 @@ export function CombatSheet({ open, onClose }: CombatSheetProps) {
             )}
           </div>
           <p className="font-[family-name:var(--font-geist-mono)] text-[11px] text-[var(--text-secondary)]">
-            {doneSets}/{totalSets} SETS SWEPT · +{rankSpec.baseXp} XP
+            {doneSets}/{totalSets} SETS SWEPT · SAVED OFFLINE · +{rankSpec.baseXp} XP
           </p>
         </div>
-        <button
-          onClick={onClose}
-          className="h-9 w-9 rounded-lg bg-[var(--surface-2)] flex items-center justify-center text-[var(--text-secondary)]"
-          aria-label="Close combat HUD"
-        >
-          <X size={18} />
-        </button>
+
+        <div className="flex items-center gap-1.5">
+          {doneSets > 0 && (
+            <button
+              onClick={discardActiveSession}
+              className="h-9 px-2.5 rounded-lg bg-[var(--surface-2)] border border-[var(--border-subtle)] font-[family-name:var(--font-rajdhani)] text-[10px] font-bold uppercase text-[var(--text-secondary)] inline-flex items-center gap-1"
+              title="Reset checked sets"
+            >
+              <RotateCcw size={11} /> RESET
+            </button>
+          )}
+          <button
+            onClick={onClose}
+            className="h-9 w-9 rounded-lg bg-[var(--surface-2)] flex items-center justify-center text-[var(--text-secondary)]"
+            aria-label="Close combat HUD"
+          >
+            <X size={18} />
+          </button>
+        </div>
       </div>
 
-      {/* Arena Guardrail & Rest Bar */}
+      {/* Arena Guardrail + Wall-Clock Count-Up Rest Stopwatch */}
       <div className="px-4 py-2 bg-[var(--surface-1)]/60 border-b border-[var(--border-subtle)] flex items-center justify-between gap-2">
         <p className="text-[11px] text-[var(--text-secondary)] leading-tight">
           {split === "pool_steps"
             ? "PROTOCOL LOCK: Lift BEFORE CG Swimming Pool. Keep Zone-2 steady."
             : arenaSpec.rule}
         </p>
-        {restLeft > 0 && (
-          <button
-            onClick={() => setRestLeft(0)}
-            className="shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-[#3b6cf6]/20 border border-[#3b6cf6]/50 font-[family-name:var(--font-geist-mono)] text-xs font-bold text-[#3b6cf6]"
+
+        {elapsedRestSec !== null && restPhase && (
+          <div
+            className={`shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1 rounded border font-[family-name:var(--font-geist-mono)] text-[11px] font-bold ${restPhase.border} ${restPhase.color}`}
           >
-            <Timer size={12} /> {mins}:{secs} <span className="text-[9px] opacity-75">SKIP</span>
-          </button>
+            <Timer size={12} />
+            <span>{formatRestDuration(elapsedRestSec)}</span>
+            <span className="text-[9px] font-[family-name:var(--font-rajdhani)] uppercase tracking-wider">
+              {restPhase.label}
+            </span>
+            <button
+              onClick={clearActiveRestTimer}
+              className="ml-1 text-[9px] opacity-70 hover:opacity-100 underline"
+            >
+              CLR
+            </button>
+          </div>
         )}
       </div>
 
@@ -261,7 +342,8 @@ export function CombatSheet({ open, onClose }: CombatSheetProps) {
           const activeReps = isSwapped ? ex.swap.reps : ex.reps;
           const activeLoad = isSwapped ? ex.swap.load : ex.load;
           const activeCue = isSwapped ? ex.swap.cue : ex.cue;
-          const checks = completedSets[ex.id] ?? Array.from({ length: activeSets }, () => false);
+          const savedArr = completedSets[ex.id] ?? [];
+          const checks = Array.from({ length: activeSets }, (_, i) => Boolean(savedArr[i]));
 
           return (
             <div
@@ -306,6 +388,13 @@ export function CombatSheet({ open, onClose }: CombatSheetProps) {
                 </p>
               )}
 
+              {!isSwapped && ex.pairHint && (
+                <p className="mt-1 text-[10px] text-[#c4b5fd] flex items-start gap-1.5">
+                  <Sparkles size={11} className="shrink-0 mt-0.5" />
+                  <span>{ex.pairHint}</span>
+                </p>
+              )}
+
               {/* Inline Bench PR Control */}
               {ex.trackBench && !isSwapped && (
                 <div className="mt-2.5 p-2.5 rounded-lg bg-[var(--surface-2)] border border-[#f59e0b]/25 flex items-center justify-between gap-2">
@@ -319,28 +408,32 @@ export function CombatSheet({ open, onClose }: CombatSheetProps) {
                   </div>
                   <div className="flex items-center gap-1.5 font-[family-name:var(--font-geist-mono)] text-xs">
                     <button
-                      onClick={() => setBenchWeight((w) => Math.max(20, w - 2.5))}
+                      onClick={() =>
+                        syncActiveSession({ benchWeight: Math.max(20, benchWeight - 2.5) })
+                      }
                       className="px-2 py-1 rounded bg-[var(--surface-1)]"
                     >
                       -
                     </button>
                     <span>{benchWeight}kg</span>
                     <button
-                      onClick={() => setBenchWeight((w) => w + 2.5)}
+                      onClick={() => syncActiveSession({ benchWeight: benchWeight + 2.5 })}
                       className="px-2 py-1 rounded bg-[var(--surface-1)]"
                     >
                       +
                     </button>
                     <span className="text-[var(--text-muted)]">x</span>
                     <button
-                      onClick={() => setBenchReps((r) => Math.max(1, r - 1))}
+                      onClick={() =>
+                        syncActiveSession({ benchReps: Math.max(1, benchReps - 1) })
+                      }
                       className="px-2 py-1 rounded bg-[var(--surface-1)]"
                     >
                       -
                     </button>
                     <span>{benchReps}</span>
                     <button
-                      onClick={() => setBenchReps((r) => r + 1)}
+                      onClick={() => syncActiveSession({ benchReps: benchReps + 1 })}
                       className="px-2 py-1 rounded bg-[var(--surface-1)]"
                     >
                       +
@@ -354,7 +447,7 @@ export function CombatSheet({ open, onClose }: CombatSheetProps) {
                 {checks.map((done, setIdx) => (
                   <button
                     key={setIdx}
-                    onClick={() => toggleSet(ex.id, setIdx, ex.restSec)}
+                    onClick={() => handleSetTap(ex.id, setIdx, activeSets)}
                     className={`h-9 min-w-[64px] px-3 rounded-lg font-[family-name:var(--font-geist-mono)] text-xs font-semibold flex items-center justify-center gap-1 border transition-colors ${
                       done
                         ? "bg-[#22c55e]/20 border-[#22c55e] text-[#4ade80]"

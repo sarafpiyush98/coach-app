@@ -82,6 +82,7 @@ export interface ExerciseSpec {
   load: string;
   restSec: number;
   cue?: string;
+  pairHint?: string;
   trackBench?: boolean;
   swap: ExerciseSwap;
 }
@@ -128,9 +129,9 @@ export const GATE_RANKS: {
   duration: string;
   baseXp: number;
 }[] = [
-  { id: "floor_5m", tag: "E-RANK", label: "5m Floor", duration: "5-10 min", baseXp: 35 },
-  { id: "express_25m", tag: "C-RANK", label: "25m Express", duration: "25-30 min", baseXp: 65 },
-  { id: "full_45m", tag: "S-RANK", label: "45m Full", duration: "45-55 min", baseXp: 95 },
+  { id: "floor_5m", tag: "E-RANK", label: "2-Set Floor", duration: "2 sets · ~8-10m", baseXp: 35 },
+  { id: "express_25m", tag: "C-RANK", label: "6-Set Heavy", duration: "3x2 sets · ~25-30m", baseXp: 65 },
+  { id: "full_45m", tag: "S-RANK", label: "Full 10-Set", duration: "4-5 lifts · chill rest", baseXp: 95 },
 ];
 
 const WORKOUT_MATRIX: Record<ArenaId, Record<SplitId, ExerciseSpec[]>> = {
@@ -711,22 +712,47 @@ const WORKOUT_MATRIX: Record<ArenaId, Record<SplitId, ExerciseSpec[]>> = {
   },
 };
 
+const PAIR_HINTS: Record<string, string> = {
+  cg_lat_cable: "Long-rest shortcut: optional pair between Flat/Incline breaks",
+  cg_rope_tri: "Long-rest shortcut: optional pair between OHP breaks",
+  cg_inc_curl: "Long-rest shortcut: alternate curls inside Pull long rests",
+  cg_face_pull: "Long-rest shortcut: rear-delt posture sets during Row breaks",
+  cg_calves_core: "Long-rest shortcut: calves/core inside Glute Bridge breaks",
+};
+
 export function getPrescribedWorkout(
   arena: ArenaId,
   split: SplitId,
   gateRank: GateRankId
 ): ExerciseSpec[] {
   const list = WORKOUT_MATRIX[arena][split];
-  if (gateRank === "floor_5m") {
-    return list.slice(0, 1).map((ex) => ({
+  const applyRank = (ex: ExerciseSpec, idx: number, maxAccSets: number): ExerciseSpec => {
+    const isCardio = split === "pool_steps";
+    const scaledSets = isCardio
+      ? ex.sets
+      : idx === 0
+        ? gateRank === "floor_5m"
+          ? Math.min(ex.sets, 2)
+          : gateRank === "express_25m"
+            ? Math.min(ex.sets, 2)
+            : ex.sets
+        : Math.min(ex.sets, maxAccSets);
+    const scaledSwapSets = isCardio ? ex.swap.sets : Math.min(ex.swap.sets, scaledSets);
+    return {
       ...ex,
-      sets: Math.min(ex.sets, 2),
-    }));
+      sets: scaledSets,
+      pairHint: PAIR_HINTS[ex.id],
+      swap: { ...ex.swap, sets: scaledSwapSets },
+    };
+  };
+
+  if (gateRank === "floor_5m") {
+    return list.slice(0, 1).map((ex, idx) => applyRank(ex, idx, 2));
   }
   if (gateRank === "express_25m") {
-    return list.slice(0, Math.min(3, list.length));
+    return list.slice(0, Math.min(3, list.length)).map((ex, idx) => applyRank(ex, idx, 2));
   }
-  return list;
+  return list.map((ex, idx) => applyRank(ex, idx, 2));
 }
 
 export type FoodTag =

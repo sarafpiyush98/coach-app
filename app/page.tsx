@@ -10,11 +10,12 @@ import {
   Plus,
   Scale,
   Sparkles,
+  Timer,
   Utensils,
   X,
 } from "lucide-react";
 import { SystemPanel } from "@/components/ui/system-panel";
-import { CombatSheet } from "@/components/combat-sheet";
+import { CombatSheet, formatRestDuration } from "@/components/combat-sheet";
 import { MuteToggle } from "@/components/mute-toggle";
 import { useToastStore } from "@/components/ui/system-toast";
 import {
@@ -56,6 +57,7 @@ export default function CommandDeckPage() {
   const [customLabel, setCustomLabel] = useState("");
   const [customKcal, setCustomKcal] = useState("");
   const [customProtein, setCustomProtein] = useState("");
+  const [nowMs, setNowMs] = useState<number>(() => Date.now());
   const handledUrlRef = useRef(false);
 
   const todayKey = getTodayKey();
@@ -65,6 +67,37 @@ export default function CommandDeckPage() {
   const lvl = levelFromMonarchXp(totalXp);
   const streak = computeStreakAndCombo(store.days);
   const directive = getAmbientShadow(store);
+
+  const activeResume = useMemo(() => {
+    const sess = store.activeSession;
+    if (!sess || sess.date !== todayKey) return null;
+    const exercises = getPrescribedWorkout(sess.arena, sess.split, sess.gateRank);
+    const totalSets = exercises.reduce((acc, ex) => {
+      const c = store.swappedExercises[ex.id] ? ex.swap.sets : ex.sets;
+      return acc + c;
+    }, 0);
+    const checkedSets = exercises.reduce((acc, ex) => {
+      const c = store.swappedExercises[ex.id] ? ex.swap.sets : ex.sets;
+      const arr = sess.completedSets[ex.id] ?? [];
+      return acc + arr.slice(0, c).filter(Boolean).length;
+    }, 0);
+    if (checkedSets === 0) return null;
+    return {
+      split: sess.split,
+      arena: sess.arena,
+      gateRank: sess.gateRank,
+      checkedSets,
+      totalSets,
+      lastSetAtMs: sess.lastSetAtMs,
+    };
+  }, [store.activeSession, store.swappedExercises, todayKey]);
+
+  useEffect(() => {
+    if (!activeResume?.lastSetAtMs) return;
+    setNowMs(Date.now());
+    const id = setInterval(() => setNowMs(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [activeResume?.lastSetAtMs]);
 
   const prescribedPreview = useMemo(
     () => getPrescribedWorkout(store.arena, store.split, store.gateRank),
@@ -431,6 +464,38 @@ export default function CommandDeckPage() {
           )}
         </div>
 
+        {/* Resume Active Long-Rest Session */}
+        {activeResume && (
+          <button
+            onClick={() => {
+              store.setSplit(activeResume.split);
+              store.setArena(activeResume.arena);
+              store.setGateRank(activeResume.gateRank);
+              setCombatOpen(true);
+            }}
+            className="mt-2.5 w-full px-3 py-2 rounded-xl bg-[#f59e0b]/15 hover:bg-[#f59e0b]/25 border border-[#f59e0b]/50 flex items-center justify-between text-left transition-colors"
+          >
+            <div className="flex items-center gap-2">
+              <Timer size={14} className="text-[#fbbf24] shrink-0" />
+              <div>
+                <div className="font-[family-name:var(--font-rajdhani)] text-xs font-bold uppercase tracking-wider text-[#fbbf24]">
+                  RESUME IN-PROGRESS GATE ({activeResume.checkedSets}/{activeResume.totalSets} SETS)
+                </div>
+                <div className="font-[family-name:var(--font-geist-mono)] text-[10px] text-[var(--text-secondary)]">
+                  {activeResume.lastSetAtMs
+                    ? `RESTING ${formatRestDuration(
+                        Math.max(0, Math.floor((nowMs - activeResume.lastSetAtMs) / 1000))
+                      )} · TAP TO CONTINUE`
+                    : "SAVED OFFLINE · TAP TO CONTINUE"}
+                </div>
+              </div>
+            </div>
+            <span className="font-[family-name:var(--font-rajdhani)] text-xs font-bold uppercase text-[#fbbf24]">
+              OPEN
+            </span>
+          </button>
+        )}
+
         {/* Effort Tier */}
         <div className="mt-2.5 grid grid-cols-3 gap-1.5">
           {GATE_RANKS.map((rank) => {
@@ -502,7 +567,7 @@ export default function CommandDeckPage() {
                 onClick={handleClear5mFloor}
                 className="flex-1 h-11 rounded-xl bg-[#22c55e] hover:bg-[#16a34a] font-[family-name:var(--font-rajdhani)] text-sm font-bold uppercase tracking-[0.14em] text-[#051b0e]"
               >
-                CLEAR 5m FLOOR · +35 XP
+                CLEAR 2-SET FLOOR · +35 XP
               </button>
               <button
                 onClick={() => setCombatOpen(true)}
@@ -522,9 +587,9 @@ export default function CommandDeckPage() {
               <button
                 onClick={handleClear5mFloor}
                 className="px-3 h-11 rounded-xl bg-[var(--surface-2)] border border-[var(--border-subtle)] font-[family-name:var(--font-rajdhani)] text-[11px] font-bold uppercase text-[var(--text-secondary)]"
-                title="Quick 5-10 min survival check-in"
+                title="Quick 2-set No-Skip survival check-in"
               >
-                5m Floor
+                2-Set Floor
               </button>
             </>
           )}

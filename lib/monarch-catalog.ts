@@ -5,6 +5,8 @@ export type SplitId =
   | "lower_a"
   | "upper_b"
   | "lower_b"
+  | "ul_combo_a"
+  | "ul_combo_b"
   | "full_body_plus"
   | "cardio_pool";
 export type GateRankId = "low_time_2x" | "regular_3x15";
@@ -105,6 +107,7 @@ export interface ExerciseSpec {
   maxRepsRegular?: number;
   maxRepsLowTime?: number;
   timeBased?: boolean;
+  blockSection?: "upper" | "lower";
   swap: ExerciseSwap;
 }
 
@@ -140,13 +143,15 @@ export const SPLITS: {
   id: SplitId;
   label: string;
   shortLabel: string;
-  tier: "core" | "bonus";
+  tier: "core" | "combo" | "bonus";
   focus: string;
 }[] = [
-  { id: "upper_a", label: "UPPER A", shortLabel: "U-A", tier: "core", focus: "Bench · Back · Side Delts · Biceps" },
+  { id: "upper_a", label: "UPPER A", shortLabel: "U-A", tier: "core", focus: "Bench · Back · Side Delts · Biceps · Triceps" },
   { id: "lower_a", label: "LOWER A", shortLabel: "L-A", tier: "core", focus: "Quads · Barbell RDL · Calves · Core" },
-  { id: "upper_b", label: "UPPER B", shortLabel: "U-B", tier: "core", focus: "OHP · Lats · Chest · Rear Delts · Triceps" },
+  { id: "upper_b", label: "UPPER B", shortLabel: "U-B", tier: "core", focus: "OHP · Lats · Chest · Rear Delts · Arms" },
   { id: "lower_b", label: "LOWER B", shortLabel: "L-B", tier: "core", focus: "RDL · Box Squat · Glutes · Kili Knees" },
+  { id: "ul_combo_a", label: "WEEKEND U+L A", shortLabel: "U+L A", tier: "combo", focus: "Upper A + Lower A (2-in-1 · 3-4h)" },
+  { id: "ul_combo_b", label: "WEEKEND U+L B", shortLabel: "U+L B", tier: "combo", focus: "Upper B + Lower B (2-in-1 · 3-4h)" },
   { id: "full_body_plus", label: "DAY 5 · FB+", shortLabel: "FB+", tier: "bonus", focus: "Bench Vol · Arms · Delts · Carries" },
   { id: "cardio_pool", label: "DAY 6 · JOG/POOL", shortLabel: "CARDIO", tier: "bonus", focus: "Zone-2 Jog · Incline · CG Pool" },
 ];
@@ -174,7 +179,10 @@ export const GATE_RANKS: {
   },
 ];
 
-const WORKOUT_MATRIX: Record<ArenaId, Record<SplitId, ExerciseSpec[]>> = {
+const WORKOUT_MATRIX: Record<
+  ArenaId,
+  Record<Exclude<SplitId, "ul_combo_a" | "ul_combo_b">, ExerciseSpec[]>
+> = {
   cg_gym: {
     upper_a: [
       {
@@ -193,10 +201,10 @@ const WORKOUT_MATRIX: Record<ArenaId, Record<SplitId, ExerciseSpec[]>> = {
         maxRepsLowTime: 12,
         cue: "Baseline 50x15 -> lock scapula + leg drive; warm up w/ empty bar (NO push-ups)",
         swap: {
-          name: "Pec Deck Machine Fly",
+          name: "Flat DB Press",
           sets: 3,
-          reps: "12-15",
-          load: "Mod Stack",
+          reps: "10-12",
+          load: "20-25 kg",
           cue: "Use when Flat Bench is busy; return for bench after",
         },
       },
@@ -301,6 +309,28 @@ const WORKOUT_MATRIX: Record<ArenaId, Record<SplitId, ExerciseSpec[]>> = {
           reps: "12-15",
           load: "Small EZ + plates",
           cue: "Strict bottom stretch, zero shoulder swing",
+        },
+      },
+      {
+        id: "cg_rope_tri_a",
+        progressKey: "cg_rope_tri",
+        name: "Cable Rope Pushdown (2:1)",
+        muscleGroup: "Triceps",
+        sets: 3,
+        reps: "12-15",
+        load: "24-36 kg stack",
+        restSec: 60,
+        trackLoad: true,
+        defaultWeightKg: 24,
+        stepKg: 6,
+        cue: "Full stretch past 90 deg; zero dips or kickbacks",
+        pairHint: "Antagonist pair: alternate with Incline DB Curl",
+        swap: {
+          name: "EZ-Bar Lying Skullcrusher",
+          sets: 3,
+          reps: "12-15",
+          load: "17.5-25 kg",
+          cue: "Elbows slightly back",
         },
       },
     ],
@@ -452,23 +482,23 @@ const WORKOUT_MATRIX: Record<ArenaId, Record<SplitId, ExerciseSpec[]>> = {
         },
       },
       {
-        id: "cg_pec_deck",
-        name: "Pec Deck Machine Fly",
+        id: "cg_cable_fly",
+        name: "Cable Chest Fly (2:1 Pulley)",
         muscleGroup: "Chest Iso",
         sets: 3,
         reps: "12-15",
-        load: "36-54 kg stack",
+        load: "24-36 kg stack",
         restSec: 75,
         trackLoad: true,
-        defaultWeightKg: 42,
+        defaultWeightKg: 24,
         stepKg: 6,
-        cue: "Joint-friendly chest tension on Upper B without shoulder fatigue",
+        cue: "Standing cable fly on 2:1 pulley - full pec stretch, controlled constant tension",
         swap: {
           name: "Incline DB Press (30 deg)",
           sets: 3,
           reps: "12-15",
           load: "17.5-22.5 kg",
-          cue: "Use if Pec Deck occupied",
+          cue: "Use if cable column is occupied",
         },
       },
       {
@@ -483,7 +513,7 @@ const WORKOUT_MATRIX: Record<ArenaId, Record<SplitId, ExerciseSpec[]>> = {
         defaultWeightKg: 20,
         stepKg: 2.5,
         cue: "CG max DB = 25 kg; progress w/ 2s squeeze or Barbell Row swap",
-        pairHint: "Long-rest pair: optional between Pec Deck breaks",
+        pairHint: "Long-rest pair: optional between Cable Fly breaks",
         swap: {
           name: "Barbell Bent-Over Row",
           sets: 3,
@@ -505,11 +535,11 @@ const WORKOUT_MATRIX: Record<ArenaId, Record<SplitId, ExerciseSpec[]>> = {
         stepKg: 6,
         cue: "Pull rope to forehead, elbows high; shoulder-health anchor",
         swap: {
-          name: "Pec Deck Reverse Fly",
+          name: "Bent-Over DB Rear Delt Fly",
           sets: 3,
           reps: "12-15",
-          load: "Light-Mod Stack",
-          cue: "Soft elbows, smooth pinch",
+          load: "5-7.5 kg DBs",
+          cue: "Hinge torso, soft elbows, crisp rear-delt squeeze",
         },
       },
       {
@@ -531,6 +561,28 @@ const WORKOUT_MATRIX: Record<ArenaId, Record<SplitId, ExerciseSpec[]>> = {
           reps: "12-15",
           load: "24-36 kg stack",
           cue: "Full elbow flex past 90 deg",
+        },
+      },
+      {
+        id: "cg_hammer_curl_b",
+        progressKey: "cg_hammer_curl",
+        name: "Cable Rope Hammer Curl (2:1)",
+        muscleGroup: "Biceps + Brachialis",
+        sets: 3,
+        reps: "12-15",
+        load: "24-30 kg stack",
+        restSec: 60,
+        trackLoad: true,
+        defaultWeightKg: 24,
+        stepKg: 6,
+        cue: "Neutral grip hits brachialis & forearms; 2nd weekly bicep angle",
+        pairHint: "Antagonist pair: alternate with Overhead Cable Extension",
+        swap: {
+          name: "Preacher EZ-Bar Curl",
+          sets: 3,
+          reps: "12-15",
+          load: "17.5-22.5 kg",
+          cue: "Strict bottom stretch, zero torso swing",
         },
       },
     ],
@@ -674,10 +726,10 @@ const WORKOUT_MATRIX: Record<ArenaId, Record<SplitId, ExerciseSpec[]>> = {
         stepKg: 2.5,
         cue: "3rd weekly bench touch accelerates 100 kg ladder without beating up joints",
         swap: {
-          name: "Pec Deck Machine Fly",
+          name: "Cable Chest Fly (2:1 Pulley)",
           sets: 3,
           reps: "12-15",
-          load: "42 kg stack",
+          load: "24-36 kg stack",
           cue: "Use if Bench busy or shoulders feel tight",
         },
       },
@@ -723,24 +775,24 @@ const WORKOUT_MATRIX: Record<ArenaId, Record<SplitId, ExerciseSpec[]>> = {
         },
       },
       {
-        id: "cg_hammer_curl",
-        name: "Cable Rope Hammer Curl (2:1)",
-        muscleGroup: "Biceps + Forearms",
+        id: "cg_preacher_curl",
+        name: "Preacher EZ-Bar Curl",
+        muscleGroup: "Biceps (Peak)",
         sets: 3,
         reps: "12-15",
-        load: "24-30 kg stack",
+        load: "17.5-25 kg",
         restSec: 60,
         trackLoad: true,
-        defaultWeightKg: 24,
-        stepKg: 6,
-        cue: "Brachialis & forearm armor; elbow-friendly neutral grip",
+        defaultWeightKg: 20,
+        stepKg: 2.5,
+        cue: "3rd weekly bicep variation; strict elbow-on-pad stretch",
         pairHint: "Long-rest pair: optional between Pushdown breaks",
         swap: {
-          name: "Preacher EZ-Bar Curl",
+          name: "Cable Rope Hammer Curl (2:1)",
           sets: 3,
           reps: "12-15",
-          load: "17.5-22.5 kg",
-          cue: "Strict peak squeeze",
+          load: "24-30 kg stack",
+          cue: "Neutral brachialis swap",
         },
       },
       {
@@ -1165,6 +1217,27 @@ const WORKOUT_MATRIX: Record<ArenaId, Record<SplitId, ExerciseSpec[]>> = {
           reps: "12-15",
           load: "Bodyweight",
           cue: "Keep elbows tucked",
+        },
+      },
+      {
+        id: "hm_drag_curl_b",
+        progressKey: "hm_sofa_curl",
+        name: "Towel-Under-Foot Drag Curl",
+        muscleGroup: "Biceps",
+        sets: 3,
+        reps: "12-15",
+        load: "Self-Resistance",
+        restSec: 60,
+        trackLoad: true,
+        defaultWeightKg: 12.5,
+        stepKg: 2.5,
+        cue: "Pair with Tricep Extension so Home Upper B hits both arm flexors & extensors",
+        swap: {
+          name: "Sofa Backpack Hammer Curl",
+          sets: 3,
+          reps: "12-15",
+          load: "10-15 kg bag",
+          cue: "Neutral grip brachialis bias",
         },
       },
     ],
@@ -1690,7 +1763,20 @@ export function getPrescribedWorkout(
           : raw === "pool_steps"
             ? "cardio_pool"
             : split;
-  const list = arenaMap[safeSplit] ?? arenaMap.upper_a;
+
+  const list: ExerciseSpec[] =
+    safeSplit === "ul_combo_a"
+      ? [
+          ...arenaMap.upper_a.map((e) => ({ ...e, blockSection: "upper" as const })),
+          ...arenaMap.lower_a.map((e) => ({ ...e, blockSection: "lower" as const })),
+        ]
+      : safeSplit === "ul_combo_b"
+        ? [
+            ...arenaMap.upper_b.map((e) => ({ ...e, blockSection: "upper" as const })),
+            ...arenaMap.lower_b.map((e) => ({ ...e, blockSection: "lower" as const })),
+          ]
+        : arenaMap[safeSplit] ?? arenaMap.upper_a;
+
   const isCardio = safeSplit === "cardio_pool";
 
   return list.map((ex) => {

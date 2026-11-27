@@ -146,6 +146,8 @@ export interface WorkoutLogSummary {
 export type MovementKind =
   | "steps_10k"
   | "steps_15k"
+  | "zone2_jog"
+  | "brisk_walk"
   | "cg_swim"
   | "badminton_2h"
   | "sunrise_trek";
@@ -167,6 +169,7 @@ export interface DayRecord {
   movements: MovementLogEntry[];
   dinnerSkipped: boolean;
   dinnerOutMode?: boolean;
+  restDay?: boolean;
   earlySealXpAwarded: boolean;
   survivalFloorCleared: boolean;
   gluttonyRaidAwarded: boolean;
@@ -260,6 +263,7 @@ export interface MonarchActions {
   ) => { turnedOn: boolean };
   clearActiveRestTimer: () => void;
   discardActiveSession: () => void;
+  toggleRestDay: () => { isRest: boolean };
   clearSurvivalFloor: () => { xpAwarded: number; alreadyCleared: boolean };
   completeGateWorkout: (input: {
     split: SplitId;
@@ -355,6 +359,7 @@ export function createEmptyDay(date: string): DayRecord {
     movements: [],
     dinnerSkipped: false,
     dinnerOutMode: false,
+    restDay: false,
     earlySealXpAwarded: false,
     survivalFloorCleared: false,
     gluttonyRaidAwarded: false,
@@ -379,6 +384,8 @@ export function normalizeSplitId(raw: string | undefined): SplitId {
     raw === "lower_a" ||
     raw === "upper_b" ||
     raw === "lower_b" ||
+    raw === "ul_combo_a" ||
+    raw === "ul_combo_b" ||
     raw === "full_body_plus" ||
     raw === "cardio_pool"
   ) {
@@ -400,6 +407,7 @@ export function normalizeGateRankId(raw: string | undefined): GateRankId {
 export interface WeeklyTrainingSummary {
   completedThisWeek: Partial<Record<SplitId, number>>;
   coreDoneCount: number;
+  weeklyMinTarget: number;
   bonusDoneCount: number;
   totalSessionsThisWeek: number;
   nextCoreSplit: SplitId;
@@ -425,7 +433,17 @@ export function computeWeeklyTraining(
     if (!rec) continue;
     for (const w of rec.workouts ?? []) {
       const sp = normalizeSplitId(w.split as unknown as string);
-      completedThisWeek[sp] = (completedThisWeek[sp] ?? 0) + 1;
+      if (sp === "ul_combo_a") {
+        completedThisWeek.ul_combo_a = (completedThisWeek.ul_combo_a ?? 0) + 1;
+        completedThisWeek.upper_a = (completedThisWeek.upper_a ?? 0) + 1;
+        completedThisWeek.lower_a = (completedThisWeek.lower_a ?? 0) + 1;
+      } else if (sp === "ul_combo_b") {
+        completedThisWeek.ul_combo_b = (completedThisWeek.ul_combo_b ?? 0) + 1;
+        completedThisWeek.upper_b = (completedThisWeek.upper_b ?? 0) + 1;
+        completedThisWeek.lower_b = (completedThisWeek.lower_b ?? 0) + 1;
+      } else {
+        completedThisWeek[sp] = (completedThisWeek[sp] ?? 0) + 1;
+      }
       totalSessionsThisWeek += 1;
     }
   }
@@ -446,8 +464,16 @@ export function computeWeeklyTraining(
     const workouts = rec?.workouts ?? [];
     for (let j = workouts.length - 1; j >= 0; j--) {
       const norm = normalizeSplitId(workouts[j].split as unknown as string);
-      if (CORE_SPLIT_ORDER.includes(norm)) {
-        lastCore = norm;
+      const effCore: SplitId | null =
+        norm === "ul_combo_a"
+          ? "lower_a"
+          : norm === "ul_combo_b"
+            ? "lower_b"
+            : CORE_SPLIT_ORDER.includes(norm)
+              ? norm
+              : null;
+      if (effCore) {
+        lastCore = effCore;
         break;
       }
     }
@@ -469,6 +495,7 @@ export function computeWeeklyTraining(
   return {
     completedThisWeek,
     coreDoneCount,
+    weeklyMinTarget: 3,
     bonusDoneCount,
     totalSessionsThisWeek,
     nextCoreSplit,
@@ -518,6 +545,7 @@ export function isDayActive(day: DayRecord | undefined): boolean {
     day.survivalFloorCleared ||
     day.workouts.length > 0 ||
     day.movements.length > 0 ||
+    Boolean(day.restDay) ||
     day.foods.length > 0 ||
     day.dinnerSkipped ||
     (day.samsungSteps ?? 0) >= 8000
@@ -734,6 +762,8 @@ export const MOVEMENT_PRESETS: Record<
 > = {
   steps_10k: { label: "10k Steps Walk", verticalGainM: 45, grantsFlex: false, xp: 30 },
   steps_15k: { label: "15k Zone-2 Reset", verticalGainM: 80, grantsFlex: false, xp: 45 },
+  zone2_jog: { label: "20-30m Zone-2 Jog", verticalGainM: 70, grantsFlex: true, xp: 45 },
+  brisk_walk: { label: "20-30m Brisk Walk", verticalGainM: 35, grantsFlex: false, xp: 25 },
   cg_swim: { label: "30m CG Pool (Post-Lift)", verticalGainM: 75, grantsFlex: true, xp: 45 },
   badminton_2h: { label: "Sun 2h Badminton", verticalGainM: 120, grantsFlex: true, xp: 60 },
   sunrise_trek: { label: "Sunrise Hill Trek", verticalGainM: 185, grantsFlex: true, xp: 75 },
@@ -939,6 +969,21 @@ export const useMonarchStore = create<MonarchStore>()(
 
       discardActiveSession: () => set({ activeSession: null }),
 
+      toggleRestDay: () => {
+        const key = getTodayKey();
+        const state = get();
+        const existing = state.days[key] ?? createEmptyDay(key);
+        const nextRest = !Boolean(existing.restDay);
+        set({
+          pendingSyncDates: enqueuePending(state.pendingSyncDates, key),
+          days: {
+            ...state.days,
+            [key]: { ...existing, restDay: nextRest },
+          },
+        });
+        return { isRest: nextRest };
+      },
+
       clearSurvivalFloor: () => {
         const key = getTodayKey();
         const existing = get().days[key] ?? createEmptyDay(key);
@@ -952,7 +997,7 @@ export const useMonarchStore = create<MonarchStore>()(
           pendingSyncDates: enqueuePending(s.pendingSyncDates, key),
           days: {
             ...s.days,
-            [key]: { ...existing, survivalFloorCleared: true },
+            [key]: { ...existing, survivalFloorCleared: true, restDay: false },
           },
         }));
         fireWebhookIfConfigured(
@@ -978,7 +1023,8 @@ export const useMonarchStore = create<MonarchStore>()(
         const state = get();
         const existing = state.days[key] ?? createEmptyDay(key);
         const rankDef = GATE_RANKS.find((g) => g.id === gateRank) ?? GATE_RANKS[1];
-        let xpAwarded = rankDef.baseXp;
+        const isCombo = split === "ul_combo_a" || split === "ul_combo_b";
+        let xpAwarded = isCombo ? Math.round(rankDef.baseXp * 1.5) : rankDef.baseXp;
         let isPr = false;
         let prsHit = 0;
         let newE1rm: number | undefined;
@@ -1041,7 +1087,13 @@ export const useMonarchStore = create<MonarchStore>()(
 
         const gainM =
           verticalGainM ??
-          (split === "cardio_pool" ? 65 : gateRank === "regular_3x15" ? 45 : 30);
+          (isCombo
+            ? 75
+            : split === "cardio_pool"
+              ? 65
+              : gateRank === "regular_3x15"
+                ? 45
+                : 30);
 
         const summary: WorkoutLogSummary = {
           id: makeId("wo"),
@@ -1062,6 +1114,7 @@ export const useMonarchStore = create<MonarchStore>()(
           [key]: {
             ...existing,
             survivalFloorCleared: true,
+            restDay: false,
             workouts: [...existing.workouts, summary],
           },
         };

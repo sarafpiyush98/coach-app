@@ -47,6 +47,8 @@ function formatSplitHeading(id: SplitId): string {
   if (id === "lower_a") return "Lower A";
   if (id === "upper_b") return "Upper B";
   if (id === "lower_b") return "Lower B";
+  if (id === "ul_combo_a") return "Upper A + Lower A";
+  if (id === "ul_combo_b") return "Upper B + Lower B";
   if (id === "full_body_plus") return "Full Body +";
   return "Jog & Pool";
 }
@@ -382,7 +384,7 @@ export function CombatSheet({ open, onClose }: CombatSheetProps) {
             Always lift before CG Pool swim. Keep cardio steady and knees protected.
           </p>
         )}
-        {exercises.map((ex) => {
+        {exercises.map((ex, idx) => {
           const isSwapped = Boolean(swappedExercises[ex.id]);
           const activeName = isSwapped ? ex.swap.name : ex.name;
           const activeSets = isSwapped ? ex.swap.sets : ex.sets;
@@ -393,16 +395,25 @@ export function CombatSheet({ open, onClose }: CombatSheetProps) {
           const tipOpen = Boolean(openTips[ex.id]);
           const savedArr = completedSets[ex.id] ?? [];
           const checks = Array.from({ length: activeSets }, (_, i) => Boolean(savedArr[i]));
+          const showLowerDivider =
+            idx > 0 &&
+            ex.blockSection === "lower" &&
+            exercises[idx - 1]?.blockSection === "upper";
 
           return (
-            <div
-              key={ex.id}
-              className={`rounded-2xl p-4 border ${
-                isSwapped
-                  ? "bg-[#151226] border-[#8b5cf6]/35"
-                  : "bg-[var(--surface-1)] border-[var(--border-subtle)]"
-              }`}
-            >
+            <div key={ex.id} className="space-y-4">
+              {showLowerDivider && (
+                <div className="px-4 py-2.5 rounded-xl bg-[var(--surface-0)] border border-[#3b6cf6]/30 text-xs text-[#93c5fd] text-center font-medium">
+                  Lower Block - take a 5-min water/electrolyte reset before legs
+                </div>
+              )}
+              <div
+                className={`rounded-2xl p-4 border ${
+                  isSwapped
+                    ? "bg-[#151226] border-[#8b5cf6]/35"
+                    : "bg-[var(--surface-1)] border-[var(--border-subtle)]"
+                }`}
+              >
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
                   <h3 className="text-[15px] font-semibold leading-snug text-[var(--text-primary)]">
@@ -555,6 +566,7 @@ export function CombatSheet({ open, onClose }: CombatSheetProps) {
                     <span>Set {setIdx + 1}</span>
                   </button>
                 ))}
+              </div>
               </div>
             </div>
           );

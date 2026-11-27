@@ -56,6 +56,8 @@ function formatSplitTitle(id: SplitId): string {
   if (id === "lower_a") return "Lower A";
   if (id === "upper_b") return "Upper B";
   if (id === "lower_b") return "Lower B";
+  if (id === "ul_combo_a") return "U+L A (2-in-1)";
+  if (id === "ul_combo_b") return "U+L B (2-in-1)";
   if (id === "full_body_plus") return "Full Body +";
   return "Jog & Pool";
 }
@@ -321,6 +323,19 @@ export default function CommandDeckPage() {
     });
   }
 
+  function handleToggleRestDay() {
+    const res = store.toggleRestDay();
+    playSystemPing();
+    addToast({
+      title: res.isRest ? "REST DAY LOGGED" : "REST DAY CLEARED",
+      message: res.isRest
+        ? "Intentional recovery day logged - active streak stays protected."
+        : "Rest day toggle cleared.",
+      variant: "info",
+      duration: 2200,
+    });
+  }
+
   function handleFoodChip(presetId: string) {
     const res = store.logFoodPreset(presetId, 1);
     if (res.isAbsRaid) {
@@ -462,6 +477,7 @@ export default function CommandDeckPage() {
   const activeSplitSpec =
     SPLITS.find((s) => s.id === store.split) ?? SPLITS[0];
   const coreSplits = SPLITS.filter((s) => s.tier === "core");
+  const comboSplits = SPLITS.filter((s) => s.tier === "combo");
   const bonusSplits = SPLITS.filter((s) => s.tier === "bonus");
   const workoutDoneToday =
     today.survivalFloorCleared ||
@@ -647,8 +663,12 @@ export default function CommandDeckPage() {
       <section className="rounded-2xl bg-[var(--surface-1)] border border-[var(--border-subtle)] p-5">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2.5">
-            <span className="text-xs font-medium text-[var(--text-secondary)]">
-              This week · {weekly.coreDoneCount}/4
+            <span
+              className={`text-xs font-medium ${
+                weekly.coreDoneCount >= 3 ? "text-[#4ade80]" : "text-[var(--text-secondary)]"
+              }`}
+            >
+              This week · {weekly.coreDoneCount}/3 min
             </span>
             <div className="flex items-center gap-1.5" aria-label="Weekly core workout progress">
               {coreSplits.map((sp) => {
@@ -684,11 +704,15 @@ export default function CommandDeckPage() {
           <h2 className="text-xl font-semibold tracking-tight text-[var(--text-primary)]">
             {splitTitle}
           </h2>
-          {workoutDoneToday && (
+          {workoutDoneToday ? (
             <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[#22c55e]/15 text-[#4ade80] text-[11px] font-medium">
               <Check size={11} /> Done
             </span>
-          )}
+          ) : today.restDay ? (
+            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[#3b6cf6]/15 text-[#93c5fd] text-[11px] font-medium">
+              Rest day
+            </span>
+          ) : null}
         </div>
 
         <p className="mt-1 text-xs text-[var(--text-secondary)] truncate">
@@ -752,6 +776,37 @@ export default function CommandDeckPage() {
 
             <div>
               <p className="text-[11px] font-medium text-[var(--text-muted)] mb-2">
+                Weekend 2-in-1 (3-4h)
+              </p>
+              <div className="grid grid-cols-2 gap-1.5">
+                {comboSplits.map((sp) => {
+                  const doneCount = weekly.completedThisWeek[sp.id] ?? 0;
+                  const isSelected = store.split === sp.id;
+                  return (
+                    <button
+                      key={sp.id}
+                      onClick={() => store.setSplit(sp.id)}
+                      className={`py-2 px-3 rounded-xl text-xs font-medium border flex flex-col items-center gap-0.5 transition-colors ${
+                        isSelected
+                          ? "bg-[var(--surface-2)] border-[#3b6cf6] text-[var(--text-primary)]"
+                          : "bg-[var(--surface-0)] border-[var(--border-subtle)] text-[var(--text-secondary)]"
+                      }`}
+                    >
+                      <span className="flex items-center gap-1">
+                        {doneCount > 0 && <Check size={11} className="text-[#4ade80]" />}
+                        <span>{sp.shortLabel}</span>
+                      </span>
+                      <span className="text-[10px] text-[var(--text-muted)]">
+                        {sp.id === "ul_combo_a" ? "Upper A + Lower A" : "Upper B + Lower B"}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div>
+              <p className="text-[11px] font-medium text-[var(--text-muted)] mb-2">
                 Optional 5th-6th day
               </p>
               <div className="grid grid-cols-2 gap-1.5">
@@ -796,13 +851,6 @@ export default function CommandDeckPage() {
                 ))}
               </div>
             </div>
-
-            <button
-              onClick={handleClear5mFloor}
-              className="w-full text-center text-xs text-[var(--text-muted)] hover:text-[var(--text-secondary)] pt-1"
-            >
-              Need an emergency check-in? Log 5m No-Skip Floor
-            </button>
           </div>
         )}
 
@@ -814,6 +862,66 @@ export default function CommandDeckPage() {
             ? `Resume ${splitTitle} (${activeResume.checkedSets}/${activeResume.totalSets})`
             : `Start ${splitTitle}`}
         </button>
+
+        {/* Quick Workout Modes: 5m No-Skip, Cardio & Rest */}
+        <div className="mt-3 grid grid-cols-5 gap-1.5">
+          <button
+            onClick={handleClear5mFloor}
+            className={`h-9 px-1 rounded-xl text-[11px] font-medium border transition-colors truncate ${
+              today.survivalFloorCleared
+                ? "bg-[#22c55e]/15 border-[#22c55e]/35 text-[#4ade80]"
+                : "bg-[var(--surface-0)] border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+            }`}
+          >
+            5m Floor
+          </button>
+          <button
+            onClick={() => handleQuickMove("zone2_jog")}
+            className={`h-9 px-1 rounded-xl text-[11px] font-medium border transition-colors truncate ${
+              today.movements.some((m) => m.kind === "zone2_jog")
+                ? "bg-[#22c55e]/15 border-[#22c55e]/35 text-[#4ade80]"
+                : "bg-[var(--surface-0)] border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+            }`}
+          >
+            Jog
+          </button>
+          <button
+            onClick={() => handleQuickMove("brisk_walk")}
+            className={`h-9 px-1 rounded-xl text-[11px] font-medium border transition-colors truncate ${
+              today.movements.some((m) => m.kind === "brisk_walk")
+                ? "bg-[#22c55e]/15 border-[#22c55e]/35 text-[#4ade80]"
+                : "bg-[var(--surface-0)] border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+            }`}
+          >
+            Walk
+          </button>
+          <button
+            onClick={() => handleQuickMove("cg_swim")}
+            className={`h-9 px-1 rounded-xl text-[11px] font-medium border transition-colors truncate ${
+              today.movements.some((m) => m.kind === "cg_swim")
+                ? "bg-[#22c55e]/15 border-[#22c55e]/35 text-[#4ade80]"
+                : "bg-[var(--surface-0)] border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+            }`}
+          >
+            Pool
+          </button>
+          <button
+            onClick={handleToggleRestDay}
+            className={`h-9 px-1 rounded-xl text-[11px] font-medium border transition-colors truncate ${
+              today.restDay
+                ? "bg-[#3b6cf6]/15 border-[#3b6cf6]/40 text-[#93c5fd]"
+                : "bg-[var(--surface-0)] border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+            }`}
+          >
+            Rest
+          </button>
+        </div>
+
+        {today.movements.length > 0 && (
+          <p className="mt-2 text-[11px] text-[var(--text-muted)] truncate">
+            Today: {today.movements.map((m) => m.label).join(" · ")}
+          </p>
+        )}
       </section>
 
       {/* 4. FUEL CARD */}

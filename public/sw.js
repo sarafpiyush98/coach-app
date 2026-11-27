@@ -1,40 +1,42 @@
-const CACHE_NAME = 'coach-v1';
-const STATIC_ASSETS = ['/', '/manifest.json'];
+const CACHE_NAME = "monarch-v2";
+const STATIC_ASSETS = ["/", "/raids", "/status", "/manifest.json"];
 
-self.addEventListener('install', (event) => {
+self.addEventListener("install", (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => cache.addAll(STATIC_ASSETS))
   );
   self.skipWaiting();
 });
 
-self.addEventListener('activate', (event) => {
+self.addEventListener("activate", (event) => {
   event.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k)))
-    )
+    caches
+      .keys()
+      .then((keys) =>
+        Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k)))
+      )
   );
   self.clients.claim();
 });
 
-self.addEventListener('fetch', (event) => {
+self.addEventListener("fetch", (event) => {
+  if (event.request.method !== "GET") return;
   const url = new URL(event.request.url);
+  if (url.origin !== self.location.origin) return;
 
-  // Network-first for API routes
-  if (url.pathname.startsWith('/api/')) {
-    event.respondWith(
-      fetch(event.request).catch(() =>
-        new Response(JSON.stringify({ error: 'Offline' }), {
-          headers: { 'Content-Type': 'application/json' },
-          status: 503,
-        })
-      )
-    );
-    return;
-  }
-
-  // Cache-first for everything else
   event.respondWith(
-    caches.match(event.request).then((cached) => cached || fetch(event.request))
+    caches.match(event.request).then((cached) => {
+      const networkFetch = fetch(event.request)
+        .then((res) => {
+          if (res.ok) {
+            const copy = res.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+          }
+          return res;
+        })
+        .catch(() => cached);
+
+      return cached || networkFetch;
+    })
   );
 });

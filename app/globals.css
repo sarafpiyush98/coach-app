@@ -50,6 +50,10 @@
 
 /* ── Surface Depth System ─────────────────────────────── */
 :root {
+  --font-geist-sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-geist-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-rajdhani: "Rajdhani", system-ui, -apple-system, sans-serif;
+
   /* Surface levels */
   --surface-0: #0a0b10;
   --surface-1: #111520;

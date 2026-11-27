@@ -1,42 +1,23 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
-import { Rajdhani } from "next/font/google";
 import { ServiceWorkerRegistration } from "@/components/ServiceWorkerRegistration";
 import { BottomNav } from "@/components/BottomNav";
-// import { ParticlesBg } from "@/components/particles-bg";
 import { SystemToastContainer } from "@/components/ui/system-toast";
 import { MuteToggle } from "@/components/mute-toggle";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
-
-const rajdhani = Rajdhani({
-  variable: "--font-rajdhani",
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
-});
-
 export const metadata: Metadata = {
-  title: "THE SYSTEM",
+  title: "THE SYSTEM · MONARCH",
   description: "The System assigns. The System records.",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "THE SYSTEM",
+    title: "MONARCH",
   },
 };
 
 export const viewport: Viewport = {
-  themeColor: "#0C0C0F",
+  themeColor: "#0a0b10",
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
@@ -49,15 +30,19 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html
-      lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} ${rajdhani.variable} dark h-full antialiased`}
-    >
-      <body className="min-h-full flex flex-col bg-background">
+    <html lang="en" className="dark h-full antialiased">
+      <head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link
+          href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Rajdhani:wght@500;600;700&display=swap"
+          rel="stylesheet"
+        />
+      </head>
+      <body className="min-h-full flex flex-col bg-background text-foreground">
         <ServiceWorkerRegistration />
         <SystemToastContainer />
         <MuteToggle />
-        {/* <ParticlesBg /> */}
         <main className="relative z-10 flex-1 pb-20">{children}</main>
         <BottomNav />
       </body>

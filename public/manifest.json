@@ -1,12 +1,42 @@
 {
-  "name": "THE SYSTEM",
-  "short_name": "SYSTEM",
-  "description": "The System assigns. The System records.",
+  "name": "THE SYSTEM · MONARCH",
+  "short_name": "MONARCH",
+  "description": "Zero-friction Solo Leveling protocol for CG Gym, HSR Lunch-OMAD, Skip-Dinner, and Kilimanjaro.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0a0b10",
   "theme_color": "#0a0b10",
   "orientation": "portrait",
+  "shortcuts": [
+    {
+      "name": "5m No-Skip Floor",
+      "short_name": "5m Floor",
+      "description": "Log minimum viable session cleanly (+35 XP)",
+      "url": "/?quick=noskip",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "Salsa Egg + Chicken",
+      "short_name": "Salsa+Chick",
+      "description": "Hebe's Salsa Egg + Grilled Chicken (680 kcal / 65g P)",
+      "url": "/?quick=salsa-stack",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "5 PM Seal & Skip Dinner",
+      "short_name": "Seal Fast",
+      "description": "Log 2x Whey + Skyr & lock Early Fasting Seal",
+      "url": "/?quick=seal-fast",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "AB's Proteinmaxx Raid",
+      "short_name": "AB's Raid",
+      "description": "Log Weekly AB's Lunch OMAD (1,550 kcal / 160g P)",
+      "url": "/?quick=abs-raid",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    }
+  ],
   "icons": [
     {
       "src": "/icon-192.png",

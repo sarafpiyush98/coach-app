@@ -1,427 +1,736 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import Link from "next/link";
-import { differenceInDays } from "date-fns";
-import { motion } from "framer-motion";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  Flame,
-  AlertTriangle,
-  UtensilsCrossed,
+  Check,
   Dumbbell,
-  Zap,
-  ChevronRight,
+  Flame,
+  Footprints,
+  Lock,
+  Plus,
+  Scale,
+  Sparkles,
+  Utensils,
+  X,
 } from "lucide-react";
 import { SystemPanel } from "@/components/ui/system-panel";
-import { DailyProgress } from "@/components/daily-progress";
-import { QuestList } from "@/components/quest-list";
-import { ComboMilestone } from "@/components/combo-milestone";
-import { ShadowGreeting } from "@/components/shadow-greeting";
+import { CombatSheet } from "@/components/combat-sheet";
 import { useToastStore } from "@/components/ui/system-toast";
-import { useCacheStore } from "@/lib/cache";
-import { useCachedFetch } from "@/lib/use-cached-fetch";
-import { isComboMilestone, getShadowGreeting, getStreakIntensity } from "@/lib/consistency";
-import type { Quest } from "@/lib/quests";
-import type { LootRarity } from "@/lib/gamification";
-import { useLevelStore } from "@/lib/level-store";
+import {
+  ARENAS,
+  CONTEXT_LIST,
+  CONTEXTS,
+  GATE_RANKS,
+  getPrescribedWorkout,
+  getPresetsForContext,
+  SPLITS,
+  type ContextId,
+} from "@/lib/monarch-catalog";
+import {
+  computeStreakAndCombo,
+  createEmptyDay,
+  getAmbientShadow,
+  getDailyTotals,
+  getTodayKey,
+  levelFromMonarchXp,
+  MOVEMENT_PRESETS,
+  useMonarchStore,
+  type MovementKind,
+} from "@/lib/monarch-store";
+import {
+  playQuestComplete,
+  playShadowArise,
+  playSystemPing,
+} from "@/lib/sounds";
 
-const START_DATE = new Date(2026, 3, 6); // April 6, 2026
+export default function CommandDeckPage() {
+  const store = useMonarchStore();
+  const addToast = useToastStore((s) => s.add);
 
-const UNLOCK_THRESHOLDS = [
-  { level: 3, message: "The System now tracks your consistency." },
-  { level: 5, message: "A new window has opened. The System reveals your attributes." },
-  { level: 8, message: "Additional protocols detected. Bonus objectives unlocked." },
-  { level: 10, message: "The gates have opened. Your first adversary awaits." },
-  { level: 15, message: "Shadows stir in the darkness. The army awaits its commander." },
-  { level: 18, message: "The System grants you power. Distribute wisely." },
-  { level: 28, message: "Command review authorized. Analyze your operations." },
-];
+  const [combatOpen, setCombatOpen] = useState(false);
+  const [portion, setPortion] = useState<0.5 | 1 | 1.5>(1);
+  const [weightEditorOpen, setWeightEditorOpen] = useState(false);
+  const [draftWeight, setDraftWeight] = useState(112.4);
+  const [customOpen, setCustomOpen] = useState(false);
+  const [customLabel, setCustomLabel] = useState("");
+  const [customKcal, setCustomKcal] = useState("");
+  const [customProtein, setCustomProtein] = useState("");
+  const handledUrlRef = useRef(false);
 
-interface Streaks {
-  exercise: number;
-  logging: number;
-  noLateEating: number;
-  exerciseDanger: boolean;
-  loggingDanger: boolean;
-  noLateEatingDanger: boolean;
-  missedYesterday: boolean;
-  message: string | null;
-}
+  const todayKey = getTodayKey();
+  const today = store.days[todayKey] ?? createEmptyDay(todayKey);
+  const totals = getDailyTotals(today);
+  const totalXp = store.legacyXp + store.earnedXp;
+  const lvl = levelFromMonarchXp(totalXp);
+  const streak = computeStreakAndCombo(store.days);
+  const directive = getAmbientShadow(store);
 
-interface Gamification {
-  level: number;
-  levelProgress: number;
-  rank: string;
-  totalXp: number;
-  todayXp: number;
-  comboDay: number;
-  comboMultiplier: number;
-  lootRarity: LootRarity | null;
-  lootMultiplier: number;
-}
+  const prescribedPreview = useMemo(
+    () => getPrescribedWorkout(store.arena, store.split, store.gateRank),
+    [store.arena, store.split, store.gateRank]
+  );
 
-interface DashboardData {
-  streaks: Streaks;
-  quests: Quest[];
-  questCompletionPercent: number;
-  gamification: Gamification;
-  unlockedShadows?: string[];
-  rewards?: Array<{
-    id: string;
-    type: string;
-    earned_at: string;
-    claimed: boolean;
-  }>;
-}
+  const contextPresets = useMemo(
+    () => getPresetsForContext(store.context),
+    [store.context]
+  );
 
-function getSystemMessage(data: DashboardData, dayNumber: number): string | null {
-  if (dayNumber === 1) return "SYSTEM INITIALIZED. FIRST QUEST AWAITS. BEGIN.";
-  if (data.questCompletionPercent === 100) return "ALL PROTOCOLS COMPLETE. THE SYSTEM IS SATISFIED.";
-  if (data.gamification.comboDay >= 15) return "MAXIMUM COMBO ACHIEVED. YOU ARE OPERATING AT PEAK PROTOCOL.";
-  if (data.gamification.comboDay === 7) return "SEVEN DAYS. THE SYSTEM HAS TAKEN NOTICE.";
-  if (data.gamification.lootRarity === "legendary") return "ANOMALY DETECTED. LEGENDARY MULTIPLIER ACTIVE.";
-  if (data.gamification.lootRarity === "epic") return "ENHANCED PROTOCOLS DETECTED. EPIC MULTIPLIER ACTIVE.";
-  if (data.gamification.level === 40) return "S-RANK. ARISE.";
-  if (data.gamification.level === 28) return "A-RANK. FEW HUNTERS REACH THIS FLOOR.";
-  if (data.gamification.level === 18) return "B-RANK. THE SHADOWS BEGIN TO STIR.";
-  if (data.gamification.level === 10) return "C-RANK ACHIEVED. THE DUNGEON DEEPENS.";
-  if (data.gamification.level === 5) return "D-RANK THRESHOLD APPROACHING.";
-  if (data.gamification.comboDay === 1 && dayNumber > 2) return "THE SYSTEM CONTINUES. REGARDLESS.";
-  return null;
-}
-
-function RewardBanner({ reward, onClaim }: { reward: { id: string; type: string; earned_at: string }; onClaim: () => void }) {
-  const [claiming, setClaiming] = useState(false);
-
-  const def = {
-    ration_upgrade: { name: "RATION UPGRADE", description: "Guilt-free indulgence meal — earned, not stolen" },
-    rest_permit: { name: "REST PERMIT", description: "Extra rest day mid-week — System-approved" },
-    cheat_code: { name: "CHEAT CODE", description: "24-hour fasting seal suspension — rank promotion reward" },
-    boss_loot: { name: "BOSS LOOT", description: "Real-world reward from your wishlist — boss defeated" },
-  }[reward.type] ?? { name: "REWARD", description: "Earned." };
-
-  async function handleClaim() {
-    setClaiming(true);
-    try {
-      const res = await fetch("/api/rewards/claim", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ reward_id: reward.id }),
-      });
-      if (res.ok) {
-        const { data } = await res.json();
-        useToastStore.getState().add({
-          title: `${def.name} — CLAIMED`,
-          message: data.message,
-          variant: "success",
-        });
-        useCacheStore.getState().invalidateAll();
-        onClaim();
-      }
-    } catch {
-      // silent
+  // Sync draft scale weight when hydrated
+  useEffect(() => {
+    if (store.hasHydrated) {
+      setDraftWeight(store.rawWeight);
     }
-    setClaiming(false);
+  }, [store.hasHydrated, store.rawWeight]);
+
+  // Execute Android WebAPK shortcuts & Samsung Modes/Routines URL intents once hydrated
+  useEffect(() => {
+    if (!store.hasHydrated || handledUrlRef.current) return;
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const quick = params.get("quick");
+    const ctxParam = params.get("context") as ContextId | null;
+    const sheet = params.get("sheet");
+
+    if (!quick && !ctxParam && !sheet) return;
+    handledUrlRef.current = true;
+
+    if (ctxParam && CONTEXTS[ctxParam]) {
+      store.setContext(ctxParam);
+    }
+
+    if (quick === "noskip") {
+      const res = store.clearSurvivalFloor();
+      playQuestComplete();
+      addToast({
+        title: res.alreadyCleared ? "GATE ALREADY GREEN" : "E-RANK FLOOR CLEARED",
+        message: res.alreadyCleared
+          ? "No-Skip streak already locked today."
+          : `No-Skip protocol complete · +${res.xpAwarded} XP`,
+        variant: "success",
+      });
+    } else if (quick === "salsa-stack") {
+      store.setContext("hsr_office");
+      store.logFoodPreset("hebe_salsa_chicken", 1);
+      playQuestComplete();
+      addToast({
+        title: "SALSA EGG + CHICKEN LOGGED",
+        message: "680 kcal · 65g P · HSR corridor",
+        variant: "success",
+      });
+    } else if (quick === "seal-fast") {
+      store.logFoodPreset("whey_skyr_seal", 1);
+      store.lockDinnerSkip();
+      playShadowArise();
+      addToast({
+        title: "5 PM SEAL + DINNER SKIPPED",
+        message: "+70g P · Early Fasting Seal active",
+        variant: "quest",
+      });
+    } else if (quick === "abs-raid") {
+      store.setContext("raid_social");
+      store.logFoodPreset("abs_omad_raid", 1);
+      playShadowArise();
+      addToast({
+        title: "GLUTTONY GATE: AB's RAID LOGGED",
+        message: "1,550 kcal · 160g P OMAD · Dinner Skip locked",
+        variant: "warning",
+      });
+    }
+
+    if (sheet === "gate") {
+      setCombatOpen(true);
+    }
+
+    window.history.replaceState({}, "", "/");
+  }, [store.hasHydrated]);
+
+  function handleClear5mFloor() {
+    const res = store.clearSurvivalFloor();
+    if (res.alreadyCleared) {
+      playSystemPing();
+      addToast({
+        title: "GATE ALREADY GREEN TODAY",
+        message: "Streak is safe. Open Combat HUD if you want extra sets.",
+        variant: "info",
+      });
+      return;
+    }
+    playQuestComplete();
+    addToast({
+      title: "E-RANK SURVIVAL FLOOR CLEARED",
+      message: `No-Skip chain protected · +${res.xpAwarded} XP`,
+      variant: "success",
+    });
   }
 
-  return (
-    <SystemPanel className="p-3 border border-[#FFC107]/40">
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex-1">
-          <p className="font-[family-name:var(--font-rajdhani)] text-xs font-bold uppercase tracking-[0.15em] text-[#FFC107]">
-            {def.name}
-          </p>
-          <p className="font-[family-name:var(--font-rajdhani)] text-[9px] uppercase tracking-widest text-[var(--text-muted)]">
-            {def.description}
-          </p>
-        </div>
-        <motion.button
-          whileTap={{ scale: 0.95 }}
-          onClick={handleClaim}
-          disabled={claiming}
-          className="px-3 py-1.5 rounded bg-[#FFC107]/20 border border-[#FFC107]/40 font-[family-name:var(--font-rajdhani)] text-[10px] font-bold uppercase tracking-widest text-[#FFC107] hover:bg-[#FFC107]/30 transition-colors disabled:opacity-50"
-        >
-          {claiming ? "..." : "CLAIM"}
-        </motion.button>
-      </div>
-    </SystemPanel>
-  );
-}
+  function handleQuickMove(kind: MovementKind) {
+    const res = store.logQuickMovement(kind);
+    playQuestComplete();
+    addToast({
+      title: `${MOVEMENT_PRESETS[kind].label.toUpperCase()} LOGGED`,
+      message: `+${res.verticalGainM}m Kili ascent · +${res.xpAwarded} XP`,
+      variant: "success",
+    });
+  }
 
-export default function CommandCenter() {
-  const { data, loading, revalidating, refresh } = useCachedFetch<DashboardData>(
-    "/api/dashboard",
-    { maxAge: 15000 }
-  );
-  const addToast = useToastStore((s) => s.add);
-  const [showMilestone, setShowMilestone] = useState(false);
-  const [showShadow, setShowShadow] = useState(false);
-  const [shadowMsg, setShadowMsg] = useState<{ name: string; message: string } | null>(null);
-
-  const today = new Date();
-  const dayNumber = differenceInDays(today, START_DATE) + 1;
-
-  // Fire toasts for completed quests on load
-  useEffect(() => {
-    if (!data?.quests) return;
-    const completed = data.quests.filter((q) => q.completed);
-    if (completed.length > 0 && completed.length === data.quests.filter((q) => q.completed).length) {
-      const last = completed[completed.length - 1];
-      if (completed.length === 1) {
-        addToast({
-          title: `${last.name} — COMPLETE`,
-          message: `+${last.xpReward} XP · ${last.stat} +2`,
-          variant: "success",
-        });
-      }
+  function handleFoodChip(presetId: string) {
+    const res = store.logFoodPreset(presetId, portion);
+    if (res.isAbsRaid) {
+      playShadowArise();
+      addToast({
+        title: "AB's LUNCH RAID LOGGED (+75 XP RAID)",
+        message: "160g P single-sitting bolus · Dinner Skip auto-sealed!",
+        variant: "warning",
+      });
+    } else {
+      playQuestComplete();
+      addToast({
+        title: res.label.toUpperCase(),
+        message: `Logged cleanly · +${res.xpAwarded} XP`,
+        variant: "success",
+        duration: 2200,
+      });
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data?.questCompletionPercent]);
+    setPortion(1);
+  }
 
-  // Unlock toasts for progressive disclosure
-  useEffect(() => {
-    if (!data) return;
-    const level = data.gamification.level;
-    const shownRaw = localStorage.getItem("shown_unlocks");
-    const shown: number[] = shownRaw ? JSON.parse(shownRaw) : [];
-    const newUnlocks = UNLOCK_THRESHOLDS.filter(
-      (t) => level >= t.level && !shown.includes(t.level)
-    );
-    if (newUnlocks.length > 0) {
-      for (const unlock of newUnlocks) {
-        addToast({ title: "SYSTEM UPGRADE", message: unlock.message, variant: "success" });
-        shown.push(unlock.level);
-      }
-      localStorage.setItem("shown_unlocks", JSON.stringify(shown));
+  function handleCustomSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    const kcal = Number(customKcal);
+    const protein = Number(customProtein) || 0;
+    if (!kcal) return;
+    const res = store.logCustomFood(customLabel || "Custom Meal", kcal, protein);
+    playQuestComplete();
+    addToast({
+      title: "CUSTOM FUEL LOGGED",
+      message: `${kcal} kcal · ${protein}g P · +${res.xpAwarded} XP`,
+      variant: "success",
+    });
+    setCustomLabel("");
+    setCustomKcal("");
+    setCustomProtein("");
+    setCustomOpen(false);
+  }
+
+  function handleLockDinnerSkip() {
+    const res = store.lockDinnerSkip();
+    if (res.alreadyLocked) return;
+    playShadowArise();
+    addToast({
+      title: "EARLY FASTING SEAL LOCKED",
+      message: `Dinner skipped cleanly · +${res.xpAwarded} XP · Swiggy intercepted`,
+      variant: "quest",
+    });
+  }
+
+  function handleSaveWeight() {
+    const res = store.logScaleWeight(draftWeight);
+    playSystemPing();
+    setWeightEditorOpen(false);
+    addToast({
+      title: `EMA UPDATED: ${res.ema} KG`,
+      message: `Raw ${res.raw} kg smoothed via 7d EMA (Bosses track EMA)`,
+      variant: "info",
+    });
+  }
+
+  function handleDirectiveAction() {
+    if (!directive?.actionKind) return;
+    if (directive.actionKind === "seal_whey") {
+      handleFoodChip("whey_skyr_seal");
+    } else if (directive.actionKind === "lock_skip") {
+      handleLockDinnerSkip();
+    } else if (directive.actionKind === "floor_5m") {
+      handleClear5mFloor();
+    } else if (directive.actionKind === "debloat_food") {
+      handleFoodChip("hotel_debloat");
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data?.gamification?.level]);
+  }
 
-  // Combo milestone overlay + shadow greeting
-  useEffect(() => {
-    if (!data) return;
-    const combo = data.gamification.comboDay;
-    const milestoneKey = `combo_milestone_${combo}`;
-    if (isComboMilestone(combo) && !localStorage.getItem(milestoneKey)) {
-      localStorage.setItem(milestoneKey, "1");
-      setShowMilestone(true);
-      // Check for shadow greeting after milestone
-      const shadows = data.unlockedShadows ?? [];
-      const greeting = getShadowGreeting(shadows, combo);
-      if (greeting) {
-        setShadowMsg(greeting);
-        setTimeout(() => setShowShadow(true), 3800); // After milestone overlay
-      }
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data?.gamification?.comboDay]);
-
-  if (loading || !data) return <LoadingSkeleton />;
-
-  useLevelStore.getState().setLevel(data.gamification.level);
-
-  const { streaks, quests, gamification } = data;
-  const dailyQuests = quests.filter((q) => q.category === "daily");
-  const completedDaily = dailyQuests.filter((q) => q.completed).length;
-  const systemMessage = getSystemMessage(data, dayNumber);
+  const activeRankSpec =
+    GATE_RANKS.find((g) => g.id === store.gateRank) ?? GATE_RANKS[1];
+  const workoutDoneToday =
+    today.survivalFloorCleared ||
+    today.workouts.length > 0 ||
+    today.movements.length > 0;
+  const proteinPct = Math.min(100, Math.round((totals.proteinG / totals.targetProteinG) * 100));
+  const kcalPct = Math.min(100, Math.round((totals.kcal / totals.targetKcal) * 100));
+  const overKcal = totals.kcal > totals.targetKcal + 150;
 
   return (
-    <div className="mx-auto max-w-lg px-4 pb-6 pt-8 space-y-6">
-      {/* System Header */}
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        className="text-center relative"
-      >
-        <h1 className="font-[family-name:var(--font-rajdhani)] text-[28px] font-bold tracking-[0.1em] text-[var(--text-primary)]">
-          THE SYSTEM
-        </h1>
-        <p className="font-[family-name:var(--font-geist-mono)] text-sm tabular-nums text-[var(--accent-blue)]">
-          DAY {dayNumber}
-        </p>
-        {/* Revalidation indicator */}
-        {revalidating && (
-          <span className="absolute top-1 right-0 w-1.5 h-1.5 rounded-full bg-[var(--accent-blue)] animate-pulse" />
-        )}
-      </motion.div>
-
-      {/* System Message — context-sensitive */}
-      {systemMessage ? (
-        <div className="border-l-2 border-l-[var(--accent-blue)] pl-4 py-2">
-          <p className="font-[family-name:var(--font-rajdhani)] text-xs font-bold uppercase tracking-wider text-[var(--accent-blue)]">
-            {systemMessage}
-          </p>
-        </div>
-      ) : streaks.missedYesterday && dayNumber > 1 ? (
-        <SystemPanel variant="danger" className="px-4 py-3" animate={false}>
-          <p className="font-[family-name:var(--font-rajdhani)] text-xs font-bold uppercase tracking-wider text-[var(--danger)]">
-            Yesterday: Protocol incomplete. Today determines the streak.
-          </p>
-        </SystemPanel>
-      ) : null}
-
-      {/* Reward Banner — unclaimed rewards */}
-      {data.rewards && data.rewards.length > 0 && (
-        <RewardBanner
-          reward={data.rewards[0]}
-          onClaim={() => refresh()}
-        />
-      )}
-
-      {/* Daily Progress — hero card */}
-      <DailyProgress
-        questsCompleted={completedDaily}
-        questsTotal={dailyQuests.length}
-        comboDay={gamification.comboDay}
-        comboMultiplier={gamification.comboMultiplier}
-        lootRarity={gamification.lootRarity}
-        lootMultiplier={gamification.lootMultiplier}
-        todayXp={gamification.todayXp}
-        level={gamification.level}
-        levelProgress={gamification.levelProgress}
-        rank={gamification.rank}
-      />
-
-      {/* Active Quests */}
-      <QuestList quests={quests} />
-
-      {/* Streak Row — single-line readout (unlocks at level 3) */}
-      {data.gamification.level >= 3 && (
-        <div className="flex items-center justify-center gap-4 py-2">
-          <StreakReadout label="EXERCISE" count={streaks.exercise} danger={streaks.exerciseDanger} />
-          <span className="text-[var(--text-muted)]/30 font-[family-name:var(--font-geist-mono)] text-xs">|</span>
-          <StreakReadout label="LOGGING" count={streaks.logging} danger={streaks.loggingDanger} />
-          <span className="text-[var(--text-muted)]/30 font-[family-name:var(--font-geist-mono)] text-xs">|</span>
-          <StreakReadout label="FASTING" count={streaks.noLateEating} danger={streaks.noLateEatingDanger} />
-        </div>
-      )}
-
-      {/* Quick Actions — surface-2, functional */}
-      <div className="grid grid-cols-3 gap-2.5">
-        <QuickAction href="/log/meal" icon={<UtensilsCrossed size={20} />} label="LOG MEAL" />
-        <QuickAction href="/log/workout" icon={<Dumbbell size={20} />} label="LOG WORKOUT" />
-        <QuickAction href="/checkin" icon={<Zap size={20} />} label="CHECK IN" />
-      </div>
-
-      {/* Weekly Debrief — Sun/Mon only, level 28+ */}
-      {data.gamification.level >= 28 && (new Date().getDay() === 0 || new Date().getDay() === 1) && (
-        <Link href="/review">
-          <SystemPanel className="p-3 border border-[var(--accent-blue)]/30">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="font-[family-name:var(--font-rajdhani)] text-xs font-bold uppercase tracking-[0.15em] text-[var(--accent-blue)]">
-                  Weekly Debrief Available
-                </p>
-                <p className="font-[family-name:var(--font-rajdhani)] text-[9px] uppercase tracking-widest text-[var(--text-muted)]">
-                  Review your week. The System has notes.
-                </p>
-              </div>
-              <ChevronRight size={16} className="text-[var(--text-muted)]" />
+    <div className="max-w-lg mx-auto px-4 pt-5 pb-6 space-y-3.5">
+      {/* HEADER PANEL */}
+      <SystemPanel variant="hero" className="p-3.5" animate={false}>
+        <div className="flex items-center justify-between gap-2">
+          <div>
+            <div className="flex items-center gap-2">
+              <span
+                className="px-1.5 py-0.5 rounded text-[10px] font-[family-name:var(--font-rajdhani)] font-bold uppercase tracking-wider"
+                style={{
+                  backgroundColor: `${lvl.rank.color}25`,
+                  color: lvl.rank.color,
+                  border: `1px solid ${lvl.rank.color}55`,
+                }}
+              >
+                {lvl.rank.title}
+              </span>
+              <span className="font-[family-name:var(--font-geist-mono)] text-xs font-bold text-[var(--text-primary)]">
+                LV {lvl.level}
+              </span>
+              <span className="inline-flex items-center gap-0.5 text-[11px] font-[family-name:var(--font-geist-mono)] text-[#f59e0b]">
+                <Flame size={12} /> {streak.activeStreak}d · {streak.comboMultiplier}x
+              </span>
             </div>
-          </SystemPanel>
-        </Link>
-      )}
+            <p className="font-[family-name:var(--font-geist-mono)] text-[10px] text-[var(--text-secondary)] mt-1">
+              {lvl.xpIntoLevel}/{lvl.currentLevelXp} XP · {store.kiliMeters}m Kili · {store.benchBest.e1rm}kg Bench e1RM
+            </p>
+          </div>
 
-      <ComboMilestone
-        comboDay={data.gamification.comboDay}
-        show={showMilestone}
-        onDone={() => setShowMilestone(false)}
-      />
-      <ShadowGreeting
-        show={showShadow}
-        shadow={shadowMsg}
-        onDone={() => setShowShadow(false)}
-      />
-    </div>
-  );
-}
+          <button
+            onClick={() => setWeightEditorOpen((v) => !v)}
+            className="shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[var(--surface-1)] border border-[var(--border-accent)] font-[family-name:var(--font-geist-mono)] text-xs font-semibold text-[var(--text-primary)]"
+          >
+            <Scale size={13} className="text-[#3b6cf6]" />
+            {store.weightEma} kg
+          </button>
+        </div>
 
-function StreakReadout({
-  label,
-  count,
-  danger,
-}: {
-  label: string;
-  count: number;
-  danger: boolean;
-}) {
-  const active = count > 0;
-
-  return (
-    <div className="flex items-center gap-1.5">
-      <span className="font-[family-name:var(--font-rajdhani)] text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)]">
-        {label}
-      </span>
-      <span
-        className={`font-[family-name:var(--font-geist-mono)] text-sm font-semibold tabular-nums ${
-          active
-            ? "text-[var(--text-primary)]"
-            : danger
-              ? "text-[var(--danger)]"
-              : "text-[var(--text-muted)]"
-        }`}
-      >
-        {count}
-      </span>
-      {active && (
-        <Flame
-          size={11}
-          className="text-[var(--warning)]"
-          style={{
-            filter: getStreakIntensity(count) > 0.3 ? `drop-shadow(0 0 ${getStreakIntensity(count) * 8}px #f59e0b)` : undefined,
-            animation: getStreakIntensity(count) > 0.5 ? "pulse 2s infinite" : undefined,
-          }}
-        />
-      )}
-      {danger && !active && <AlertTriangle size={10} className="text-[var(--danger)]" />}
-    </div>
-  );
-}
-
-function QuickAction({
-  href,
-  icon,
-  label,
-}: {
-  href: string;
-  icon: React.ReactNode;
-  label: string;
-}) {
-  return (
-    <Link href={href}>
-      <div className="flex h-16 cursor-pointer flex-col items-center justify-center gap-1 rounded-lg bg-[var(--surface-2)] transition-colors hover:bg-[var(--surface-3)] active:scale-[0.98]">
-        <span className="text-[var(--text-secondary)]">{icon}</span>
-        <span className="font-[family-name:var(--font-rajdhani)] text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)]">
-          {label}
-        </span>
-      </div>
-    </Link>
-  );
-}
-
-function LoadingSkeleton() {
-  return (
-    <div className="mx-auto max-w-lg px-4 pb-6 pt-8 space-y-6">
-      <div className="flex flex-col items-center gap-1">
-        <div className="h-7 w-32 rounded bg-[var(--surface-1)] animate-pulse" />
-        <div className="h-4 w-16 rounded bg-[var(--surface-1)] animate-pulse" />
-      </div>
-      <div className="h-52 rounded-lg bg-[var(--surface-1)] animate-pulse" />
-      {[1, 2, 3, 4, 5, 6].map((i) => (
-        <div
-          key={i}
-          className="h-16 rounded-lg bg-[var(--surface-1)] animate-pulse"
-        />
-      ))}
-      <div className="h-20 rounded-lg bg-[var(--surface-1)] animate-pulse" />
-      <div className="grid grid-cols-3 gap-2.5">
-        {[1, 2, 3].map((i) => (
+        {/* XP Bar */}
+        <div className="mt-2 h-1.5 rounded-full bg-[var(--surface-0)] overflow-hidden">
           <div
-            key={i}
-            className="h-16 rounded-lg bg-[var(--surface-1)] animate-pulse"
+            className="h-full progress-blue transition-all duration-300"
+            style={{ width: `${lvl.progress}%` }}
           />
-        ))}
-      </div>
+        </div>
+
+        {/* Inline Scale Weight Logger */}
+        {weightEditorOpen && (
+          <div className="mt-2.5 p-2.5 rounded-lg bg-[var(--surface-0)] border border-[var(--border-accent)] flex items-center justify-between gap-2">
+            <span className="font-[family-name:var(--font-rajdhani)] text-xs uppercase tracking-wider text-[var(--text-secondary)]">
+              TODAY SCALE (RAW):
+            </span>
+            <div className="flex items-center gap-1.5 font-[family-name:var(--font-geist-mono)] text-xs">
+              <button
+                onClick={() => setDraftWeight((w) => Math.round((w - 0.2) * 10) / 10)}
+                className="px-2 py-1 rounded bg-[var(--surface-2)]"
+              >
+                -0.2
+              </button>
+              <span className="min-w-[54px] text-center font-bold">{draftWeight.toFixed(1)}</span>
+              <button
+                onClick={() => setDraftWeight((w) => Math.round((w + 0.2) * 10) / 10)}
+                className="px-2 py-1 rounded bg-[var(--surface-2)]"
+              >
+                +0.2
+              </button>
+              <button
+                onClick={handleSaveWeight}
+                className="ml-1 px-2.5 py-1 rounded bg-[#3b6cf6] text-white font-bold"
+              >
+                SAVE
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Single 4-Context Selector */}
+        <div className="mt-3 grid grid-cols-4 gap-1.5">
+          {CONTEXT_LIST.map((ctx) => {
+            const active = store.context === ctx.id;
+            return (
+              <button
+                key={ctx.id}
+                onClick={() => store.setContext(ctx.id)}
+                className={`py-1.5 px-1 rounded-md font-[family-name:var(--font-rajdhani)] text-[11px] font-bold uppercase tracking-wider border transition-colors ${
+                  active
+                    ? "bg-[#3b6cf6]/25 border-[#3b6cf6] text-white"
+                    : "bg-[var(--surface-1)] border-[var(--border-subtle)] text-[var(--text-secondary)]"
+                }`}
+              >
+                {ctx.shortLabel}
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="mt-2 flex items-center justify-between gap-2">
+          <p className="text-[10px] text-[var(--text-secondary)] truncate">
+            {CONTEXTS[store.context].sub}
+          </p>
+          <div className="flex items-center gap-1.5 shrink-0">
+            <button
+              onClick={store.toggleLowMana}
+              className={`px-2 py-0.5 rounded text-[10px] font-[family-name:var(--font-rajdhani)] font-bold uppercase border ${
+                store.lowMana
+                  ? "bg-[#8b5cf6]/25 border-[#8b5cf6] text-[#c4b5fd]"
+                  : "bg-[var(--surface-1)] border-[var(--border-subtle)] text-[var(--text-muted)]"
+              }`}
+            >
+              Low Mana
+            </button>
+            <button
+              onClick={store.toggleDebloat}
+              className={`px-2 py-0.5 rounded text-[10px] font-[family-name:var(--font-rajdhani)] font-bold uppercase border ${
+                store.debloatMode
+                  ? "bg-[#f59e0b]/25 border-[#f59e0b] text-[#fcd34d]"
+                  : "bg-[var(--surface-1)] border-[var(--border-subtle)] text-[var(--text-muted)]"
+              }`}
+            >
+              De-Bloat
+            </button>
+          </div>
+        </div>
+      </SystemPanel>
+
+      {/* AMBIENT SHADOW DIRECTIVE */}
+      {directive && (
+        <div
+          className="rounded-xl p-3 bg-[var(--surface-1)] border border-[var(--border-subtle)] flex items-center justify-between gap-2.5"
+          style={{ borderLeftWidth: "3px", borderLeftColor: directive.color }}
+        >
+          <div className="min-w-0">
+            <p
+              className="font-[family-name:var(--font-rajdhani)] text-[11px] font-bold uppercase tracking-[0.14em]"
+              style={{ color: directive.color }}
+            >
+              {directive.title}
+            </p>
+            <p className="text-xs text-[var(--text-secondary)] leading-snug mt-0.5">
+              {directive.message}
+            </p>
+          </div>
+          {directive.actionLabel && (
+            <button
+              onClick={handleDirectiveAction}
+              className="shrink-0 px-2.5 py-1.5 rounded-lg font-[family-name:var(--font-rajdhani)] text-[11px] font-bold uppercase tracking-wider text-white"
+              style={{ backgroundColor: directive.color }}
+            >
+              {directive.actionLabel}
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* CARD 1: TODAY'S GATE (WORKOUT & MOVEMENT) */}
+      <SystemPanel className="p-3.5" animate={false}>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-1.5">
+            <Dumbbell size={14} className="text-[#3b6cf6]" />
+            <h2 className="font-[family-name:var(--font-rajdhani)] text-xs font-bold uppercase tracking-[0.15em] text-[var(--text-secondary)]">
+              TODAY&apos;S GATE (NO SKIPS)
+            </h2>
+          </div>
+          {workoutDoneToday && (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-[#22c55e]/20 text-[#4ade80] font-[family-name:var(--font-geist-mono)] text-[10px] font-bold">
+              <Check size={11} /> GREEN
+            </span>
+          )}
+        </div>
+
+        {/* Effort Tier */}
+        <div className="mt-2.5 grid grid-cols-3 gap-1.5">
+          {GATE_RANKS.map((rank) => {
+            const active = store.gateRank === rank.id;
+            return (
+              <button
+                key={rank.id}
+                onClick={() => store.setGateRank(rank.id)}
+                className={`py-1.5 px-2 rounded-lg border text-left transition-colors ${
+                  active
+                    ? "bg-[#3b6cf6]/20 border-[#3b6cf6] text-white"
+                    : "bg-[var(--surface-2)]/60 border-[var(--border-subtle)] text-[var(--text-secondary)]"
+                }`}
+              >
+                <div className="font-[family-name:var(--font-rajdhani)] text-xs font-bold uppercase">
+                  {rank.label}
+                </div>
+                <div className="font-[family-name:var(--font-geist-mono)] text-[9px] opacity-80">
+                  {rank.duration} · +{rank.baseXp}XP
+                </div>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Split & Arena Pickers */}
+        <div className="mt-2 grid grid-cols-4 gap-1.5">
+          {SPLITS.map((sp) => (
+            <button
+              key={sp.id}
+              onClick={() => store.setSplit(sp.id)}
+              className={`py-1.5 rounded-md font-[family-name:var(--font-rajdhani)] text-[11px] font-bold uppercase border ${
+                store.split === sp.id
+                  ? "bg-[var(--surface-3)] border-[#3b6cf6]/70 text-white"
+                  : "bg-[var(--surface-0)] border-[var(--border-subtle)] text-[var(--text-muted)]"
+              }`}
+            >
+              {sp.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="mt-1.5 grid grid-cols-3 gap-1.5">
+          {ARENAS.map((ar) => (
+            <button
+              key={ar.id}
+              onClick={() => store.setArena(ar.id)}
+              className={`py-1 rounded font-[family-name:var(--font-rajdhani)] text-[10px] font-bold uppercase tracking-wider border ${
+                store.arena === ar.id
+                  ? "bg-[var(--surface-3)] border-[var(--text-secondary)]/50 text-[var(--text-primary)]"
+                  : "bg-[var(--surface-0)] border-[var(--border-subtle)] text-[var(--text-muted)]"
+              }`}
+            >
+              {ar.shortLabel}
+            </button>
+          ))}
+        </div>
+
+        {/* Prescribed Preview */}
+        <p className="mt-2 text-[11px] text-[var(--text-secondary)] truncate">
+          {prescribedPreview.map((e) => e.name).join(" · ")}
+        </p>
+
+        {/* Primary Action */}
+        <div className="mt-2.5 flex gap-2">
+          {store.gateRank === "floor_5m" ? (
+            <>
+              <button
+                onClick={handleClear5mFloor}
+                className="flex-1 h-11 rounded-xl bg-[#22c55e] hover:bg-[#16a34a] font-[family-name:var(--font-rajdhani)] text-sm font-bold uppercase tracking-[0.14em] text-[#051b0e]"
+              >
+                CLEAR 5m FLOOR · +35 XP
+              </button>
+              <button
+                onClick={() => setCombatOpen(true)}
+                className="px-3 h-11 rounded-xl bg-[var(--surface-2)] border border-[var(--border-subtle)] font-[family-name:var(--font-rajdhani)] text-xs font-bold uppercase text-[var(--text-secondary)]"
+              >
+                HUD
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                onClick={() => setCombatOpen(true)}
+                className="flex-1 h-11 rounded-xl bg-[#3b6cf6] hover:bg-[#2a5be6] font-[family-name:var(--font-rajdhani)] text-sm font-bold uppercase tracking-[0.14em] text-white"
+              >
+                ENTER GATE · {activeRankSpec.label.toUpperCase()}
+              </button>
+              <button
+                onClick={handleClear5mFloor}
+                className="px-3 h-11 rounded-xl bg-[var(--surface-2)] border border-[var(--border-subtle)] font-[family-name:var(--font-rajdhani)] text-[11px] font-bold uppercase text-[var(--text-secondary)]"
+                title="Quick 5-10 min survival check-in"
+              >
+                5m Floor
+              </button>
+            </>
+          )}
+        </div>
+
+        {/* Quick Cardio / Swim / Badminton / Kili Chips */}
+        <div className="mt-2.5 flex items-center gap-1.5 overflow-x-auto pb-1">
+          <Footprints size={12} className="shrink-0 text-[var(--text-muted)]" />
+          {(Object.keys(MOVEMENT_PRESETS) as MovementKind[]).map((kind) => {
+            const mp = MOVEMENT_PRESETS[kind];
+            return (
+              <button
+                key={kind}
+                onClick={() => handleQuickMove(kind)}
+                className="shrink-0 px-2.5 py-1 rounded-full bg-[var(--surface-2)] hover:bg-[var(--surface-3)] border border-[var(--border-subtle)] font-[family-name:var(--font-geist-mono)] text-[10px] text-[var(--text-secondary)]"
+              >
+                {mp.label} (+{mp.verticalGainM}m)
+              </button>
+            );
+          })}
+        </div>
+      </SystemPanel>
+
+      {/* CARD 2: VESSEL FUEL (LUNCH-OMAD + SKIP DINNER) */}
+      <SystemPanel className="p-3.5" animate={false}>
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-1.5">
+            <Utensils size={14} className="text-[#f59e0b]" />
+            <h2 className="font-[family-name:var(--font-rajdhani)] text-xs font-bold uppercase tracking-[0.15em] text-[var(--text-secondary)]">
+              VESSEL FUEL (LUNCH + SKIP DINNER)
+            </h2>
+          </div>
+
+          <div className="flex items-center gap-1">
+            {([0.5, 1, 1.5] as const).map((mult) => (
+              <button
+                key={mult}
+                onClick={() => setPortion(mult)}
+                className={`px-1.5 py-0.5 rounded font-[family-name:var(--font-geist-mono)] text-[10px] font-bold border ${
+                  portion === mult
+                    ? "bg-[#3b6cf6]/25 border-[#3b6cf6] text-white"
+                    : "bg-[var(--surface-0)] border-[var(--border-subtle)] text-[var(--text-muted)]"
+                }`}
+              >
+                {mult}x
+              </button>
+            ))}
+            <button
+              onClick={() => setCustomOpen((v) => !v)}
+              className="ml-1 px-1.5 py-0.5 rounded bg-[var(--surface-2)] border border-[var(--border-subtle)] font-[family-name:var(--font-rajdhani)] text-[10px] font-bold uppercase text-[var(--text-secondary)] inline-flex items-center gap-0.5"
+            >
+              <Plus size={10} /> Custom
+            </button>
+          </div>
+        </div>
+
+        {/* Macro Bars */}
+        <div className="mt-2.5 grid grid-cols-2 gap-3">
+          <div>
+            <div className="flex items-baseline justify-between text-[11px]">
+              <span className="font-[family-name:var(--font-rajdhani)] font-bold uppercase text-[#f59e0b]">
+                PROTEIN
+              </span>
+              <span className="font-[family-name:var(--font-geist-mono)] tabular-nums text-xs font-bold">
+                {totals.proteinG} / {totals.targetProteinG}g
+              </span>
+            </div>
+            <div className="mt-1 h-1.5 rounded-full bg-[var(--surface-0)] overflow-hidden">
+              <div
+                className={`h-full transition-all duration-300 ${
+                  totals.proteinG >= 145 ? "progress-green" : "progress-gold"
+                }`}
+                style={{ width: `${proteinPct}%` }}
+              />
+            </div>
+          </div>
+
+          <div>
+            <div className="flex items-baseline justify-between text-[11px]">
+              <span className="font-[family-name:var(--font-rajdhani)] font-bold uppercase text-[#3b6cf6]">
+                KCAL {totals.activeFlexKcal > 0 ? `+${totals.activeFlexKcal}` : ""}
+              </span>
+              <span className="font-[family-name:var(--font-geist-mono)] tabular-nums text-xs font-bold">
+                {totals.kcal} / {totals.targetKcal}
+              </span>
+            </div>
+            <div className="mt-1 h-1.5 rounded-full bg-[var(--surface-0)] overflow-hidden">
+              <div
+                className={`h-full transition-all duration-300 ${
+                  overKcal ? "progress-red" : "progress-blue"
+                }`}
+                style={{ width: `${kcalPct}%` }}
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Custom Inline Form */}
+        {customOpen && (
+          <form onSubmit={handleCustomSubmit} className="mt-2.5 grid grid-cols-12 gap-1.5">
+            <input
+              type="text"
+              placeholder="Meal name"
+              value={customLabel}
+              onChange={(e) => setCustomLabel(e.target.value)}
+              className="col-span-5 px-2.5 py-1.5 rounded bg-[var(--surface-0)] border border-[var(--border-subtle)] text-xs"
+            />
+            <input
+              type="number"
+              placeholder="kcal"
+              value={customKcal}
+              onChange={(e) => setCustomKcal(e.target.value)}
+              className="col-span-3 px-2 py-1.5 rounded bg-[var(--surface-0)] border border-[var(--border-subtle)] text-xs font-[family-name:var(--font-geist-mono)]"
+              required
+            />
+            <input
+              type="number"
+              placeholder="P (g)"
+              value={customProtein}
+              onChange={(e) => setCustomProtein(e.target.value)}
+              className="col-span-2 px-2 py-1.5 rounded bg-[var(--surface-0)] border border-[var(--border-subtle)] text-xs font-[family-name:var(--font-geist-mono)]"
+            />
+            <button
+              type="submit"
+              className="col-span-2 rounded bg-[#3b6cf6] text-white font-[family-name:var(--font-rajdhani)] text-xs font-bold uppercase"
+            >
+              ADD
+            </button>
+          </form>
+        )}
+
+        {/* Context-Matched 1-Tap Spot Chips */}
+        <div className="mt-3 grid grid-cols-2 gap-1.5">
+          {contextPresets.map((preset) => {
+            const isRaid = preset.tags.includes("abs_raid");
+            const isSeal = preset.tags.includes("seal");
+            const isSolo = preset.tags.includes("salsa_solo");
+            const scaledKcal = Math.round(preset.kcal * portion);
+            const scaledP = Math.round(preset.proteinG * portion);
+
+            return (
+              <button
+                key={preset.id}
+                onClick={() => handleFoodChip(preset.id)}
+                className={`p-2 rounded-lg border text-left transition-colors ${
+                  isRaid
+                    ? "bg-[#8b5cf6]/15 border-[#8b5cf6]/45 hover:bg-[#8b5cf6]/25"
+                    : isSeal
+                      ? "bg-[#22c55e]/10 border-[#22c55e]/35 hover:bg-[#22c55e]/20"
+                      : isSolo
+                        ? "bg-[#f59e0b]/10 border-[#f59e0b]/35 hover:bg-[#f59e0b]/20"
+                        : "bg-[var(--surface-2)]/70 border-[var(--border-subtle)] hover:border-[var(--border-accent)]"
+                }`}
+              >
+                <div className="font-[family-name:var(--font-rajdhani)] text-xs font-bold leading-tight text-[var(--text-primary)] truncate">
+                  {preset.shortLabel}
+                </div>
+                <div className="font-[family-name:var(--font-geist-mono)] text-[10px] text-[var(--text-secondary)] mt-0.5">
+                  {scaledKcal} kcal · <span className="text-[#f59e0b]">{scaledP}g P</span>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Today's Logged Meals */}
+        {today.foods.length > 0 && (
+          <div className="mt-2.5 flex flex-wrap gap-1.5">
+            {today.foods.map((entry) => (
+              <span
+                key={entry.id}
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[var(--surface-0)] border border-[var(--border-subtle)] font-[family-name:var(--font-geist-mono)] text-[10px] text-[var(--text-secondary)]"
+              >
+                {entry.label} ({entry.proteinG}g)
+                <button
+                  onClick={() => store.removeFoodEntry(todayKey, entry.id)}
+                  className="text-[var(--text-muted)] hover:text-[#ef4444]"
+                  aria-label={`Remove ${entry.label}`}
+                >
+                  <X size={10} />
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
+
+        {/* Signature Skip-Dinner Early Fasting Seal */}
+        <button
+          onClick={handleLockDinnerSkip}
+          disabled={today.dinnerSkipped}
+          className={`mt-3 w-full h-11 rounded-xl font-[family-name:var(--font-rajdhani)] text-sm font-bold uppercase tracking-[0.14em] flex items-center justify-center gap-2 border transition-colors ${
+            today.dinnerSkipped
+              ? "bg-[#22c55e]/15 border-[#22c55e]/45 text-[#4ade80]"
+              : "bg-[#8b5cf6]/20 hover:bg-[#8b5cf6]/30 border-[#8b5cf6] text-[#e9d5ff]"
+          }`}
+        >
+          {today.dinnerSkipped ? (
+            <>
+              <Sparkles size={15} /> EARLY FASTING SEAL ACTIVE · DINNER SKIPPED
+            </>
+          ) : (
+            <>
+              <Lock size={14} /> LOCK DINNER SKIP · +30 XP EARLY SEAL
+            </>
+          )}
+        </button>
+      </SystemPanel>
+
+      {/* Live Workout Combat Sheet */}
+      <CombatSheet open={combatOpen} onClose={() => setCombatOpen(false)} />
     </div>
   );
 }

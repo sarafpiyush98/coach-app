@@ -2292,7 +2292,11 @@ export const FOOD_PRESETS: FoodPreset[] = [
 export function getPresetsForContext(contextId: ContextId): FoodPreset[] {
   const matched = FOOD_PRESETS.filter(
     (f) => (!f.category || f.category === "spot") && f.contexts.includes(contextId)
-  );
+  ).sort((a, b) => {
+    const aPrimary = a.contexts[0] === contextId ? 0 : 1;
+    const bPrimary = b.contexts[0] === contextId ? 0 : 1;
+    return aPrimary - bPrimary;
+  });
   const seal = FOOD_PRESETS.find((f) => f.id === "whey_skyr_seal");
   if (seal && !matched.some((m) => m.id === seal.id)) {
     return [seal, ...matched];

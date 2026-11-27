@@ -336,6 +336,51 @@ export default function CommandDeckPage() {
     });
   }
 
+  function handleSelectContext(ctxId: ContextId) {
+    const targetArena =
+      ctxId === "travel"
+        ? "Hotel"
+        : store.arena === "nomad_hotel"
+          ? formatArenaTitle(CONTEXTS[ctxId].defaultArena)
+          : formatArenaTitle(store.arena);
+    store.setContext(ctxId);
+    playSystemPing();
+    addToast({
+      title: `CONTEXT: ${CONTEXTS[ctxId].label}`,
+      message: `Arena: ${targetArena} · Fuel picks updated`,
+      variant: "info",
+      duration: 2200,
+    });
+  }
+
+  function handleToggleLowMana() {
+    const next = !store.lowMana;
+    store.toggleLowMana();
+    playSystemPing();
+    addToast({
+      title: next ? "LOW MANA MODE ON" : "LOW MANA MODE OFF",
+      message: next
+        ? "Switched to 2x Fail + 5m Floor guard."
+        : "Restored Regular 3x15 volume.",
+      variant: "info",
+      duration: 2400,
+    });
+  }
+
+  function handleToggleDebloat() {
+    const next = !store.debloatMode;
+    store.toggleDebloat();
+    playSystemPing();
+    addToast({
+      title: next ? "36H DE-BLOAT MODE ON" : "36H DE-BLOAT MODE OFF",
+      message: next
+        ? "Hydration & clean protein guard active."
+        : "De-bloat guard cleared.",
+      variant: "info",
+      duration: 2400,
+    });
+  }
+
   function handleFoodChip(presetId: string) {
     const res = store.logFoodPreset(presetId, 1);
     if (res.isAbsRaid) {
@@ -503,22 +548,47 @@ export default function CommandDeckPage() {
     <div className="max-w-lg mx-auto px-5 pt-6 pb-24 space-y-5">
       {/* 1. MINIMAL TOP BAR */}
       <header className="h-11 flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2.5 min-w-0">
-          <h1 className="text-lg font-semibold tracking-tight text-[var(--text-primary)]">
+        <div className="flex items-center gap-1.5 min-w-0 overflow-hidden">
+          <h1 className="text-lg font-semibold tracking-tight text-[var(--text-primary)] shrink-0">
             Monarch
           </h1>
           <button
             onClick={() => setContextSheetOpen(true)}
-            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-[var(--surface-2)] text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
+            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-[var(--surface-2)] text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors whitespace-nowrap shrink-0"
           >
-            <span className="truncate">{CONTEXTS[store.context].shortLabel}</span>
+            <span>{CONTEXTS[store.context].shortLabel}</span>
             <ChevronDown size={13} />
           </button>
+          {store.lowMana && store.debloatMode ? (
+            <button
+              onClick={() => setContextSheetOpen(true)}
+              className="px-2 py-0.5 rounded-full bg-[#8b5cf6]/20 border border-[#8b5cf6]/35 text-[10px] font-medium text-[#c4b5fd] whitespace-nowrap shrink-0"
+              title="Low mana & 36h de-bloat modes active"
+            >
+              2 modes
+            </button>
+          ) : store.lowMana ? (
+            <button
+              onClick={() => setContextSheetOpen(true)}
+              className="px-2 py-0.5 rounded-full bg-[#3b6cf6]/20 border border-[#3b6cf6]/35 text-[10px] font-medium text-[#93c5fd] whitespace-nowrap shrink-0"
+              title="Low mana mode active"
+            >
+              Low
+            </button>
+          ) : store.debloatMode ? (
+            <button
+              onClick={() => setContextSheetOpen(true)}
+              className="px-2 py-0.5 rounded-full bg-[#f59e0b]/20 border border-[#f59e0b]/35 text-[10px] font-medium text-[#fbbf24] whitespace-nowrap shrink-0"
+              title="36h de-bloat mode active"
+            >
+              De-bloat
+            </button>
+          ) : null}
         </div>
 
         <button
           onClick={() => setWeightEditorOpen(true)}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[var(--surface-1)] border border-[var(--border-subtle)] font-mono tabular-nums text-xs font-medium text-[var(--text-primary)] hover:border-[var(--border-accent)] transition-colors shrink-0"
+          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-[var(--surface-1)] border border-[var(--border-subtle)] font-mono tabular-nums text-xs font-medium text-[var(--text-primary)] hover:border-[var(--border-accent)] transition-colors whitespace-nowrap shrink-0"
         >
           <Scale size={13} className="text-[var(--text-secondary)]" />
           <span>{store.weightEma} kg</span>
@@ -605,59 +675,80 @@ export default function CommandDeckPage() {
         </button>
       </section>
 
-      {/* OPTIONAL SINGLE-LINE ACTIONABLE BANNER */}
-      {store.coachBanner.trim() ? (
-        <div className="rounded-2xl px-4 py-3 bg-[var(--surface-1)] border border-[#f59e0b]/35 flex items-center justify-between gap-3">
-          <p className="text-xs text-[var(--text-primary)] leading-snug">
-            <span className="font-semibold text-[#fbbf24] mr-1.5">Note:</span>
-            {store.coachBanner}
-          </p>
-        </div>
-      ) : activeResume ? (
-        <button
-          onClick={() => {
-            store.setSplit(activeResume.split);
-            store.setArena(activeResume.arena);
-            store.setGateRank(activeResume.gateRank);
-            setCombatOpen(true);
-          }}
-          className="w-full rounded-2xl px-4 py-3 bg-[var(--surface-1)] border border-[#3b6cf6]/40 flex items-center justify-between text-left"
-        >
-          <div className="flex items-center gap-2.5 min-w-0">
-            <Timer size={15} className="text-[#60a5fa] shrink-0" />
-            <span className="text-xs font-medium text-[var(--text-primary)] truncate">
-              {formatSplitTitle(activeResume.split)} in progress ({activeResume.checkedSets}/
-              {activeResume.totalSets} sets)
-              {activeResume.lastSetAtMs
-                ? ` · Resting ${formatRestDuration(
-                    Math.max(0, Math.floor((nowMs - activeResume.lastSetAtMs) / 1000))
-                  )}`
-                : ""}
-            </span>
-          </div>
-          <span className="text-xs font-semibold text-[#60a5fa] shrink-0">Resume</span>
-        </button>
-      ) : actionableDirective ? (
-        <div className="rounded-2xl px-4 py-3 bg-[var(--surface-1)] border border-[var(--border-subtle)] flex items-center justify-between gap-3">
-          <p className="text-xs text-[var(--text-secondary)] leading-snug">
-            {actionableDirective.message}
-          </p>
-          {actionableDirective.actionLabel && (
+      {/* OPTIONAL ACTIONABLE BANNERS */}
+      {(store.coachBanner.trim() || activeResume || actionableDirective) && (
+        <div className="space-y-3">
+          {store.coachBanner.trim() && (
+            <div className="rounded-2xl px-4 py-3 bg-[var(--surface-1)] border border-[#f59e0b]/35 flex items-center justify-between gap-3">
+              <p className="text-xs text-[var(--text-primary)] leading-snug">
+                <span className="font-semibold text-[#fbbf24] mr-1.5">Note:</span>
+                {store.coachBanner}
+              </p>
+            </div>
+          )}
+
+          {activeResume && (
             <button
-              onClick={handleDirectiveAction}
-              className="shrink-0 px-3 py-1.5 rounded-lg bg-[var(--surface-2)] text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-3)]"
+              onClick={() => {
+                store.setSplit(activeResume.split);
+                store.setArena(activeResume.arena);
+                store.setGateRank(activeResume.gateRank);
+                setCombatOpen(true);
+              }}
+              className="w-full rounded-2xl px-4 py-3 bg-[var(--surface-1)] border border-[#3b6cf6]/40 flex items-center justify-between text-left"
             >
-              {actionableDirective.actionKind === "seal_whey"
-                ? "Add Whey+Skyr"
-                : actionableDirective.actionKind === "lock_skip"
-                  ? "Skip dinner"
-                  : actionableDirective.actionKind === "floor_5m"
-                    ? "5m Floor"
-                    : "De-bloat meal"}
+              <div className="flex items-center gap-2.5 min-w-0">
+                <Timer size={15} className="text-[#60a5fa] shrink-0" />
+                <span className="text-xs font-medium text-[var(--text-primary)] truncate">
+                  {formatSplitTitle(activeResume.split)} in progress ({activeResume.checkedSets}/
+                  {activeResume.totalSets} sets)
+                  {activeResume.lastSetAtMs
+                    ? ` · Resting ${formatRestDuration(
+                        Math.max(0, Math.floor((nowMs - activeResume.lastSetAtMs) / 1000))
+                      )}`
+                    : ""}
+                </span>
+              </div>
+              <span className="text-xs font-semibold text-[#60a5fa] shrink-0">Resume</span>
             </button>
           )}
+
+          {actionableDirective && (
+            <div
+              className={`rounded-2xl px-4 py-3 border flex items-center justify-between gap-3 ${
+                actionableDirective.soldier === "Beru"
+                  ? "bg-[#8b5cf6]/10 border-[#8b5cf6]/35"
+                  : actionableDirective.soldier === "Tusk"
+                    ? "bg-[#f59e0b]/10 border-[#f59e0b]/35"
+                    : "bg-[var(--surface-1)] border-[var(--border-subtle)]"
+              }`}
+            >
+              <div className="min-w-0">
+                <p className="text-[11px] font-semibold text-[var(--text-primary)]">
+                  {actionableDirective.title}
+                </p>
+                <p className="text-xs text-[var(--text-secondary)] leading-snug mt-0.5">
+                  {actionableDirective.message}
+                </p>
+              </div>
+              {actionableDirective.actionLabel && (
+                <button
+                  onClick={handleDirectiveAction}
+                  className="shrink-0 px-3 py-1.5 rounded-lg bg-[var(--surface-2)] text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-3)]"
+                >
+                  {actionableDirective.actionKind === "seal_whey"
+                    ? "Add Whey+Skyr"
+                    : actionableDirective.actionKind === "lock_skip"
+                      ? "Skip dinner"
+                      : actionableDirective.actionKind === "floor_5m"
+                        ? "5m Floor"
+                        : "De-bloat meal"}
+                </button>
+              )}
+            </div>
+          )}
         </div>
-      ) : null}
+      )}
 
       {/* 3. TODAY'S WORKOUT CARD */}
       <section className="rounded-2xl bg-[var(--surface-1)] border border-[var(--border-subtle)] p-5">
@@ -1253,7 +1344,7 @@ export default function CommandDeckPage() {
             return (
               <button
                 key={ctx.id}
-                onClick={() => store.setContext(ctx.id)}
+                onClick={() => handleSelectContext(ctx.id)}
                 className={`p-3 rounded-xl border text-left transition-colors ${
                   active
                     ? "bg-[var(--surface-2)] border-[#3b6cf6] text-[var(--text-primary)]"
@@ -1267,9 +1358,23 @@ export default function CommandDeckPage() {
           })}
         </div>
 
+        <div className="p-3 rounded-xl bg-[var(--surface-0)] border border-[var(--border-subtle)] space-y-1">
+          <div className="flex items-center justify-between gap-2 text-[11px]">
+            <span className="font-semibold text-[#60a5fa]">
+              {CONTEXTS[store.context].label} rules
+            </span>
+            <span className="font-mono text-[var(--text-muted)]">
+              Arena: {formatArenaTitle(store.arena)}
+            </span>
+          </div>
+          <p className="text-xs text-[var(--text-secondary)] leading-snug">
+            {CONTEXTS[store.context].avoidNote}
+          </p>
+        </div>
+
         <div className="space-y-2 pt-2 border-t border-[var(--border-subtle)]">
           <button
-            onClick={store.toggleLowMana}
+            onClick={handleToggleLowMana}
             className="w-full p-3 rounded-xl bg-[var(--surface-0)] flex items-center justify-between text-left"
           >
             <div>
@@ -1288,12 +1393,12 @@ export default function CommandDeckPage() {
           </button>
 
           <button
-            onClick={store.toggleDebloat}
+            onClick={handleToggleDebloat}
             className="w-full p-3 rounded-xl bg-[var(--surface-0)] flex items-center justify-between text-left"
           >
             <div>
               <p className="text-xs font-medium text-[var(--text-primary)]">36h de-bloat mode</p>
-              <p className="text-[11px] text-[var(--text-muted)]">Highlights hydration & lean food guard</p>
+              <p className="text-[11px] text-[var(--text-muted)]">Highlights hydration &amp; lean food guard</p>
             </div>
             <span
               className={`px-2.5 py-1 rounded-full text-xs font-medium ${

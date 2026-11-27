@@ -3,7 +3,6 @@
 import { create } from "zustand";
 import { createJSONStorage, persist, type StateStorage } from "zustand/middleware";
 import {
-  autoDetectContext,
   CONTEXTS,
   CORE_SPLIT_ORDER,
   DEFAULT_WEEKLY_MEAL_PLAN,
@@ -668,7 +667,7 @@ export function getAmbientShadow(
   const totals = getDailyTotals(day);
   const hour = now.getHours();
 
-  if (state.lowMana && !totals.isActive) {
+  if (state.lowMana && !(day?.workouts.length || day?.survivalFloorCleared)) {
     return {
       soldier: "Beru",
       color: "#8b5cf6",
@@ -774,7 +773,7 @@ export const MOVEMENT_PRESETS: Record<
 // ============================================================
 
 const INITIAL_PERSISTED_STATE: MonarchPersistedState = {
-  context: typeof window !== "undefined" ? autoDetectContext() : "cg_home",
+  context: "cg_home",
   split: "upper_a",
   arena: "cg_gym",
   gateRank: "regular_3x15",
@@ -844,7 +843,7 @@ export const useMonarchStore = create<MonarchStore>()(
       toggleLowMana: () =>
         set((s) => ({
           lowMana: !s.lowMana,
-          gateRank: !s.lowMana ? "low_time_2x" : s.gateRank,
+          gateRank: !s.lowMana ? "low_time_2x" : "regular_3x15",
         })),
 
       toggleDebloat: () => set((s) => ({ debloatMode: !s.debloatMode })),

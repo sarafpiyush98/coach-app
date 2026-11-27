@@ -161,11 +161,36 @@ export interface MovementLogEntry {
   xpAwarded: number;
 }
 
+export type BookStatus = "reading" | "finished" | "paused";
+
+export interface BookItem {
+  id: string;
+  title: string;
+  author?: string;
+  currentPage: number;
+  totalPages?: number;
+  status: BookStatus;
+  startedAtIso: string;
+  finishedAtIso?: string;
+}
+
+export interface ReadingLogEntry {
+  id: string;
+  timeIso: string;
+  bookId: string;
+  bookTitle: string;
+  fromPage: number;
+  toPage: number;
+  pagesDelta: number;
+}
+
 export interface DayRecord {
   date: string;
   foods: FoodLogEntry[];
   workouts: WorkoutLogSummary[];
   movements: MovementLogEntry[];
+  readingLogs?: ReadingLogEntry[];
+  readingFloorXpAwarded?: boolean;
   dinnerSkipped: boolean;
   dinnerOutMode?: boolean;
   restDay?: boolean;
@@ -242,6 +267,9 @@ export interface MonarchPersistedState {
   activeSession: ActiveWorkoutSession | null;
   savedFoods: SavedFoodItem[];
   weeklyMealPlan: Record<WeekdayKey, DayMealPlan>;
+  books: BookItem[];
+  activeBookId: string | null;
+  readingMinPages: number;
   days: Record<string, DayRecord>;
 }
 
@@ -323,6 +351,39 @@ export interface MonarchActions {
   setTodayDinnerOutMode: (enabled: boolean) => void;
   updateWeeklyPlanDay: (day: WeekdayKey, patch: Partial<DayMealPlan>) => void;
   resetWeeklyMealPlan: () => void;
+  addBook: (input: {
+    title: string;
+    author?: string;
+    currentPage?: number;
+    totalPages?: number;
+  }) => BookItem;
+  setActiveBook: (bookId: string) => void;
+  updateBookMeta: (
+    bookId: string,
+    patch: { title?: string; author?: string; totalPages?: number; status?: BookStatus }
+  ) => void;
+  deleteBook: (bookId: string) => void;
+  logBookPage: (
+    bookId: string,
+    newPage: number
+  ) => {
+    pagesDelta: number;
+    todayPages: number;
+    floorJustCleared: boolean;
+    xpAwarded: number;
+    finishedBook: boolean;
+  };
+  logBookPagesDelta: (
+    bookId: string,
+    deltaPages: number
+  ) => {
+    pagesDelta: number;
+    todayPages: number;
+    floorJustCleared: boolean;
+    xpAwarded: number;
+    finishedBook: boolean;
+  };
+  removeReadingEntry: (dateKey: string, entryId: string) => void;
   removeFoodEntry: (dateKey: string, entryId: string) => void;
   lockDinnerSkip: () => { xpAwarded: number; alreadyLocked: boolean };
   logScaleWeight: (
@@ -356,6 +417,8 @@ export function createEmptyDay(date: string): DayRecord {
     foods: [],
     workouts: [],
     movements: [],
+    readingLogs: [],
+    readingFloorXpAwarded: false,
     dinnerSkipped: false,
     dinnerOutMode: false,
     restDay: false,
@@ -572,6 +635,34 @@ export function getDailyTotals(day: DayRecord | undefined) {
   };
 }
 
+export function getDailyReadingPages(day: DayRecord | undefined): number {
+  return Math.max(
+    0,
+    (day?.readingLogs ?? []).reduce((sum, e) => sum + e.pagesDelta, 0)
+  );
+}
+
+export function computeReadingStreak(
+  days: Record<string, DayRecord>,
+  minPages = 5,
+  today: Date = new Date()
+): number {
+  let streak = 0;
+  const todayDone = getDailyReadingPages(days[getTodayKey(today)]) >= minPages;
+  const startOffset = todayDone ? 0 : 1;
+  for (let i = startOffset; i < 90; i++) {
+    const d = new Date(today);
+    d.setDate(d.getDate() - i);
+    const rec = days[getTodayKey(d)];
+    if (getDailyReadingPages(rec) >= minPages) {
+      streak++;
+    } else {
+      break;
+    }
+  }
+  return streak;
+}
+
 export function computeStreakAndCombo(
   days: Record<string, DayRecord>,
   today: Date = new Date()
@@ -631,7 +722,14 @@ export function computeMonarchStats(state: MonarchPersistedState): PlayerStats {
   const totalMealsLogged = 120 + allDays.reduce((s, d) => s + d.foods.length, 0);
   const totalCheckins =
     82 +
-    allDays.reduce((s, d) => s + d.movements.length + (d.dinnerSkipped ? 1 : 0), 0);
+    allDays.reduce(
+      (s, d) =>
+        s +
+        d.movements.length +
+        (d.dinnerSkipped ? 1 : 0) +
+        (getDailyReadingPages(d) >= (state.readingMinPages || 5) ? 1 : 0),
+      0
+    );
   const { activeStreak, fastingStreak, comboDay } = computeStreakAndCombo(state.days);
   const lvl = levelFromMonarchXp(state.legacyXp + state.earnedXp).level;
 
@@ -812,6 +910,9 @@ const INITIAL_PERSISTED_STATE: MonarchPersistedState = {
   activeSession: null,
   savedFoods: [],
   weeklyMealPlan: DEFAULT_WEEKLY_MEAL_PLAN,
+  books: [],
+  activeBookId: null,
+  readingMinPages: 5,
   days: {},
 };
 
@@ -1461,6 +1562,242 @@ export const useMonarchStore = create<MonarchStore>()(
         });
       },
 
+      addBook: (input) => {
+        const state = get();
+        const startPage = Math.max(0, Math.round(input.currentPage ?? 0));
+        const totalPages =
+          input.totalPages && input.totalPages > 0
+            ? Math.round(input.totalPages)
+            : undefined;
+        const item: BookItem = {
+          id: makeId("bk"),
+          title: input.title.trim() || "Untitled Book",
+          author: input.author?.trim() || undefined,
+          currentPage: startPage,
+          totalPages,
+          status:
+            totalPages && startPage >= totalPages ? "finished" : "reading",
+          startedAtIso: new Date().toISOString(),
+          finishedAtIso:
+            totalPages && startPage >= totalPages
+              ? new Date().toISOString()
+              : undefined,
+        };
+        set({
+          books: [item, ...(state.books ?? [])],
+          activeBookId: item.id,
+        });
+        return item;
+      },
+
+      setActiveBook: (bookId) => {
+        const state = get();
+        const books = state.books ?? [];
+        if (!books.some((b) => b.id === bookId)) return;
+        set({
+          activeBookId: bookId,
+          books: books.map((b) =>
+            b.id === bookId && b.status === "paused"
+              ? { ...b, status: "reading" }
+              : b
+          ),
+        });
+      },
+
+      updateBookMeta: (bookId, patch) => {
+        const state = get();
+        const books = state.books ?? [];
+        set({
+          books: books.map((b) => {
+            if (b.id !== bookId) return b;
+            const nextStatus = patch.status ?? b.status;
+            const nextTotal =
+              patch.totalPages !== undefined
+                ? patch.totalPages > 0
+                  ? Math.round(patch.totalPages)
+                  : undefined
+                : b.totalPages;
+            return {
+              ...b,
+              title: patch.title !== undefined ? patch.title.trim() || b.title : b.title,
+              author:
+                patch.author !== undefined
+                  ? patch.author.trim() || undefined
+                  : b.author,
+              totalPages: nextTotal,
+              status: nextStatus,
+              finishedAtIso:
+                nextStatus === "finished"
+                  ? b.finishedAtIso ?? new Date().toISOString()
+                  : undefined,
+            };
+          }),
+        });
+      },
+
+      deleteBook: (bookId) => {
+        const state = get();
+        const remaining = (state.books ?? []).filter((b) => b.id !== bookId);
+        const nextActive =
+          state.activeBookId === bookId
+            ? remaining.find((b) => b.status === "reading")?.id ??
+              remaining[0]?.id ??
+              null
+            : state.activeBookId;
+        set({
+          books: remaining,
+          activeBookId: nextActive,
+        });
+      },
+
+      logBookPage: (bookId, newPage) => {
+        const state = get();
+        const books = state.books ?? [];
+        const book = books.find((b) => b.id === bookId);
+        const key = getTodayKey();
+        const existing = state.days[key] ?? createEmptyDay(key);
+        const minPages = state.readingMinPages || 5;
+
+        if (!book) {
+          return {
+            pagesDelta: 0,
+            todayPages: getDailyReadingPages(existing),
+            floorJustCleared: false,
+            xpAwarded: 0,
+            finishedBook: false,
+          };
+        }
+
+        const cleanPage = Math.max(0, Math.round(newPage));
+        const pagesDelta = cleanPage - book.currentPage;
+        if (pagesDelta === 0) {
+          return {
+            pagesDelta: 0,
+            todayPages: getDailyReadingPages(existing),
+            floorJustCleared: false,
+            xpAwarded: 0,
+            finishedBook: false,
+          };
+        }
+
+        const entry: ReadingLogEntry = {
+          id: makeId("rd"),
+          timeIso: new Date().toISOString(),
+          bookId: book.id,
+          bookTitle: book.title,
+          fromPage: book.currentPage,
+          toPage: cleanPage,
+          pagesDelta,
+        };
+
+        const finishedBook = Boolean(book.totalPages && cleanPage >= book.totalPages);
+        const nextReadingLogs = [...(existing.readingLogs ?? []), entry];
+        const nextDay: DayRecord = {
+          ...existing,
+          readingLogs: nextReadingLogs,
+        };
+        const todayPages = getDailyReadingPages(nextDay);
+
+        let xpAwarded = 0;
+        let floorJustCleared = false;
+        let readingFloorXpAwarded = Boolean(existing.readingFloorXpAwarded);
+        if (todayPages >= minPages && !readingFloorXpAwarded) {
+          xpAwarded = 25;
+          floorJustCleared = true;
+          readingFloorXpAwarded = true;
+        }
+        nextDay.readingFloorXpAwarded = readingFloorXpAwarded;
+
+        const nowIso = new Date().toISOString();
+        set({
+          earnedXp: state.earnedXp + xpAwarded,
+          pendingSyncDates: enqueuePending(state.pendingSyncDates, key),
+          books: books.map((b) => {
+            if (b.id !== book.id) return b;
+            const nextStatus: BookStatus = finishedBook
+              ? "finished"
+              : b.status === "finished" && b.totalPages && cleanPage < b.totalPages
+                ? "reading"
+                : b.status === "paused"
+                  ? "reading"
+                  : b.status;
+            return {
+              ...b,
+              currentPage: cleanPage,
+              status: nextStatus,
+              finishedAtIso: nextStatus === "finished" ? b.finishedAtIso ?? nowIso : undefined,
+            };
+          }),
+          days: {
+            ...state.days,
+            [key]: nextDay,
+          },
+        });
+
+        return {
+          pagesDelta,
+          todayPages,
+          floorJustCleared,
+          xpAwarded,
+          finishedBook,
+        };
+      },
+
+      logBookPagesDelta: (bookId, deltaPages) => {
+        const state = get();
+        const book = (state.books ?? []).find((b) => b.id === bookId);
+        if (!book) {
+          const existing = state.days[getTodayKey()];
+          return {
+            pagesDelta: 0,
+            todayPages: getDailyReadingPages(existing),
+            floorJustCleared: false,
+            xpAwarded: 0,
+            finishedBook: false,
+          };
+        }
+        return get().logBookPage(bookId, book.currentPage + deltaPages);
+      },
+
+      removeReadingEntry: (dateKey, entryId) => {
+        const state = get();
+        const day = state.days[dateKey];
+        if (!day || !day.readingLogs?.length) return;
+        const target = day.readingLogs.find((r) => r.id === entryId);
+        if (!target) return;
+
+        const nextLogs = day.readingLogs.filter((r) => r.id !== entryId);
+        const books = state.books ?? [];
+        const updatedBooks = books.map((b) => {
+          if (b.id !== target.bookId || b.currentPage !== target.toPage) {
+            return b;
+          }
+          const revertedPage = Math.max(0, target.fromPage);
+          const nextStatus: BookStatus =
+            b.status === "finished" && b.totalPages && revertedPage < b.totalPages
+              ? "reading"
+              : b.status;
+          return {
+            ...b,
+            currentPage: revertedPage,
+            status: nextStatus,
+            finishedAtIso: nextStatus === "finished" ? b.finishedAtIso : undefined,
+          };
+        });
+
+        set({
+          books: updatedBooks,
+          pendingSyncDates: enqueuePending(state.pendingSyncDates, dateKey),
+          days: {
+            ...state.days,
+            [dateKey]: {
+              ...day,
+              readingLogs: nextLogs,
+            },
+          },
+        });
+      },
+
       removeFoodEntry: (dateKey, entryId) => {
         const state = get();
         const day = state.days[dateKey];
@@ -1812,6 +2149,9 @@ export const useMonarchStore = create<MonarchStore>()(
           activeSession: s.activeSession,
           savedFoods: s.savedFoods ?? [],
           weeklyMealPlan: s.weeklyMealPlan ?? DEFAULT_WEEKLY_MEAL_PLAN,
+          books: s.books ?? [],
+          activeBookId: s.activeBookId ?? null,
+          readingMinPages: s.readingMinPages || 5,
           days: s.days,
         };
         return JSON.stringify(snapshot, null, 2);
@@ -1835,6 +2175,17 @@ export const useMonarchStore = create<MonarchStore>()(
             weeklyMealPlan: parsed.weeklyMealPlan
               ? { ...DEFAULT_WEEKLY_MEAL_PLAN, ...parsed.weeklyMealPlan }
               : INITIAL_PERSISTED_STATE.weeklyMealPlan,
+            books: Array.isArray(parsed.books)
+              ? parsed.books
+              : INITIAL_PERSISTED_STATE.books,
+            activeBookId:
+              typeof parsed.activeBookId === "string" || parsed.activeBookId === null
+                ? parsed.activeBookId
+                : null,
+            readingMinPages:
+              typeof parsed.readingMinPages === "number" && parsed.readingMinPages > 0
+                ? parsed.readingMinPages
+                : 5,
           });
           return { ok: true };
         } catch (err) {
@@ -1906,6 +2257,9 @@ export const useMonarchStore = create<MonarchStore>()(
         activeSession: state.activeSession,
         savedFoods: state.savedFoods ?? [],
         weeklyMealPlan: state.weeklyMealPlan ?? DEFAULT_WEEKLY_MEAL_PLAN,
+        books: state.books ?? [],
+        activeBookId: state.activeBookId ?? null,
+        readingMinPages: state.readingMinPages || 5,
         days: state.days,
       }),
     }

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Bluetooth,
+  BookOpen,
   Calendar,
   Check,
   ChevronDown,
@@ -17,6 +18,7 @@ import { CombatSheet, formatRestDuration } from "@/components/combat-sheet";
 import { FuelSheet, tierBadgeStyle } from "@/components/fuel-sheet";
 import { MealPlanSheet } from "@/components/meal-plan-sheet";
 import { MuteToggle } from "@/components/mute-toggle";
+import { ReadingSheet } from "@/components/reading-sheet";
 import { useToastStore } from "@/components/ui/system-toast";
 import { canUseWebBluetooth, readBleScaleWeight } from "@/lib/ble-scale";
 import {
@@ -36,9 +38,11 @@ import {
   type SplitId,
 } from "@/lib/monarch-catalog";
 import {
+  computeReadingStreak,
   computeWeeklyTraining,
   createEmptyDay,
   getAmbientShadow,
+  getDailyReadingPages,
   getDailyTotals,
   getTodayKey,
   MOVEMENT_PRESETS,
@@ -116,6 +120,8 @@ export default function CommandDeckPage() {
   const [switchOpen, setSwitchOpen] = useState(false);
   const [fuelSheetOpen, setFuelSheetOpen] = useState(false);
   const [mealPlanOpen, setMealPlanOpen] = useState(false);
+  const [readingSheetOpen, setReadingSheetOpen] = useState(false);
+  const [readingSheetMode, setReadingSheetMode] = useState<"update" | "add">("update");
   const [stepsSheetOpen, setStepsSheetOpen] = useState(false);
   const [contextSheetOpen, setContextSheetOpen] = useState(false);
   const [weightEditorOpen, setWeightEditorOpen] = useState(false);
@@ -132,6 +138,20 @@ export default function CommandDeckPage() {
   const totals = getDailyTotals(today);
   const weekly = useMemo(() => computeWeeklyTraining(store.days), [store.days]);
   const directive = getAmbientShadow(store);
+
+  const books = store.books ?? [];
+  const activeBook =
+    books.find((b) => b.id === store.activeBookId) ??
+    books.find((b) => b.status === "reading") ??
+    books[0] ??
+    null;
+  const todayPages = getDailyReadingPages(today);
+  const readingMin = store.readingMinPages || 5;
+  const readingDone = todayPages >= readingMin;
+  const readingStreak = useMemo(
+    () => computeReadingStreak(store.days, readingMin),
+    [store.days, readingMin]
+  );
 
   const todayWeekday = getTodayWeekdayKey();
   const weeklyPlan = store.weeklyMealPlan ?? DEFAULT_WEEKLY_MEAL_PLAN;
@@ -379,6 +399,36 @@ export default function CommandDeckPage() {
       variant: "info",
       duration: 2400,
     });
+  }
+
+  function handleQuickPages(delta: number) {
+    if (!activeBook) return;
+    const targetPage = activeBook.currentPage + delta;
+    const res = store.logBookPagesDelta(activeBook.id, delta);
+    if (res.floorJustCleared) {
+      playShadowArise();
+      addToast({
+        title: "DAILY READING FLOOR CLEARED (+25 XP)",
+        message: `${activeBook.title} · now p. ${targetPage} (${res.todayPages}/${readingMin}p today)`,
+        variant: "quest",
+        duration: 2400,
+      });
+    } else if (res.finishedBook) {
+      playShadowArise();
+      addToast({
+        title: `FINISHED: ${activeBook.title.toUpperCase()}`,
+        message: `Reached p. ${targetPage}`,
+        variant: "success",
+      });
+    } else {
+      playQuestComplete();
+      addToast({
+        title: `+${delta} PAGES LOGGED`,
+        message: `${activeBook.title} · now p. ${targetPage} (${res.todayPages}/${readingMin}p today)`,
+        variant: "success",
+        duration: 2000,
+      });
+    }
   }
 
   function handleFoodChip(presetId: string) {
@@ -1168,7 +1218,125 @@ export default function CommandDeckPage() {
         )}
       </section>
 
-      {/* MODULAR BOTTOM SHEETS: PLATE BUILDER & WEEKLY MEAL PLAN */}
+      {/* 5. READING CARD */}
+      <section className="rounded-2xl bg-[var(--surface-1)] border border-[var(--border-subtle)] p-5 space-y-3">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <BookOpen size={15} className="text-[#60a5fa]" />
+            <h2 className="text-base font-semibold text-[var(--text-primary)]">Reading</h2>
+            {readingStreak > 0 && (
+              <span className="font-mono text-[11px] text-[var(--text-muted)]">
+                · {readingStreak}d
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span
+              className={`px-2.5 py-1 rounded-full text-[11px] font-mono font-medium ${
+                readingDone
+                  ? "bg-[#22c55e]/15 text-[#4ade80] border border-[#22c55e]/30"
+                  : "bg-[var(--surface-2)] text-[var(--text-secondary)]"
+              }`}
+            >
+              {todayPages} / {readingMin} pages
+            </span>
+            <button
+              onClick={() => {
+                setReadingSheetMode(activeBook ? "update" : "add");
+                setReadingSheetOpen(true);
+              }}
+              className="px-2.5 py-1 rounded-full bg-[var(--surface-2)] hover:bg-[var(--surface-3)] text-[11px] font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
+            >
+              Books
+            </button>
+          </div>
+        </div>
+
+        {activeBook ? (
+          <>
+            <div className="space-y-1.5">
+              <div className="flex items-baseline justify-between gap-2">
+                <p className="text-sm font-medium text-[var(--text-primary)] truncate">
+                  {activeBook.title}
+                </p>
+                <span className="font-mono tabular-nums text-xs text-[var(--text-secondary)] shrink-0">
+                  p. {activeBook.currentPage}
+                  {activeBook.totalPages ? ` / ${activeBook.totalPages}` : ""}
+                </span>
+              </div>
+              {activeBook.totalPages && activeBook.totalPages > 0 && (
+                <div className="h-1 rounded-full bg-[var(--surface-0)] overflow-hidden">
+                  <div
+                    className="h-full progress-blue transition-all duration-300"
+                    style={{
+                      width: `${Math.min(
+                        100,
+                        Math.round((activeBook.currentPage / activeBook.totalPages) * 100)
+                      )}%`,
+                    }}
+                  />
+                </div>
+              )}
+            </div>
+
+            <div className="grid grid-cols-3 gap-2">
+              <button
+                onClick={() => handleQuickPages(5)}
+                className="h-10 rounded-xl bg-[var(--surface-2)] hover:bg-[var(--surface-3)] text-xs font-medium text-[var(--text-primary)] transition-colors"
+              >
+                +5 pages
+              </button>
+              <button
+                onClick={() => handleQuickPages(10)}
+                className="h-10 rounded-xl bg-[var(--surface-2)] hover:bg-[var(--surface-3)] text-xs font-medium text-[var(--text-primary)] transition-colors"
+              >
+                +10 pages
+              </button>
+              <button
+                onClick={() => {
+                  setReadingSheetMode("update");
+                  setReadingSheetOpen(true);
+                }}
+                className="h-10 rounded-xl bg-[var(--surface-0)] hover:bg-[var(--surface-2)] border border-[var(--border-subtle)] text-xs font-medium text-[#60a5fa] transition-colors"
+              >
+                Update page
+              </button>
+            </div>
+
+            {(today.readingLogs ?? []).length > 0 && (
+              <p className="text-[11px] text-[var(--text-muted)] truncate">
+                Latest:{" "}
+                {(() => {
+                  const last = (today.readingLogs ?? [])[
+                    (today.readingLogs ?? []).length - 1
+                  ];
+                  const sign =
+                    last.pagesDelta > 0 ? `+${last.pagesDelta}` : `${last.pagesDelta}`;
+                  return `p. ${last.fromPage} -> ${last.toPage} (${sign}p)`;
+                })()}
+              </p>
+            )}
+          </>
+        ) : (
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-xs text-[var(--text-muted)]">
+              Track your current book &amp; page (min {readingMin} pages/day).
+            </p>
+            <button
+              onClick={() => {
+                setReadingSheetMode("add");
+                setReadingSheetOpen(true);
+              }}
+              className="shrink-0 h-9 px-3 rounded-xl bg-[var(--surface-2)] hover:bg-[var(--surface-3)] text-xs font-medium text-[var(--text-primary)] inline-flex items-center gap-1 transition-colors"
+            >
+              <Plus size={13} />
+              <span>Add current book</span>
+            </button>
+          </div>
+        )}
+      </section>
+
+      {/* MODULAR BOTTOM SHEETS: PLATE BUILDER, WEEKLY MEAL PLAN & READING */}
       <FuelSheet
         open={fuelSheetOpen}
         onClose={() => setFuelSheetOpen(false)}
@@ -1176,6 +1344,11 @@ export default function CommandDeckPage() {
       <MealPlanSheet
         open={mealPlanOpen}
         onClose={() => setMealPlanOpen(false)}
+      />
+      <ReadingSheet
+        open={readingSheetOpen}
+        onClose={() => setReadingSheetOpen(false)}
+        initialMode={readingSheetMode}
       />
 
       {/* BOTTOM SHEET: SCALE & BODY COMP */}

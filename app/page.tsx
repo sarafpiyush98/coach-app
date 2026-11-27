@@ -481,10 +481,10 @@ export default function CommandDeckPage() {
     store.setTodayDinnerOutMode(next);
     playSystemPing();
     addToast({
-      title: next ? "DINNER OUT MODE ACTIVE" : "SKIP DINNER DEFAULT RESTORED",
+      title: next ? "OMAD · DINNER OUT MODE" : "OMAD · DAYTIME DEFAULT",
       message: next
-        ? "Coach recalculated evening protein & calorie budget."
-        : "Lock Skip Dinner after 5 PM Seal to earn +30 XP.",
+        ? "Coach recalculated evening OMAD protein & calorie budget."
+        : "Seal your OMAD window cleanly to earn +30 XP.",
       variant: "info",
       duration: 2200,
     });
@@ -1079,13 +1079,13 @@ export default function CommandDeckPage() {
                     ? "bg-[#22c55e]/15 text-[#4ade80] border border-[#22c55e]/30"
                     : "bg-[var(--surface-2)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
               }`}
-              title="Switch today between Skip Dinner & Dinner Out budget"
+              title="Switch today between OMAD Default & Dinner Out budget"
             >
               {dinnerOutMode
-                ? "Dinner out"
+                ? "OMAD · Dinner out"
                 : today.dinnerSkipped
-                  ? "Dinner skipped ✓"
-                  : "Skip dinner"}
+                  ? "OMAD sealed ✓"
+                  : "OMAD · Default"}
             </button>
             <button
               onClick={() => setMealPlanOpen(true)}
@@ -1150,12 +1150,12 @@ export default function CommandDeckPage() {
             {today.dinnerSkipped && !dinnerOutMode ? (
               <>
                 <Check size={15} />
-                <span>Dinner skipped</span>
+                <span>OMAD sealed</span>
               </>
             ) : (
               <>
                 <Lock size={14} />
-                <span>Lock skip dinner</span>
+                <span>Close OMAD</span>
               </>
             )}
           </button>
@@ -1195,7 +1195,14 @@ export default function CommandDeckPage() {
                     <span className="text-[var(--text-primary)] truncate">{entry.label}</span>
                     {entry.slot && (
                       <span className="text-[10px] text-[var(--text-muted)] shrink-0">
-                        · {entry.slot === "seal" ? "5 PM Seal" : entry.slot}
+                        ·{" "}
+                        {entry.slot === "lunch"
+                          ? "OMAD"
+                          : entry.slot === "seal"
+                            ? "Seal"
+                            : entry.slot === "dinner"
+                              ? "Dinner"
+                              : "Extra"}
                       </span>
                     )}
                   </div>

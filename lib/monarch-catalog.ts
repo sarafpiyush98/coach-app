@@ -1971,13 +1971,13 @@ export const FOOD_PRESETS: FoodPreset[] = [
   {
     id: "am_eggs_whey",
     shortLabel: "4 Eggs / 1.5x Whey Primer",
-    spot: "Home Morning Primer",
+    spot: "Extra Protein Primer",
     kcal: 320,
     proteinG: 42,
     contexts: ["cg_home", "hsr_office", "travel"],
     note: "Keep Monster White >= 8h before sleep",
     tags: ["high_protein"],
-    category: "spot",
+    category: "staple",
   },
   {
     id: "hebe_chicken_bowl",
@@ -2322,73 +2322,72 @@ export interface DayMealPlan {
 
 export const DEFAULT_WEEKLY_MEAL_PLAN: Record<WeekdayKey, DayMealPlan> = {
   mon: {
-    focus: "Upper A + HSR Lunch + 5 PM Seal",
+    focus: "OMAD · HSR Hebe's + Whey/Skyr Seal",
     dinnerSkipped: true,
     dinnerOut: false,
     meals: [
-      { id: "mon_1", slot: "primer", presetId: "am_eggs_whey", label: "4 Eggs / 1.5x Whey Primer", kcal: 320, proteinG: 42 },
-      { id: "mon_2", slot: "lunch", presetId: "hebe_salsa_chicken", label: "Hebe's Salsa Egg + Chicken", kcal: 680, proteinG: 65 },
-      { id: "mon_3", slot: "seal", presetId: "whey_skyr_seal", label: "5 PM Seal: 2x Whey + Skyr", kcal: 380, proteinG: 70 },
+      { id: "mon_1", slot: "lunch", presetId: "hebe_salsa_chicken", label: "Hebe's Salsa Egg + Chicken", kcal: 680, proteinG: 65 },
+      { id: "mon_2", slot: "seal", presetId: "whey_skyr_seal", label: "5 PM Seal: 2x Whey + Skyr", kcal: 380, proteinG: 70 },
+      { id: "mon_3", slot: "seal", presetId: "whey_1x", label: "1 Scoop Whey (Water)", kcal: 120, proteinG: 25 },
     ],
   },
   tue: {
-    focus: "Lower A + HSR Skewers + 5 PM Seal",
+    focus: "OMAD · Grill Daddy + Tikka + Seal",
     dinnerSkipped: true,
     dinnerOut: false,
     meals: [
-      { id: "tue_1", slot: "primer", presetId: "am_eggs_whey", label: "4 Eggs / 1.5x Whey Primer", kcal: 320, proteinG: 42 },
-      { id: "tue_2", slot: "lunch", presetId: "grill_daddy_skewers", label: "Grill Daddy Skewers / 1/2 Roast", kcal: 490, proteinG: 48 },
+      { id: "tue_1", slot: "lunch", presetId: "grill_daddy_skewers", label: "Grill Daddy Skewers / 1/2 Roast", kcal: 490, proteinG: 48 },
+      { id: "tue_2", slot: "lunch", presetId: "chicken_tikka_6", label: "Chicken Tikka (6 pcs)", kcal: 320, proteinG: 44 },
       { id: "tue_3", slot: "seal", presetId: "whey_skyr_seal", label: "5 PM Seal: 2x Whey + Skyr", kcal: 380, proteinG: 70 },
     ],
   },
   wed: {
-    focus: "AB's Weekly Proteinmaxx Lunch Raid (OMAD)",
+    focus: "OMAD · AB's Weekly Proteinmaxx Raid",
     dinnerSkipped: true,
     dinnerOut: false,
     meals: [
-      { id: "wed_1", slot: "primer", presetId: "boiled_eggs_2", label: "2 Boiled Eggs", kcal: 155, proteinG: 13 },
-      { id: "wed_2", slot: "lunch", presetId: "abs_omad_raid", label: "AB's Proteinmaxx Lunch Raid", kcal: 1550, proteinG: 160 },
-      { id: "wed_3", slot: "seal", presetId: "diet_coke", label: "Diet Coke / Coke Zero (330 ml)", kcal: 0, proteinG: 0 },
+      { id: "wed_1", slot: "lunch", presetId: "abs_omad_raid", label: "AB's Proteinmaxx Lunch Raid", kcal: 1550, proteinG: 160 },
+      { id: "wed_2", slot: "seal", presetId: "diet_coke", label: "Diet Coke / Coke Zero (330 ml)", kcal: 0, proteinG: 0 },
     ],
   },
   thu: {
-    focus: "Upper B + Cal Burrito + 5 PM Seal",
+    focus: "OMAD · Cal Burrito + Tandoori + Seal",
     dinnerSkipped: true,
     dinnerOut: false,
     meals: [
-      { id: "thu_1", slot: "primer", presetId: "am_eggs_whey", label: "4 Eggs / 1.5x Whey Primer", kcal: 320, proteinG: 42 },
-      { id: "thu_2", slot: "lunch", presetId: "cal_burrito_bowl", label: "Cal Burrito BBQ Bowl", kcal: 550, proteinG: 48 },
+      { id: "thu_1", slot: "lunch", presetId: "cal_burrito_bowl", label: "Cal Burrito BBQ Bowl", kcal: 550, proteinG: 48 },
+      { id: "thu_2", slot: "lunch", presetId: "tandoori_half", label: "Tandoori Chicken (Half)", kcal: 420, proteinG: 56 },
       { id: "thu_3", slot: "seal", presetId: "whey_skyr_seal", label: "5 PM Seal: 2x Whey + Skyr", kcal: 380, proteinG: 70 },
     ],
   },
   fri: {
-    focus: "Lower B + Social Dinner Out Mode",
+    focus: "OMAD · Social Dinner Out",
     dinnerSkipped: false,
     dinnerOut: true,
     meals: [
-      { id: "fri_1", slot: "primer", presetId: "am_eggs_whey", label: "4 Eggs / 1.5x Whey Primer", kcal: 320, proteinG: 42 },
-      { id: "fri_2", slot: "lunch", presetId: "hebe_chicken_bowl", label: "Hebe's Dbl-Chicken Bowl", kcal: 520, proteinG: 50 },
-      { id: "fri_3", slot: "seal", presetId: "pre_social_shield", label: "Pre-Taproom Curd + Whey", kcal: 220, proteinG: 35 },
-      { id: "fri_4", slot: "dinner", presetId: "tandoori_half", label: "Tandoori Chicken (Half)", kcal: 420, proteinG: 56 },
+      { id: "fri_1", slot: "seal", presetId: "pre_social_shield", label: "Pre-Taproom Curd + Whey", kcal: 220, proteinG: 35 },
+      { id: "fri_2", slot: "dinner", presetId: "tandoori_half", label: "Tandoori Chicken (Half)", kcal: 420, proteinG: 56 },
+      { id: "fri_3", slot: "dinner", presetId: "fish_tikka", label: "Tandoori Fish Tikka (1 plate)", kcal: 290, proteinG: 42 },
+      { id: "fri_4", slot: "dinner", presetId: "whey_1x", label: "1 Scoop Whey (Water)", kcal: 120, proteinG: 25 },
     ],
   },
   sat: {
-    focus: "Core + Zone 2 + CG Home Grill",
+    focus: "OMAD · CG Home Grill Stack",
     dinnerSkipped: true,
     dinnerOut: false,
     meals: [
-      { id: "sat_1", slot: "primer", presetId: "am_eggs_whey", label: "4 Eggs / 1.5x Whey Primer", kcal: 320, proteinG: 42 },
-      { id: "sat_2", slot: "lunch", presetId: "khan_saheb_tikka", label: "Khan Saheb Tikka + Charcoal", kcal: 520, proteinG: 65 },
+      { id: "sat_1", slot: "lunch", presetId: "khan_saheb_tikka", label: "Khan Saheb Tikka + Charcoal", kcal: 520, proteinG: 65 },
+      { id: "sat_2", slot: "lunch", presetId: "kfc_smoky_red", label: "KFC Smoky Red (3 pc)", kcal: 480, proteinG: 52 },
       { id: "sat_3", slot: "seal", presetId: "whey_skyr_seal", label: "5 PM Seal: 2x Whey + Skyr", kcal: 380, proteinG: 70 },
     ],
   },
   sun: {
-    focus: "Badminton + Taaza + Controlled Meghana",
+    focus: "OMAD · Post-Badminton Meghana + Seal",
     dinnerSkipped: true,
     dinnerOut: false,
     meals: [
-      { id: "sun_1", slot: "primer", presetId: "taaza_whey", label: "Taaza 2 Idli + Whey/Eggs", kcal: 540, proteinG: 38 },
-      { id: "sun_2", slot: "lunch", presetId: "meghana_half", label: "Meghana Leg + Eggs + 1/2 Rice", kcal: 720, proteinG: 54 },
+      { id: "sun_1", slot: "lunch", presetId: "meghana_half", label: "Meghana Leg + Eggs + 1/2 Rice", kcal: 720, proteinG: 54 },
+      { id: "sun_2", slot: "lunch", presetId: "tandoori_half", label: "Tandoori Chicken (Half)", kcal: 420, proteinG: 56 },
       { id: "sun_3", slot: "seal", presetId: "whey_skyr_seal", label: "5 PM Seal: 2x Whey + Skyr", kcal: 380, proteinG: 70 },
     ],
   },
@@ -2453,15 +2452,20 @@ export function computeNutritionCoachAdvice(params: {
 
   if (consumedKcal === 0) {
     return {
-      headline: nextPlannedMeal
-        ? `Start today clean with ${nextPlannedMeal.label}`
-        : `0 / ${proteinTargetG}g P logged - lock Primer or HSR Lunch first`,
+      headline:
+        currentHour < 12
+          ? "OMAD fast active - zero kcal until your eating window"
+          : currentHour >= 18
+            ? `OMAD Dinner window: ${kcalCeiling} kcal & ${proteinTargetG}g P budget untouched`
+            : nextPlannedMeal
+              ? `OMAD window ready: ${nextPlannedMeal.label}`
+              : `OMAD window open - aim for ${proteinTargetG}g P in 1 sitting`,
       actionTip:
-        currentHour >= 18
-          ? "Evening check-in: log today's meals or tap Build Plate for dinner dishes."
-          : currentHour >= 12
-            ? "Midday already: hit a 48-65g P lunch now so evening protein takes zero stress."
-            : "Anchor 40g+ P before noon to make the 5 PM Seal effortless.",
+        currentHour < 12
+          ? "Stay on water, black coffee, or Monster White (>=8h pre-sleep). Break fast with your full protein-dense OMAD plate."
+          : currentHour >= 18
+            ? "Build your full OMAD dinner plate in Fuel - lead with S-tier grilled/tandoor protein + shake top-up if needed."
+            : "Stack main protein + Whey/Skyr Seal inside your eating window so evening fasting stays effortless.",
       tone: "cobalt",
       remainingKcal,
       remainingProteinG,
@@ -2488,12 +2492,10 @@ export function computeNutritionCoachAdvice(params: {
 
   if (remainingProteinG <= 0) {
     return {
-      headline: `Protein floor locked (${consumedProteinG}g P) with ${remainingKcal} kcal room left`,
+      headline: `OMAD protein locked (${consumedProteinG}g P) with ${remainingKcal} kcal left`,
       actionTip: dinnerOutMode
-        ? `Dinner Out budget: up to ${remainingKcal} kcal. Stick to grilled starters or light dinner; skip mindless desserts.`
-        : dinnerSkipped
-          ? "Skip-Dinner Seal holds cleanly - grab Diet Coke or mint tea if a late craving hits."
-          : `You have ${remainingKcal} kcal spare for a light dinner or social flex.`,
+        ? `Dinner Out budget: up to ${remainingKcal} kcal. Stick to grilled starters; skip mindless desserts.`
+        : "Close your OMAD window cleanly - stick to water or Diet Coke until tomorrow.",
       tone: "emerald",
       remainingKcal,
       remainingProteinG: 0,
@@ -2525,11 +2527,11 @@ export function computeNutritionCoachAdvice(params: {
 
   if (dinnerSkipped && remainingProteinG > 25) {
     return {
-      headline: `Need ${remainingProteinG}g P inside ${remainingKcal} kcal before Skip-Dinner lock`,
+      headline: `Add ${remainingProteinG}g P before closing your OMAD window`,
       actionTip:
         remainingProteinG >= 55
-          ? "Run the 5 PM Seal (2x Whey + Skyr = 70g P / 380 kcal) before 7 PM to clear target without eating dinner."
-          : `Top up with ${remainingProteinG <= 25 ? "1x Whey" : "Chicken Tikka / Whey + Skyr"} and close the kitchen at 7 PM.`,
+          ? "Finish with 2x Whey + Skyr Seal (+70g P / 380 kcal) before closing your OMAD window."
+          : `Top up with ${remainingProteinG <= 25 ? "1x Whey" : "Chicken Tikka / Whey + Skyr"} and seal today's OMAD fast.`,
       tone: currentHour >= 17 ? "amber" : "cobalt",
       remainingKcal,
       remainingProteinG,

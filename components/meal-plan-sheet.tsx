@@ -22,17 +22,17 @@ import {
 import { playQuestComplete, playShadowArise, playSystemPing } from "@/lib/sounds";
 
 const SLOT_ORDER: Record<MealSlot, number> = {
-  primer: 0,
-  lunch: 1,
-  seal: 2,
-  dinner: 3,
+  lunch: 0,
+  seal: 1,
+  dinner: 2,
+  primer: 3,
 };
 
 const SLOT_LABELS: Record<MealSlot, string> = {
-  primer: "Primer",
-  lunch: "Lunch",
-  seal: "5 PM Seal",
-  dinner: "Dinner",
+  lunch: "OMAD Main",
+  seal: "Protein Seal",
+  dinner: "Dinner Out",
+  primer: "Extra / AM",
 };
 
 export function MealPlanSheet({
@@ -192,7 +192,7 @@ export function MealPlanSheet({
     playSystemPing();
     addToast({
       title: "WEEKLY PLAN RESET",
-      message: "Restored Mon-Sun Bangalore cut template.",
+      message: "Restored Mon-Sun OMAD cut plan.",
       variant: "info",
       duration: 2200,
     });
@@ -215,7 +215,7 @@ export function MealPlanSheet({
                 Weekly meal plan
               </h3>
               <p className="text-[11px] text-[var(--text-muted)]">
-                Pre-planned Mon-Sun structure - swap any dish anytime
+                Everyday OMAD structure - swap any dish or flip Dinner Out anytime
               </p>
             </div>
             <div className="flex items-center gap-2">
@@ -299,7 +299,7 @@ export function MealPlanSheet({
                     : "text-[var(--text-secondary)]"
                 }`}
               >
-                Skip Dinner Mode
+                OMAD · Daytime
               </button>
               <button
                 onClick={() => setDayMode("dinner_out")}
@@ -309,7 +309,7 @@ export function MealPlanSheet({
                     : "text-[var(--text-secondary)]"
                 }`}
               >
-                Dinner Out Mode
+                OMAD · Dinner Out
               </button>
             </div>
           </div>
@@ -402,11 +402,11 @@ export function MealPlanSheet({
                 </div>
 
                 <div className="grid grid-cols-4 gap-1 bg-[var(--surface-1)] p-1 rounded-xl">
-                  {(["primer", "lunch", "seal", "dinner"] as const).map((s) => (
+                  {(["lunch", "seal", "dinner", "primer"] as const).map((s) => (
                     <button
                       key={s}
                       onClick={() => setPickSlot(s)}
-                      className={`py-1 rounded-lg text-[11px] font-medium ${
+                      className={`py-1 px-1 rounded-lg text-[11px] font-medium whitespace-nowrap ${
                         pickSlot === s
                           ? "bg-[var(--surface-2)] text-[var(--text-primary)]"
                           : "text-[var(--text-secondary)]"

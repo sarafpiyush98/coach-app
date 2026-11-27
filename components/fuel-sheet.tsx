@@ -42,10 +42,10 @@ interface PlateItem {
 }
 
 const SLOT_OPTIONS: { id: MealSlot; label: string }[] = [
-  { id: "primer", label: "Primer" },
-  { id: "lunch", label: "Lunch" },
-  { id: "seal", label: "5 PM Seal" },
-  { id: "dinner", label: "Dinner" },
+  { id: "lunch", label: "OMAD Main" },
+  { id: "seal", label: "Protein Seal" },
+  { id: "dinner", label: "Dinner Out" },
+  { id: "primer", label: "Extra / AM" },
 ];
 
 export function tierBadgeStyle(tier: "S" | "A" | "B" | "C"): string {
@@ -63,11 +63,8 @@ export function tierBadgeStyle(tier: "S" | "A" | "B" | "C"): string {
 
 function defaultSlotForClock(dinnerOutMode?: boolean): MealSlot {
   const hr = new Date().getHours();
-  if (dinnerOutMode && hr >= 18) return "dinner";
-  if (hr < 11) return "primer";
-  if (hr < 16) return "lunch";
-  if (hr < 19) return "seal";
-  return dinnerOutMode ? "dinner" : "seal";
+  if (dinnerOutMode && hr >= 17) return "dinner";
+  return "lunch";
 }
 
 export function FuelSheet({
@@ -343,7 +340,7 @@ export function FuelSheet({
               <button
                 key={opt.id}
                 onClick={() => setSlot(opt.id)}
-                className={`py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                className={`py-1.5 px-1 rounded-lg text-[11px] sm:text-xs font-medium whitespace-nowrap transition-colors ${
                   slot === opt.id
                     ? "bg-[var(--surface-2)] text-[var(--text-primary)]"
                     : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"

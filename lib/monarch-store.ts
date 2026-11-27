@@ -267,6 +267,7 @@ export interface MonarchPersistedState {
   activeSession: ActiveWorkoutSession | null;
   savedFoods: SavedFoodItem[];
   weeklyMealPlan: Record<WeekdayKey, DayMealPlan>;
+  mealPlanVersion?: number;
   books: BookItem[];
   activeBookId: string | null;
   readingMinPages: number;
@@ -910,6 +911,7 @@ const INITIAL_PERSISTED_STATE: MonarchPersistedState = {
   activeSession: null,
   savedFoods: [],
   weeklyMealPlan: DEFAULT_WEEKLY_MEAL_PLAN,
+  mealPlanVersion: 2,
   books: [],
   activeBookId: null,
   readingMinPages: 5,
@@ -1545,6 +1547,7 @@ export const useMonarchStore = create<MonarchStore>()(
         const basePlan = state.weeklyMealPlan ?? DEFAULT_WEEKLY_MEAL_PLAN;
         const currentDay = basePlan[day] ?? DEFAULT_WEEKLY_MEAL_PLAN[day];
         set({
+          mealPlanVersion: 2,
           weeklyMealPlan: {
             ...DEFAULT_WEEKLY_MEAL_PLAN,
             ...basePlan,
@@ -1559,6 +1562,7 @@ export const useMonarchStore = create<MonarchStore>()(
       resetWeeklyMealPlan: () => {
         set({
           weeklyMealPlan: DEFAULT_WEEKLY_MEAL_PLAN,
+          mealPlanVersion: 2,
         });
       },
 
@@ -2149,6 +2153,7 @@ export const useMonarchStore = create<MonarchStore>()(
           activeSession: s.activeSession,
           savedFoods: s.savedFoods ?? [],
           weeklyMealPlan: s.weeklyMealPlan ?? DEFAULT_WEEKLY_MEAL_PLAN,
+          mealPlanVersion: s.mealPlanVersion ?? 2,
           books: s.books ?? [],
           activeBookId: s.activeBookId ?? null,
           readingMinPages: s.readingMinPages || 5,
@@ -2175,6 +2180,8 @@ export const useMonarchStore = create<MonarchStore>()(
             weeklyMealPlan: parsed.weeklyMealPlan
               ? { ...DEFAULT_WEEKLY_MEAL_PLAN, ...parsed.weeklyMealPlan }
               : INITIAL_PERSISTED_STATE.weeklyMealPlan,
+            mealPlanVersion:
+              typeof parsed.mealPlanVersion === "number" ? parsed.mealPlanVersion : 2,
             books: Array.isArray(parsed.books)
               ? parsed.books
               : INITIAL_PERSISTED_STATE.books,
@@ -2199,12 +2206,30 @@ export const useMonarchStore = create<MonarchStore>()(
     {
       name: "monarch-v2-state",
       storage: createJSONStorage(() => monarchIdbStorage),
+      merge: (persistedState, currentState) => {
+        const persisted =
+          (persistedState as Partial<MonarchPersistedState> | undefined) ?? {};
+        const isLegacyMealPlan =
+          Boolean(persistedState) && (persisted.mealPlanVersion ?? 1) < 2;
+        return {
+          ...currentState,
+          ...persisted,
+          weeklyMealPlan: isLegacyMealPlan
+            ? DEFAULT_WEEKLY_MEAL_PLAN
+            : persisted.weeklyMealPlan ?? DEFAULT_WEEKLY_MEAL_PLAN,
+          mealPlanVersion: 2,
+        };
+      },
       onRehydrateStorage: () => (state) => {
         if (state) {
           if (!state.webhookUrl?.trim()) {
             state.setWebhookUrl(DEFAULT_WEBHOOK_URL);
           }
-          if (!state.weeklyMealPlan || !state.weeklyMealPlan.mon) {
+          if (
+            !state.weeklyMealPlan ||
+            !state.weeklyMealPlan.mon ||
+            (state.mealPlanVersion ?? 1) < 2
+          ) {
             state.resetWeeklyMealPlan();
           }
           const cleanSplit = normalizeSplitId(state.split as unknown as string);
@@ -2257,6 +2282,7 @@ export const useMonarchStore = create<MonarchStore>()(
         activeSession: state.activeSession,
         savedFoods: state.savedFoods ?? [],
         weeklyMealPlan: state.weeklyMealPlan ?? DEFAULT_WEEKLY_MEAL_PLAN,
+        mealPlanVersion: state.mealPlanVersion ?? 2,
         books: state.books ?? [],
         activeBookId: state.activeBookId ?? null,
         readingMinPages: state.readingMinPages || 5,

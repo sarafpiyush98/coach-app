@@ -5,6 +5,7 @@ import { createJSONStorage, persist, type StateStorage } from "zustand/middlewar
 import {
   autoDetectContext,
   CONTEXTS,
+  CORE_SPLIT_ORDER,
   FOOD_PRESETS,
   GATE_RANKS,
   type ArenaId,
@@ -171,12 +172,24 @@ export interface BenchBest {
   updatedAt?: string;
 }
 
+export interface ExerciseProgress {
+  exerciseId: string;
+  lastWeightKg: number;
+  lastReps: number;
+  bestWeightKg: number;
+  bestReps: number;
+  bestE1rm: number;
+  lastDate: string;
+  sessionsCount: number;
+}
+
 export interface ActiveWorkoutSession {
   date: string;
   split: SplitId;
   arena: ArenaId;
   gateRank: GateRankId;
   completedSets: Record<string, boolean[]>;
+  draftLoads?: Record<string, { weightKg: number; reps: number }>;
   benchWeight: number;
   benchReps: number;
   lastSetAtMs: number | null;
@@ -203,6 +216,7 @@ export interface MonarchPersistedState {
   lastSyncedAt: string | null;
   pendingSyncDates: string[];
   benchBest: BenchBest;
+  exerciseLogs: Record<string, ExerciseProgress>;
   kiliMeters: number;
   lateNightsSaved: number;
   webhookUrl: string;
@@ -222,6 +236,7 @@ export interface MonarchActions {
   toggleDebloat: () => void;
   toggleExerciseSwap: (exerciseId: string) => void;
   syncActiveSession: (patch: Partial<ActiveWorkoutSession> & { reset?: boolean }) => void;
+  setActiveDraftLoad: (exKey: string, weightKg: number, reps: number) => void;
   toggleActiveSet: (
     meta: { split: SplitId; arena: ArenaId; gateRank: GateRankId; exId: string; setIdx: number; totalSetsForEx: number }
   ) => { turnedOn: boolean };
@@ -235,8 +250,20 @@ export interface MonarchActions {
     setsCompleted: number;
     benchWeightKg?: number;
     benchReps?: number;
+    loggedExercises?: Array<{
+      key: string;
+      weightKg: number;
+      reps: number;
+      isBench?: boolean;
+    }>;
     verticalGainM?: number;
-  }) => { xpAwarded: number; isPr: boolean; newE1rm?: number };
+  }) => {
+    xpAwarded: number;
+    isPr: boolean;
+    prsHit: number;
+    newE1rm?: number;
+    nextSplit: SplitId;
+  };
   logQuickMovement: (kind: MovementKind) => { xpAwarded: number; verticalGainM: number };
   logFoodPreset: (presetId: string, multiplier?: number) => {
     xpAwarded: number;
@@ -294,6 +321,108 @@ export function createEmptyDay(date: string): DayRecord {
 export function epley1Rm(weightKg: number, reps: number): number {
   if (reps <= 1) return Math.round(weightKg * 10) / 10;
   return Math.round(weightKg * (1 + reps / 30) * 10) / 10;
+}
+
+export function normalizeSplitId(raw: string | undefined): SplitId {
+  if (
+    raw === "upper_a" ||
+    raw === "lower_a" ||
+    raw === "upper_b" ||
+    raw === "lower_b" ||
+    raw === "full_body_plus" ||
+    raw === "cardio_pool"
+  ) {
+    return raw;
+  }
+  if (raw === "push") return "upper_a";
+  if (raw === "pull") return "upper_b";
+  if (raw === "legs") return "lower_a";
+  if (raw === "pool_steps") return "cardio_pool";
+  return "upper_a";
+}
+
+export function normalizeGateRankId(raw: string | undefined): GateRankId {
+  if (raw === "low_time_2x" || raw === "regular_3x15") return raw;
+  if (raw === "floor_5m" || raw === "express_25m") return "low_time_2x";
+  return "regular_3x15";
+}
+
+export interface WeeklyTrainingSummary {
+  completedThisWeek: Partial<Record<SplitId, number>>;
+  coreDoneCount: number;
+  bonusDoneCount: number;
+  totalSessionsThisWeek: number;
+  nextCoreSplit: SplitId;
+}
+
+export function computeWeeklyTraining(
+  days: Record<string, DayRecord>,
+  today: Date = new Date()
+): WeeklyTrainingSummary {
+  const localToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const dayOfWeek = localToday.getDay(); // 0=Sun..6=Sat
+  const offsetFromMon = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+  const monday = new Date(localToday);
+  monday.setDate(localToday.getDate() - offsetFromMon);
+
+  const completedThisWeek: Partial<Record<SplitId, number>> = {};
+  let totalSessionsThisWeek = 0;
+
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(monday);
+    d.setDate(monday.getDate() + i);
+    const rec = days[getTodayKey(d)];
+    if (!rec) continue;
+    for (const w of rec.workouts ?? []) {
+      const sp = normalizeSplitId(w.split as unknown as string);
+      completedThisWeek[sp] = (completedThisWeek[sp] ?? 0) + 1;
+      totalSessionsThisWeek += 1;
+    }
+  }
+
+  const coreDoneCount = CORE_SPLIT_ORDER.filter(
+    (sp) => (completedThisWeek[sp] ?? 0) > 0
+  ).length;
+  const bonusDoneCount =
+    (completedThisWeek.full_body_plus ?? 0) +
+    (completedThisWeek.cardio_pool ?? 0);
+
+  // Determine next core split from most recent core workout in last 21 days
+  let lastCore: SplitId | null = null;
+  for (let i = 0; i < 21 && !lastCore; i++) {
+    const d = new Date(localToday);
+    d.setDate(localToday.getDate() - i);
+    const rec = days[getTodayKey(d)];
+    const workouts = rec?.workouts ?? [];
+    for (let j = workouts.length - 1; j >= 0; j--) {
+      const norm = normalizeSplitId(workouts[j].split as unknown as string);
+      if (CORE_SPLIT_ORDER.includes(norm)) {
+        lastCore = norm;
+        break;
+      }
+    }
+  }
+
+  let nextCoreSplit: SplitId = "upper_a";
+  if (lastCore) {
+    const idx = CORE_SPLIT_ORDER.indexOf(lastCore);
+    const rotated = CORE_SPLIT_ORDER[(idx + 1) % CORE_SPLIT_ORDER.length];
+    if ((completedThisWeek[rotated] ?? 0) > 0 && coreDoneCount < 4) {
+      nextCoreSplit =
+        CORE_SPLIT_ORDER.find((sp) => (completedThisWeek[sp] ?? 0) === 0) ??
+        rotated;
+    } else {
+      nextCoreSplit = rotated;
+    }
+  }
+
+  return {
+    completedThisWeek,
+    coreDoneCount,
+    bonusDoneCount,
+    totalSessionsThisWeek,
+    nextCoreSplit,
+  };
 }
 
 /**
@@ -566,9 +695,9 @@ export const MOVEMENT_PRESETS: Record<
 
 const INITIAL_PERSISTED_STATE: MonarchPersistedState = {
   context: typeof window !== "undefined" ? autoDetectContext() : "cg_home",
-  split: "push",
+  split: "upper_a",
   arena: "cg_gym",
-  gateRank: "express_25m",
+  gateRank: "regular_3x15",
   lowMana: false,
   debloatMode: false,
   legacyXp: 4850,
@@ -585,6 +714,18 @@ const INITIAL_PERSISTED_STATE: MonarchPersistedState = {
   lastSyncedAt: null,
   pendingSyncDates: [],
   benchBest: { weightKg: 50, reps: 15, e1rm: 75, updatedAt: "2026-11-26" },
+  exerciseLogs: {
+    cg_bench: {
+      exerciseId: "cg_bench",
+      lastWeightKg: 50,
+      lastReps: 15,
+      bestWeightKg: 50,
+      bestReps: 15,
+      bestE1rm: 75,
+      lastDate: "2026-11-26",
+      sessionsCount: 1,
+    },
+  },
   kiliMeters: 1240,
   lateNightsSaved: 6,
   webhookUrl: DEFAULT_WEBHOOK_URL,
@@ -621,7 +762,7 @@ export const useMonarchStore = create<MonarchStore>()(
       toggleLowMana: () =>
         set((s) => ({
           lowMana: !s.lowMana,
-          gateRank: !s.lowMana ? "floor_5m" : s.gateRank,
+          gateRank: !s.lowMana ? "low_time_2x" : s.gateRank,
         })),
 
       toggleDebloat: () => set((s) => ({ debloatMode: !s.debloatMode })),
@@ -647,8 +788,9 @@ export const useMonarchStore = create<MonarchStore>()(
                 arena: s.arena,
                 gateRank: s.gateRank,
                 completedSets: {},
+                draftLoads: {},
                 benchWeight: s.benchBest.weightKg || 55,
-                benchReps: 8,
+                benchReps: 10,
                 lastSetAtMs: null,
               };
         const { reset: _reset, ...rest } = patch;
@@ -657,6 +799,39 @@ export const useMonarchStore = create<MonarchStore>()(
             ...base,
             ...rest,
             date: key,
+          },
+        });
+      },
+
+      setActiveDraftLoad: (exKey, weightKg, reps) => {
+        const key = getTodayKey();
+        const s = get();
+        const current = s.activeSession;
+        const base: ActiveWorkoutSession =
+          current && current.date === key
+            ? current
+            : {
+                date: key,
+                split: s.split,
+                arena: s.arena,
+                gateRank: s.gateRank,
+                completedSets: {},
+                draftLoads: {},
+                benchWeight: s.benchBest.weightKg || 55,
+                benchReps: 10,
+                lastSetAtMs: null,
+              };
+        const cleanWeight = Math.round(Math.max(0, weightKg) * 10) / 10;
+        const cleanReps = Math.max(1, Math.round(reps));
+        set({
+          activeSession: {
+            ...base,
+            benchWeight: exKey === "cg_bench" ? cleanWeight : base.benchWeight,
+            benchReps: exKey === "cg_bench" ? cleanReps : base.benchReps,
+            draftLoads: {
+              ...(base.draftLoads ?? {}),
+              [exKey]: { weightKg: cleanWeight, reps: cleanReps },
+            },
           },
         });
       },
@@ -677,8 +852,9 @@ export const useMonarchStore = create<MonarchStore>()(
                 arena,
                 gateRank,
                 completedSets: {},
+                draftLoads: {},
                 benchWeight: s.benchBest.weightKg || 55,
-                benchReps: 8,
+                benchReps: 10,
                 lastSetAtMs: null,
               };
 
@@ -743,6 +919,7 @@ export const useMonarchStore = create<MonarchStore>()(
         setsCompleted,
         benchWeightKg,
         benchReps,
+        loggedExercises,
         verticalGainM,
       }) => {
         const key = getTodayKey();
@@ -751,28 +928,68 @@ export const useMonarchStore = create<MonarchStore>()(
         const rankDef = GATE_RANKS.find((g) => g.id === gateRank) ?? GATE_RANKS[1];
         let xpAwarded = rankDef.baseXp;
         let isPr = false;
+        let prsHit = 0;
         let newE1rm: number | undefined;
         let nextBench = state.benchBest;
         let nextTotalPrs = state.totalPrs;
+        const nextExerciseLogs: Record<string, ExerciseProgress> = {
+          ...(state.exerciseLogs ?? {}),
+        };
 
-        if (benchWeightKg && benchReps && benchWeightKg > 0 && benchReps > 0) {
-          newE1rm = epley1Rm(benchWeightKg, benchReps);
-          if (newE1rm > state.benchBest.e1rm) {
-            isPr = true;
-            xpAwarded += 75;
+        const entries =
+          loggedExercises && loggedExercises.length > 0
+            ? loggedExercises
+            : benchWeightKg && benchReps && benchWeightKg > 0 && benchReps > 0
+              ? [{ key: "cg_bench", weightKg: benchWeightKg, reps: benchReps, isBench: true }]
+              : [];
+
+        let effBenchWeight = benchWeightKg;
+        let effBenchReps = benchReps;
+
+        for (const item of entries) {
+          if (!item.key || item.weightKg <= 0 || item.reps <= 0) continue;
+          const prev = nextExerciseLogs[item.key];
+          const itemE1rm = epley1Rm(item.weightKg, item.reps);
+          const isBenchItem = Boolean(item.isBench || item.key === "cg_bench");
+
+          if (isBenchItem) {
+            effBenchWeight = item.weightKg;
+            effBenchReps = item.reps;
+            newE1rm = itemE1rm;
+            if (itemE1rm > nextBench.e1rm) {
+              isPr = true;
+              prsHit += 1;
+              xpAwarded += 75;
+              nextTotalPrs += 1;
+              nextBench = {
+                weightKg: item.weightKg,
+                reps: item.reps,
+                e1rm: itemE1rm,
+                updatedAt: key,
+              };
+            }
+          } else if (prev && itemE1rm > prev.bestE1rm) {
+            prsHit += 1;
+            xpAwarded += 25;
             nextTotalPrs += 1;
-            nextBench = {
-              weightKg: benchWeightKg,
-              reps: benchReps,
-              e1rm: newE1rm,
-              updatedAt: key,
-            };
           }
+
+          const beatBest = !prev || itemE1rm >= prev.bestE1rm;
+          nextExerciseLogs[item.key] = {
+            exerciseId: item.key,
+            lastWeightKg: item.weightKg,
+            lastReps: item.reps,
+            bestWeightKg: beatBest ? item.weightKg : prev.bestWeightKg,
+            bestReps: beatBest ? item.reps : prev.bestReps,
+            bestE1rm: prev ? Math.max(prev.bestE1rm, itemE1rm) : itemE1rm,
+            lastDate: key,
+            sessionsCount: (prev?.sessionsCount ?? 0) + 1,
+          };
         }
 
         const gainM =
           verticalGainM ??
-          (split === "pool_steps" ? 65 : gateRank === "full_45m" ? 45 : 25);
+          (split === "cardio_pool" ? 65 : gateRank === "regular_3x15" ? 45 : 30);
 
         const summary: WorkoutLogSummary = {
           id: makeId("wo"),
@@ -781,28 +998,34 @@ export const useMonarchStore = create<MonarchStore>()(
           arena,
           gateRank,
           setsCompleted,
-          benchWeightKg,
-          benchReps,
+          benchWeightKg: effBenchWeight,
+          benchReps: effBenchReps,
           e1rm: newE1rm,
           verticalGainM: gainM,
           xpAwarded,
         };
 
+        const updatedDays = {
+          ...state.days,
+          [key]: {
+            ...existing,
+            survivalFloorCleared: true,
+            workouts: [...existing.workouts, summary],
+          },
+        };
+        const weeklyAfter = computeWeeklyTraining(updatedDays);
+        const nextSplit = weeklyAfter.nextCoreSplit;
+
         set({
+          split: nextSplit,
           earnedXp: state.earnedXp + xpAwarded,
           totalPrs: nextTotalPrs,
           benchBest: nextBench,
+          exerciseLogs: nextExerciseLogs,
           kiliMeters: state.kiliMeters + gainM,
           activeSession: null,
           pendingSyncDates: enqueuePending(state.pendingSyncDates, key),
-          days: {
-            ...state.days,
-            [key]: {
-              ...existing,
-              survivalFloorCleared: true,
-              workouts: [...existing.workouts, summary],
-            },
-          },
+          days: updatedDays,
         });
 
         fireWebhookIfConfigured(
@@ -812,7 +1035,7 @@ export const useMonarchStore = create<MonarchStore>()(
           get().syncWithLedger
         );
 
-        return { xpAwarded, isPr, newE1rm };
+        return { xpAwarded, isPr, prsHit, newE1rm, nextSplit };
       },
 
       logQuickMovement: (kind) => {
@@ -1314,6 +1537,7 @@ export const useMonarchStore = create<MonarchStore>()(
           lastSyncedAt: s.lastSyncedAt,
           pendingSyncDates: s.pendingSyncDates,
           benchBest: s.benchBest,
+          exerciseLogs: s.exerciseLogs,
           kiliMeters: s.kiliMeters,
           lateNightsSaved: s.lateNightsSaved,
           webhookUrl: s.webhookUrl,
@@ -1333,6 +1557,9 @@ export const useMonarchStore = create<MonarchStore>()(
           set({
             ...INITIAL_PERSISTED_STATE,
             ...parsed,
+            split: normalizeSplitId(parsed.split as unknown as string),
+            gateRank: normalizeGateRankId(parsed.gateRank as unknown as string),
+            exerciseLogs: parsed.exerciseLogs ?? INITIAL_PERSISTED_STATE.exerciseLogs,
           });
           return { ok: true };
         } catch (err) {
@@ -1347,8 +1574,28 @@ export const useMonarchStore = create<MonarchStore>()(
       name: "monarch-v2-state",
       storage: createJSONStorage(() => monarchIdbStorage),
       onRehydrateStorage: () => (state) => {
-        if (state && !state.webhookUrl?.trim()) {
-          state.setWebhookUrl(DEFAULT_WEBHOOK_URL);
+        if (state) {
+          if (!state.webhookUrl?.trim()) {
+            state.setWebhookUrl(DEFAULT_WEBHOOK_URL);
+          }
+          const cleanSplit = normalizeSplitId(state.split as unknown as string);
+          const cleanRank = normalizeGateRankId(state.gateRank as unknown as string);
+          if (cleanSplit !== state.split) state.setSplit(cleanSplit);
+          if (cleanRank !== state.gateRank) state.setGateRank(cleanRank);
+          if (state.activeSession) {
+            const normSessSplit = normalizeSplitId(
+              state.activeSession.split as unknown as string
+            );
+            const normSessRank = normalizeGateRankId(
+              state.activeSession.gateRank as unknown as string
+            );
+            if (
+              normSessSplit !== state.activeSession.split ||
+              normSessRank !== state.activeSession.gateRank
+            ) {
+              state.discardActiveSession();
+            }
+          }
         }
         state?.setHasHydrated(true);
       },
@@ -1373,6 +1620,7 @@ export const useMonarchStore = create<MonarchStore>()(
         lastSyncedAt: state.lastSyncedAt,
         pendingSyncDates: state.pendingSyncDates,
         benchBest: state.benchBest,
+        exerciseLogs: state.exerciseLogs,
         kiliMeters: state.kiliMeters,
         lateNightsSaved: state.lateNightsSaved,
         webhookUrl: state.webhookUrl,

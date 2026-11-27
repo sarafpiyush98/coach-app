@@ -32,6 +32,7 @@ import {
 } from "@/lib/monarch-catalog";
 import {
   computeStreakAndCombo,
+  computeWeeklyTraining,
   createEmptyDay,
   getAmbientShadow,
   getDailyTotals,
@@ -72,6 +73,7 @@ export default function CommandDeckPage() {
   const totalXp = store.legacyXp + store.earnedXp;
   const lvl = levelFromMonarchXp(totalXp);
   const streak = computeStreakAndCombo(store.days);
+  const weekly = useMemo(() => computeWeeklyTraining(store.days), [store.days]);
   const directive = getAmbientShadow(store);
 
   const activeResume = useMemo(() => {
@@ -354,6 +356,12 @@ export default function CommandDeckPage() {
 
   const activeRankSpec =
     GATE_RANKS.find((g) => g.id === store.gateRank) ?? GATE_RANKS[1];
+  const activeSplitSpec =
+    SPLITS.find((s) => s.id === store.split) ?? SPLITS[0];
+  const nextCoreSpec =
+    SPLITS.find((s) => s.id === weekly.nextCoreSplit) ?? SPLITS[0];
+  const coreSplits = SPLITS.filter((s) => s.tier === "core");
+  const bonusSplits = SPLITS.filter((s) => s.tier === "bonus");
   const workoutDoneToday =
     today.survivalFloorCleared ||
     today.workouts.length > 0 ||
@@ -615,22 +623,41 @@ export default function CommandDeckPage() {
           </button>
         )}
 
-        {/* Effort Tier */}
-        <div className="mt-2.5 grid grid-cols-3 gap-1.5">
+        {/* Weekly Rotation Tracker (Mon-Sun: 4 Core + 2 Bonus) */}
+        <div className="mt-2.5 flex items-center justify-between text-[10px] font-[family-name:var(--font-geist-mono)] text-[var(--text-secondary)]">
+          <span>
+            WEEKLY ROTATION ·{" "}
+            <strong className="text-[var(--text-primary)]">
+              {weekly.coreDoneCount}/4 CORE
+            </strong>
+            {weekly.bonusDoneCount > 0 ? ` + ${weekly.bonusDoneCount} BONUS` : ""}
+          </span>
+          <button
+            onClick={() => store.setSplit(weekly.nextCoreSplit)}
+            className="text-[#60a5fa] hover:underline font-bold"
+          >
+            NEXT: {nextCoreSpec.shortLabel}
+          </button>
+        </div>
+
+        {/* 2 Volume Modes: Low Time 2x Fail vs Regular 3x15 */}
+        <div className="mt-2 grid grid-cols-2 gap-1.5">
           {GATE_RANKS.map((rank) => {
             const active = store.gateRank === rank.id;
             return (
               <button
                 key={rank.id}
                 onClick={() => store.setGateRank(rank.id)}
-                className={`py-1.5 px-2 rounded-lg border text-left transition-colors ${
+                className={`py-1.5 px-2.5 rounded-lg border text-left transition-colors ${
                   active
                     ? "bg-[#3b6cf6]/20 border-[#3b6cf6] text-white"
                     : "bg-[var(--surface-2)]/60 border-[var(--border-subtle)] text-[var(--text-secondary)]"
                 }`}
               >
-                <div className="font-[family-name:var(--font-rajdhani)] text-xs font-bold uppercase">
-                  {rank.label}
+                <div className="flex items-center justify-between gap-1">
+                  <span className="font-[family-name:var(--font-rajdhani)] text-xs font-bold uppercase">
+                    {rank.tag} · {rank.label}
+                  </span>
                 </div>
                 <div className="font-[family-name:var(--font-geist-mono)] text-[9px] opacity-80">
                   {rank.duration} · +{rank.baseXp}XP
@@ -640,21 +667,53 @@ export default function CommandDeckPage() {
           })}
         </div>
 
-        {/* Split & Arena Pickers */}
+        {/* 4 Core Rotation Splits (U-A, L-A, U-B, L-B) */}
         <div className="mt-2 grid grid-cols-4 gap-1.5">
-          {SPLITS.map((sp) => (
-            <button
-              key={sp.id}
-              onClick={() => store.setSplit(sp.id)}
-              className={`py-1.5 rounded-md font-[family-name:var(--font-rajdhani)] text-[11px] font-bold uppercase border ${
-                store.split === sp.id
-                  ? "bg-[var(--surface-3)] border-[#3b6cf6]/70 text-white"
-                  : "bg-[var(--surface-0)] border-[var(--border-subtle)] text-[var(--text-muted)]"
-              }`}
-            >
-              {sp.label}
-            </button>
-          ))}
+          {coreSplits.map((sp) => {
+            const doneCount = weekly.completedThisWeek[sp.id] ?? 0;
+            const isNext = sp.id === weekly.nextCoreSplit;
+            const isSelected = store.split === sp.id;
+            return (
+              <button
+                key={sp.id}
+                onClick={() => store.setSplit(sp.id)}
+                className={`py-1.5 px-1 rounded-md font-[family-name:var(--font-rajdhani)] text-[11px] font-bold uppercase border flex items-center justify-center gap-1 ${
+                  isSelected
+                    ? "bg-[var(--surface-3)] border-[#3b6cf6] text-white"
+                    : isNext
+                      ? "bg-[#3b6cf6]/10 border-[#3b6cf6]/45 text-[#93c5fd]"
+                      : "bg-[var(--surface-0)] border-[var(--border-subtle)] text-[var(--text-muted)]"
+                }`}
+                title={`${sp.label}: ${sp.focus}`}
+              >
+                {doneCount > 0 && <Check size={10} className="text-[#4ade80] shrink-0" />}
+                <span>{sp.shortLabel}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* 2 Optional Bonus Days (Day 5 Full Body+ & Day 6 Jog/Pool) */}
+        <div className="mt-1.5 grid grid-cols-2 gap-1.5">
+          {bonusSplits.map((sp) => {
+            const doneCount = weekly.completedThisWeek[sp.id] ?? 0;
+            const isSelected = store.split === sp.id;
+            return (
+              <button
+                key={sp.id}
+                onClick={() => store.setSplit(sp.id)}
+                className={`py-1 px-2 rounded-md font-[family-name:var(--font-rajdhani)] text-[10px] font-bold uppercase tracking-wider border flex items-center justify-center gap-1 ${
+                  isSelected
+                    ? "bg-[var(--surface-3)] border-[#8b5cf6] text-white"
+                    : "bg-[var(--surface-0)] border-[var(--border-subtle)] text-[var(--text-muted)]"
+                }`}
+                title={sp.focus}
+              >
+                {doneCount > 0 && <Check size={10} className="text-[#4ade80] shrink-0" />}
+                <span>{sp.label}</span>
+              </button>
+            );
+          })}
         </div>
 
         <div className="mt-1.5 grid grid-cols-3 gap-1.5">
@@ -673,45 +732,27 @@ export default function CommandDeckPage() {
           ))}
         </div>
 
-        {/* Prescribed Preview */}
+        {/* Split Focus + Exercise Preview */}
         <p className="mt-2 text-[11px] text-[var(--text-secondary)] truncate">
+          <strong className="text-[var(--text-primary)]">{activeSplitSpec.label}:</strong>{" "}
           {prescribedPreview.map((e) => e.name).join(" · ")}
         </p>
 
         {/* Primary Action */}
         <div className="mt-2.5 flex gap-2">
-          {store.gateRank === "floor_5m" ? (
-            <>
-              <button
-                onClick={handleClear5mFloor}
-                className="flex-1 h-11 rounded-xl bg-[#22c55e] hover:bg-[#16a34a] font-[family-name:var(--font-rajdhani)] text-sm font-bold uppercase tracking-[0.14em] text-[#051b0e]"
-              >
-                CLEAR 2-SET FLOOR · +35 XP
-              </button>
-              <button
-                onClick={() => setCombatOpen(true)}
-                className="px-3 h-11 rounded-xl bg-[var(--surface-2)] border border-[var(--border-subtle)] font-[family-name:var(--font-rajdhani)] text-xs font-bold uppercase text-[var(--text-secondary)]"
-              >
-                HUD
-              </button>
-            </>
-          ) : (
-            <>
-              <button
-                onClick={() => setCombatOpen(true)}
-                className="flex-1 h-11 rounded-xl bg-[#3b6cf6] hover:bg-[#2a5be6] font-[family-name:var(--font-rajdhani)] text-sm font-bold uppercase tracking-[0.14em] text-white"
-              >
-                ENTER GATE · {activeRankSpec.label.toUpperCase()}
-              </button>
-              <button
-                onClick={handleClear5mFloor}
-                className="px-3 h-11 rounded-xl bg-[var(--surface-2)] border border-[var(--border-subtle)] font-[family-name:var(--font-rajdhani)] text-[11px] font-bold uppercase text-[var(--text-secondary)]"
-                title="Quick 2-set No-Skip survival check-in"
-              >
-                2-Set Floor
-              </button>
-            </>
-          )}
+          <button
+            onClick={() => setCombatOpen(true)}
+            className="flex-1 h-11 rounded-xl bg-[#3b6cf6] hover:bg-[#2a5be6] font-[family-name:var(--font-rajdhani)] text-sm font-bold uppercase tracking-[0.14em] text-white"
+          >
+            ENTER GATE · {activeRankSpec.label.toUpperCase()}
+          </button>
+          <button
+            onClick={handleClear5mFloor}
+            className="px-3 h-11 rounded-xl bg-[var(--surface-2)] border border-[var(--border-subtle)] font-[family-name:var(--font-rajdhani)] text-[11px] font-bold uppercase text-[var(--text-secondary)]"
+            title="Quick 5m No-Skip survival check-in"
+          >
+            5m Floor
+          </button>
         </div>
 
         {/* Quick Cardio / Swim / Badminton / Kili Chips */}

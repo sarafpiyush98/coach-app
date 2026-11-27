@@ -49,10 +49,12 @@ export function CombatSheet({ open, onClose }: CombatSheetProps) {
   const arena = useMonarchStore((s) => s.arena);
   const gateRank = useMonarchStore((s) => s.gateRank);
   const benchBest = useMonarchStore((s) => s.benchBest);
+  const exerciseLogs = useMonarchStore((s) => s.exerciseLogs);
   const swappedExercises = useMonarchStore((s) => s.swappedExercises);
   const activeSession = useMonarchStore((s) => s.activeSession);
   const toggleExerciseSwap = useMonarchStore((s) => s.toggleExerciseSwap);
   const syncActiveSession = useMonarchStore((s) => s.syncActiveSession);
+  const setActiveDraftLoad = useMonarchStore((s) => s.setActiveDraftLoad);
   const toggleActiveSet = useMonarchStore((s) => s.toggleActiveSet);
   const clearActiveRestTimer = useMonarchStore((s) => s.clearActiveRestTimer);
   const discardActiveSession = useMonarchStore((s) => s.discardActiveSession);
@@ -169,9 +171,26 @@ export function CombatSheet({ open, onClose }: CombatSheetProps) {
 
   if (!open) return null;
 
-  const benchWeight = activeSession?.benchWeight ?? (benchBest.weightKg || 55);
-  const benchReps = activeSession?.benchReps ?? 8;
   const completedSets = activeSession?.completedSets ?? {};
+  const draftLoads = activeSession?.draftLoads ?? {};
+
+  function resolveDraft(ex: (typeof exercises)[number]) {
+    const progKey = ex.progressKey ?? ex.id;
+    const prev = exerciseLogs?.[progKey];
+    const draft = draftLoads[progKey];
+    const fallbackW = ex.trackBench
+      ? (activeSession?.benchWeight ?? (prev?.lastWeightKg || benchBest.weightKg || 55))
+      : (prev?.lastWeightKg ?? ex.defaultWeightKg ?? 20);
+    const fallbackR = ex.trackBench
+      ? (activeSession?.benchReps ?? (prev?.lastReps || 10))
+      : (prev?.lastReps ?? 12);
+    return {
+      progKey,
+      prev,
+      weightKg: draft?.weightKg ?? fallbackW,
+      reps: draft?.reps ?? fallbackR,
+    };
+  }
 
   const totalSets = exercises.reduce((acc, ex) => {
     const count = swappedExercises[ex.id] ? ex.swap.sets : ex.sets;
@@ -232,34 +251,60 @@ export function CombatSheet({ open, onClose }: CombatSheetProps) {
   }
 
   function handleComplete() {
-    const hasBench = exercises.some((e) => e.trackBench && !swappedExercises[e.id]);
+    const tracked = exercises.filter((e) => e.trackLoad && !swappedExercises[e.id]);
+    const hasPartialCheck = doneSets > 0;
+    const chosen = hasPartialCheck
+      ? tracked.filter((e) => (completedSets[e.id] ?? []).some(Boolean))
+      : tracked;
+
+    const loggedExercises = chosen.map((e) => {
+      const { progKey, weightKg, reps } = resolveDraft(e);
+      return {
+        key: progKey,
+        weightKg,
+        reps,
+        isBench: Boolean(e.trackBench),
+      };
+    });
+
+    const benchEntry = loggedExercises.find((x) => x.isBench);
     const res = completeGateWorkout({
       split: split as SplitId,
       arena: arena as ArenaId,
       gateRank: gateRank as GateRankId,
       setsCompleted: Math.max(doneSets, totalSets),
-      benchWeightKg: hasBench ? benchWeight : undefined,
-      benchReps: hasBench ? benchReps : undefined,
+      benchWeightKg: benchEntry?.weightKg,
+      benchReps: benchEntry?.reps,
+      loggedExercises,
     });
-    if (res.isPr) {
+
+    const nextSpec = SPLITS.find((s) => s.id === res.nextSplit);
+    const nextHint = nextSpec ? `Next: ${nextSpec.label}` : "";
+
+    if (res.isPr && res.newE1rm) {
       playLevelUp();
       addToast({
         title: `NEW BENCH 1RM RECORD: ${res.newE1rm} KG`,
-        message: `Vulcan's Anvil struck · +${res.xpAwarded} XP (PR Crit!)`,
+        message: `Vulcan's Anvil struck · +${res.xpAwarded} XP · ${nextHint}`,
+        variant: "warning",
+      });
+    } else if (res.prsHit > 0) {
+      playLevelUp();
+      addToast({
+        title: `${res.prsHit} LIFT PR${res.prsHit > 1 ? "S" : ""} HIT!`,
+        message: `${Math.max(doneSets, totalSets)} sets · +${res.xpAwarded} XP · ${nextHint}`,
         variant: "warning",
       });
     } else {
       playQuestComplete();
       addToast({
         title: `${rankSpec.tag} GATE SWEPT`,
-        message: `${Math.max(doneSets, totalSets)} sets logged · +${res.xpAwarded} XP`,
+        message: `${Math.max(doneSets, totalSets)} sets · +${res.xpAwarded} XP · ${nextHint}`,
         variant: "success",
       });
     }
     onClose();
   }
-
-  const est1Rm = epley1Rm(benchWeight, benchReps);
 
   return (
     <div
@@ -309,7 +354,7 @@ export function CombatSheet({ open, onClose }: CombatSheetProps) {
       {/* Arena Guardrail + Wall-Clock Count-Up Rest Stopwatch */}
       <div className="px-4 py-2 bg-[var(--surface-1)]/60 border-b border-[var(--border-subtle)] flex items-center justify-between gap-2">
         <p className="text-[11px] text-[var(--text-secondary)] leading-tight">
-          {split === "pool_steps"
+          {split === "cardio_pool"
             ? "PROTOCOL LOCK: Lift BEFORE CG Swimming Pool. Keep Zone-2 steady."
             : arenaSpec.rule}
         </p>
@@ -356,13 +401,16 @@ export function CombatSheet({ open, onClose }: CombatSheetProps) {
             >
               <div className="flex items-start justify-between gap-2">
                 <div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <span className="font-[family-name:var(--font-geist-mono)] text-[10px] text-[var(--text-muted)]">
                       0{idx + 1}
                     </span>
                     <h3 className="font-[family-name:var(--font-rajdhani)] text-base font-bold uppercase tracking-wide">
                       {activeName}
                     </h3>
+                    <span className="px-1.5 py-0.5 rounded bg-[var(--surface-2)] border border-[var(--border-subtle)] font-[family-name:var(--font-geist-mono)] text-[9px] uppercase text-[var(--text-muted)]">
+                      {ex.muscleGroup}
+                    </span>
                   </div>
                   <p className="font-[family-name:var(--font-geist-mono)] text-xs text-[#3b6cf6] mt-0.5">
                     {activeSets} x {activeReps} · {activeLoad}
@@ -395,52 +443,98 @@ export function CombatSheet({ open, onClose }: CombatSheetProps) {
                 </p>
               )}
 
-              {/* Inline Bench PR Control */}
-              {ex.trackBench && !isSwapped && (
-                <div className="mt-2.5 p-2.5 rounded-lg bg-[var(--surface-2)] border border-[#f59e0b]/25 flex items-center justify-between gap-2">
-                  <div>
-                    <p className="font-[family-name:var(--font-rajdhani)] text-[10px] font-bold uppercase tracking-wider text-[#f59e0b]">
-                      VULCAN 100 KG LADDER (e1RM: {est1Rm} KG)
-                    </p>
-                    <p className="text-[10px] text-[var(--text-muted)]">
-                      Prev best: {benchBest.weightKg}kg x {benchBest.reps} ({benchBest.e1rm}kg e1RM)
-                    </p>
+              {/* All-Lift Progressive Overload Bar */}
+              {ex.trackLoad && !isSwapped && (() => {
+                const { progKey, prev, weightKg, reps } = resolveDraft(ex);
+                const stepKg = ex.stepKg ?? 2.5;
+                const estLift1Rm = epley1Rm(weightKg, reps);
+                const isLowTime = gateRank === "low_time_2x";
+                const maxCap = isLowTime ? (ex.maxRepsLowTime ?? 19) : (ex.maxRepsRegular ?? 15);
+                const readyToBump = Boolean(prev && prev.lastReps >= maxCap);
+
+                return (
+                  <div className="mt-2.5 p-2.5 rounded-lg bg-[var(--surface-2)] border border-[#3b6cf6]/25 flex flex-wrap items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span
+                          className={`font-[family-name:var(--font-rajdhani)] text-[10px] font-bold uppercase tracking-wider ${
+                            ex.trackBench ? "text-[#f59e0b]" : "text-[#60a5fa]"
+                          }`}
+                        >
+                          {ex.trackBench
+                            ? `VULCAN 100 KG · e1RM ${estLift1Rm} KG`
+                            : prev
+                              ? `LAST: ${prev.lastWeightKg}kg x ${prev.lastReps}${ex.timeBased ? "s" : ""} (e1RM ${prev.bestE1rm})`
+                              : `BASE: ${weightKg}kg x ${reps}${ex.timeBased ? "s" : ""}`}
+                        </span>
+                        {readyToBump ? (
+                          <span className="px-1.5 py-0.5 rounded bg-[#f59e0b]/20 text-[#fbbf24] font-[family-name:var(--font-geist-mono)] text-[9px] font-bold">
+                            {isLowTime ? `MAX ${maxCap}` : `HIT ${maxCap}`} -&gt; BUMP +{stepKg}kg
+                          </span>
+                        ) : prev ? (
+                          <span className="px-1.5 py-0.5 rounded bg-[#3b6cf6]/15 text-[#93c5fd] font-[family-name:var(--font-geist-mono)] text-[9px]">
+                            {isLowTime
+                              ? `BEAT ${prev.lastReps} (<=${maxCap})`
+                              : `TARGET 3x${maxCap} (LAST ${prev.lastReps})`}
+                          </span>
+                        ) : (
+                          <span className="px-1.5 py-0.5 rounded bg-[var(--surface-1)] text-[var(--text-muted)] font-[family-name:var(--font-geist-mono)] text-[9px]">
+                            {isLowTime ? `2x TO FAIL (<=${maxCap})` : `TARGET 3x${maxCap}`}
+                          </span>
+                        )}
+                      </div>
+                      {ex.trackBench && (
+                        <p className="text-[10px] text-[var(--text-muted)] mt-0.5">
+                          Best: {benchBest.weightKg}kg x {benchBest.reps} ({benchBest.e1rm}kg e1RM)
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-1.5 font-[family-name:var(--font-geist-mono)] text-xs shrink-0">
+                      <button
+                        onClick={() =>
+                          setActiveDraftLoad(progKey, Math.max(0, weightKg - stepKg), reps)
+                        }
+                        className="px-2 py-1 rounded bg-[var(--surface-1)]"
+                      >
+                        -
+                      </button>
+                      <span>{weightKg}kg</span>
+                      <button
+                        onClick={() => setActiveDraftLoad(progKey, weightKg + stepKg, reps)}
+                        className="px-2 py-1 rounded bg-[var(--surface-1)]"
+                      >
+                        +
+                      </button>
+                      <span className="text-[var(--text-muted)]">x</span>
+                      <button
+                        onClick={() =>
+                          setActiveDraftLoad(progKey, weightKg, Math.max(1, reps - 1))
+                        }
+                        className="px-2 py-1 rounded bg-[var(--surface-1)]"
+                      >
+                        -
+                      </button>
+                      <span>
+                        {reps}
+                        {ex.timeBased ? "s" : ""}
+                      </span>
+                      <button
+                        onClick={() =>
+                          setActiveDraftLoad(
+                            progKey,
+                            weightKg,
+                            isLowTime ? Math.min(maxCap, reps + 1) : reps + 1
+                          )
+                        }
+                        className="px-2 py-1 rounded bg-[var(--surface-1)]"
+                      >
+                        +
+                      </button>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-1.5 font-[family-name:var(--font-geist-mono)] text-xs">
-                    <button
-                      onClick={() =>
-                        syncActiveSession({ benchWeight: Math.max(20, benchWeight - 2.5) })
-                      }
-                      className="px-2 py-1 rounded bg-[var(--surface-1)]"
-                    >
-                      -
-                    </button>
-                    <span>{benchWeight}kg</span>
-                    <button
-                      onClick={() => syncActiveSession({ benchWeight: benchWeight + 2.5 })}
-                      className="px-2 py-1 rounded bg-[var(--surface-1)]"
-                    >
-                      +
-                    </button>
-                    <span className="text-[var(--text-muted)]">x</span>
-                    <button
-                      onClick={() =>
-                        syncActiveSession({ benchReps: Math.max(1, benchReps - 1) })
-                      }
-                      className="px-2 py-1 rounded bg-[var(--surface-1)]"
-                    >
-                      -
-                    </button>
-                    <span>{benchReps}</span>
-                    <button
-                      onClick={() => syncActiveSession({ benchReps: benchReps + 1 })}
-                      className="px-2 py-1 rounded bg-[var(--surface-1)]"
-                    >
-                      +
-                    </button>
-                  </div>
-                </div>
-              )}
+                );
+              })()}
 
               {/* Set Taps */}
               <div className="mt-3 flex flex-wrap gap-2">

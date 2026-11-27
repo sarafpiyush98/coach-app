@@ -55,20 +55,20 @@
   --font-rajdhani: "Rajdhani", system-ui, -apple-system, sans-serif;
 
   /* Surface levels */
-  --surface-0: #0a0b10;
-  --surface-1: #111520;
-  --surface-2: #1a1f30;
-  --surface-3: #232940;
+  --surface-0: #0b0c10;
+  --surface-1: #13161f;
+  --surface-2: #1b1f2c;
+  --surface-3: #242a3b;
 
   /* Text hierarchy */
-  --text-primary: #e8eaf0;
-  --text-secondary: #8890a4;
-  --text-muted: #4a5168;
+  --text-primary: #f3f4f6;
+  --text-secondary: #9ca3af;
+  --text-muted: #636b7f;
 
-  /* Accent — 10% rule */
+  /* Accent (signal-first) */
   --accent-blue: #3b6cf6;
   --accent-dim: #2a4fb8;
-  --accent-glow: rgba(59, 108, 246, 0.15);
+  --accent-glow: rgba(59, 108, 246, 0.08);
 
   /* Semantic colors */
   --success: #22c55e;
@@ -78,7 +78,7 @@
 
   /* Borders */
   --border-subtle: rgba(255, 255, 255, 0.06);
-  --border-accent: rgba(59, 108, 246, 0.2);
+  --border-accent: rgba(59, 108, 246, 0.35);
 
   /* Legacy System palette (kept for stat colors etc) */
   --system-blue: #3b6cf6;
@@ -89,20 +89,20 @@
   --success-green: #22c55e;
 
   /* shadcn compat tokens */
-  --background: #0a0b10;
-  --foreground: #e8eaf0;
-  --card: #111520;
-  --card-foreground: #e8eaf0;
-  --popover: #111520;
-  --popover-foreground: #e8eaf0;
+  --background: #0b0c10;
+  --foreground: #f3f4f6;
+  --card: #13161f;
+  --card-foreground: #f3f4f6;
+  --popover: #13161f;
+  --popover-foreground: #f3f4f6;
   --primary: #3b6cf6;
-  --primary-foreground: #e8eaf0;
-  --secondary: #1a1f30;
-  --secondary-foreground: #e8eaf0;
-  --muted: #111520;
-  --muted-foreground: #4a5168;
+  --primary-foreground: #f3f4f6;
+  --secondary: #1b1f2c;
+  --secondary-foreground: #f3f4f6;
+  --muted: #13161f;
+  --muted-foreground: #636b7f;
   --accent: #8b5cf6;
-  --accent-foreground: #e8eaf0;
+  --accent-foreground: #f3f4f6;
   --destructive: #ef4444;
   --border: rgba(255, 255, 255, 0.06);
   --input: rgba(255, 255, 255, 0.08);
@@ -112,36 +112,36 @@
   --chart-3: #f59e0b;
   --chart-4: #22c55e;
   --chart-5: #ef4444;
-  --radius: 0.75rem;
-  --sidebar: #111520;
-  --sidebar-foreground: #e8eaf0;
+  --radius: 1rem;
+  --sidebar: #13161f;
+  --sidebar-foreground: #f3f4f6;
   --sidebar-primary: #3b6cf6;
-  --sidebar-primary-foreground: #e8eaf0;
-  --sidebar-accent: #1a1f30;
-  --sidebar-accent-foreground: #e8eaf0;
+  --sidebar-primary-foreground: #f3f4f6;
+  --sidebar-accent: #1b1f2c;
+  --sidebar-accent-foreground: #f3f4f6;
   --sidebar-border: rgba(255, 255, 255, 0.06);
   --sidebar-ring: #3b6cf6;
 
   /* Surface shorthand for Tailwind */
-  --surface: #111520;
+  --surface: #13161f;
 }
 
-/* Dark class kept for shadcn compat — same values */
+/* Dark class kept for shadcn compat */
 .dark {
-  --background: #0a0b10;
-  --foreground: #e8eaf0;
-  --card: #111520;
-  --card-foreground: #e8eaf0;
-  --popover: #111520;
-  --popover-foreground: #e8eaf0;
+  --background: #0b0c10;
+  --foreground: #f3f4f6;
+  --card: #13161f;
+  --card-foreground: #f3f4f6;
+  --popover: #13161f;
+  --popover-foreground: #f3f4f6;
   --primary: #3b6cf6;
-  --primary-foreground: #e8eaf0;
-  --secondary: #1a1f30;
-  --secondary-foreground: #e8eaf0;
-  --muted: #111520;
-  --muted-foreground: #4a5168;
+  --primary-foreground: #f3f4f6;
+  --secondary: #1b1f2c;
+  --secondary-foreground: #f3f4f6;
+  --muted: #13161f;
+  --muted-foreground: #636b7f;
   --accent: #8b5cf6;
-  --accent-foreground: #e8eaf0;
+  --accent-foreground: #f3f4f6;
   --destructive: #ef4444;
   --border: rgba(255, 255, 255, 0.06);
   --input: rgba(255, 255, 255, 0.08);
@@ -151,12 +151,12 @@
   --chart-3: #f59e0b;
   --chart-4: #22c55e;
   --chart-5: #ef4444;
-  --sidebar: #111520;
-  --sidebar-foreground: #e8eaf0;
+  --sidebar: #13161f;
+  --sidebar-foreground: #f3f4f6;
   --sidebar-primary: #3b6cf6;
-  --sidebar-primary-foreground: #e8eaf0;
-  --sidebar-accent: #1a1f30;
-  --sidebar-accent-foreground: #e8eaf0;
+  --sidebar-primary-foreground: #f3f4f6;
+  --sidebar-accent: #1b1f2c;
+  --sidebar-accent-foreground: #f3f4f6;
   --sidebar-border: rgba(255, 255, 255, 0.06);
   --sidebar-ring: #3b6cf6;
 }
@@ -233,25 +233,25 @@
 .stagger-4 { animation-delay: 0.2s; opacity: 0; }
 .stagger-5 { animation-delay: 0.25s; opacity: 0; }
 
-/* ── Progress Bar Gradients ─────────────────────────── */
+/* Progress fills */
 .progress-blue {
-  background: linear-gradient(90deg, #1a3a8a, #3b6cf6, #5b8cff);
+  background: linear-gradient(90deg, rgba(59, 108, 246, 0.8), #3b6cf6);
 }
 
 .progress-purple {
-  background: linear-gradient(90deg, #4c1d95, #8b5cf6, #a78bfa);
+  background: linear-gradient(90deg, rgba(139, 92, 246, 0.8), #8b5cf6);
 }
 
 .progress-gold {
-  background: linear-gradient(90deg, #92400e, #f59e0b, #fbbf24);
+  background: linear-gradient(90deg, rgba(245, 158, 11, 0.8), #f59e0b);
 }
 
 .progress-green {
-  background: linear-gradient(90deg, #166534, #22c55e, #4ade80);
+  background: linear-gradient(90deg, rgba(34, 197, 94, 0.85), #22c55e);
 }
 
 .progress-red {
-  background: linear-gradient(90deg, #7f1d1d, #ef4444, #f87171);
+  background: linear-gradient(90deg, rgba(239, 68, 68, 0.85), #ef4444);
 }
 
 /* ── Respect reduced motion ─────────────────────────── */

@@ -1654,8 +1654,20 @@ export function getPrescribedWorkout(
   split: SplitId,
   gateRank: GateRankId
 ): ExerciseSpec[] {
-  const list = WORKOUT_MATRIX[arena][split];
-  const isCardio = split === "cardio_pool";
+  const arenaMap = WORKOUT_MATRIX[arena] ?? WORKOUT_MATRIX.cg_gym;
+  const raw = split as string;
+  const safeSplit: SplitId =
+    raw === "push"
+      ? "upper_a"
+      : raw === "pull"
+        ? "upper_b"
+        : raw === "legs"
+          ? "lower_a"
+          : raw === "pool_steps"
+            ? "cardio_pool"
+            : split;
+  const list = arenaMap[safeSplit] ?? arenaMap.upper_a;
+  const isCardio = safeSplit === "cardio_pool";
 
   return list.map((ex) => {
     if (isCardio) return ex;

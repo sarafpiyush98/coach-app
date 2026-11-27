@@ -7,7 +7,7 @@ const variantStyles = {
   default:
     "bg-[var(--surface-1)] border border-[var(--border-subtle)]",
   hero:
-    "bg-[var(--surface-2)] border-t-2 border-t-[var(--accent-blue)] border-x border-b border-x-[var(--border-subtle)] border-b-[var(--border-subtle)] shadow-[0_4px_24px_var(--accent-glow)]",
+    "bg-[var(--surface-1)] border border-[var(--border-subtle)]",
   interactive:
     "bg-[var(--surface-1)] border border-[var(--border-subtle)] hover:bg-[var(--surface-2)] hover:border-[var(--border-accent)] transition-colors",
   ghost:
@@ -36,27 +36,12 @@ export function SystemPanel({
   animate = true,
 }: SystemPanelProps) {
   const classes = cn(
-    "relative rounded-lg",
+    "relative rounded-2xl",
     variantStyles[variant],
     className
   );
 
-  const content = (
-    <>
-      {/* Scanline overlay — hero only */}
-      {variant === "hero" && (
-        <div
-          aria-hidden
-          className="pointer-events-none absolute inset-0 z-[1] rounded-[inherit]"
-          style={{
-            background:
-              "repeating-linear-gradient(0deg, transparent 2px, rgba(59,108,246,0.02) 4px)",
-          }}
-        />
-      )}
-      <div className="relative z-[2]">{children}</div>
-    </>
-  );
+  const content = <div className="relative z-[2]">{children}</div>;
 
   if (!animate) {
     return <div className={classes}>{content}</div>;

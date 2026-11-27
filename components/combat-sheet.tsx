@@ -3,11 +3,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Check,
+  Info,
   RefreshCw,
   RotateCcw,
-  ShieldAlert,
-  Sparkles,
-  Sun,
   Timer,
   X,
 } from "lucide-react";
@@ -44,6 +42,15 @@ export function formatRestDuration(sec: number): string {
   return `${m}:${s}`;
 }
 
+function formatSplitHeading(id: SplitId): string {
+  if (id === "upper_a") return "Upper A";
+  if (id === "lower_a") return "Lower A";
+  if (id === "upper_b") return "Upper B";
+  if (id === "lower_b") return "Lower B";
+  if (id === "full_body_plus") return "Full Body +";
+  return "Jog & Pool";
+}
+
 export function CombatSheet({ open, onClose }: CombatSheetProps) {
   const split = useMonarchStore((s) => s.split);
   const arena = useMonarchStore((s) => s.arena);
@@ -68,6 +75,7 @@ export function CombatSheet({ open, onClose }: CombatSheetProps) {
 
   const [nowMs, setNowMs] = useState<number>(() => Date.now());
   const [wakeActive, setWakeActive] = useState<boolean>(false);
+  const [openTips, setOpenTips] = useState<Record<string, boolean>>({});
   const wakeRef = useRef<WakeLockSentinelLike | null>(null);
   const pingedRestAtRef = useRef<number | null>(null);
 
@@ -210,13 +218,12 @@ export function CombatSheet({ open, onClose }: CombatSheetProps) {
     elapsedRestSec === null
       ? null
       : elapsedRestSec < 120
-        ? { label: "RECOVERING", color: "text-[var(--text-secondary)]", border: "border-[var(--border-subtle)] bg-[var(--surface-2)]" }
+        ? { label: "Rest", color: "text-[var(--text-secondary)]", border: "border-[var(--border-subtle)] bg-[var(--surface-2)]" }
         : elapsedRestSec < 270
-          ? { label: "ATP FULL", color: "text-[#60a5fa]", border: "border-[#3b6cf6]/60 bg-[#3b6cf6]/15" }
-          : { label: "LONG REST · READY", color: "text-[#fbbf24]", border: "border-[#f59e0b]/60 bg-[#f59e0b]/15" };
+          ? { label: "Ready", color: "text-[#60a5fa]", border: "border-[#3b6cf6]/45 bg-[#3b6cf6]/10" }
+          : { label: "Long rest", color: "text-[#fbbf24]", border: "border-[#f59e0b]/45 bg-[#f59e0b]/10" };
 
   const arenaSpec = ARENAS.find((a) => a.id === arena) ?? ARENAS[0];
-  const splitSpec = SPLITS.find((s) => s.id === split) ?? SPLITS[0];
   const rankSpec = GATE_RANKS.find((g) => g.id === gateRank) ?? GATE_RANKS[1];
 
   function handleSetTap(exId: string, setIdx: number, totalSetsForEx: number) {
@@ -313,134 +320,134 @@ export function CombatSheet({ open, onClose }: CombatSheetProps) {
       aria-label="Combat HUD"
       className="fixed inset-0 z-[60] flex flex-col bg-[var(--surface-0)] text-[var(--text-primary)]"
     >
-      {/* Top Bar */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--border-subtle)] bg-[var(--surface-1)]">
-        <div>
+      {/* Clean Top Bar */}
+      <div className="flex items-center justify-between gap-2 px-5 py-3.5 border-b border-[var(--border-subtle)] bg-[var(--surface-1)]">
+        <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <span className="font-[family-name:var(--font-rajdhani)] text-xs font-bold uppercase tracking-[0.16em] text-[var(--accent-blue)]">
-              {rankSpec.tag} · {splitSpec.label} · {arenaSpec.shortLabel}
-            </span>
+            <h2 className="text-base font-semibold tracking-tight text-[var(--text-primary)] truncate">
+              {formatSplitHeading(split)}
+            </h2>
             {wakeActive && (
-              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-[#22c55e]/15 text-[#22c55e] font-[family-name:var(--font-geist-mono)] text-[9px]">
-                <Sun size={10} /> AWAKE
-              </span>
+              <span
+                className="w-1.5 h-1.5 rounded-full bg-[#22c55e] shrink-0"
+                title="Screen wake lock active"
+              />
             )}
           </div>
-          <p className="font-[family-name:var(--font-geist-mono)] text-[11px] text-[var(--text-secondary)]">
-            {doneSets}/{totalSets} SETS SWEPT · SAVED OFFLINE · +{rankSpec.baseXp} XP
+          <p className="text-xs text-[var(--text-secondary)] mt-0.5 truncate">
+            {doneSets} of {totalSets} sets · {arena === "cg_gym" ? "CG Gym" : arena === "home_zero" ? "Home" : "Hotel"}
           </p>
         </div>
 
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-2 shrink-0">
+          {elapsedRestSec !== null && restPhase && (
+            <div
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full border font-mono text-xs font-medium ${restPhase.border} ${restPhase.color}`}
+            >
+              <Timer size={12} />
+              <span>{formatRestDuration(elapsedRestSec)}</span>
+              <span className="text-[11px] font-sans">{restPhase.label}</span>
+              <button
+                onClick={clearActiveRestTimer}
+                className="ml-0.5 opacity-70 hover:opacity-100"
+                aria-label="Clear rest timer"
+              >
+                <X size={11} />
+              </button>
+            </div>
+          )}
           {doneSets > 0 && (
             <button
               onClick={discardActiveSession}
-              className="h-9 px-2.5 rounded-lg bg-[var(--surface-2)] border border-[var(--border-subtle)] font-[family-name:var(--font-rajdhani)] text-[10px] font-bold uppercase text-[var(--text-secondary)] inline-flex items-center gap-1"
+              className="h-9 px-2.5 rounded-full bg-[var(--surface-2)] text-xs font-medium text-[var(--text-secondary)] inline-flex items-center gap-1"
               title="Reset checked sets"
             >
-              <RotateCcw size={11} /> RESET
+              <RotateCcw size={12} /> Reset
             </button>
           )}
           <button
             onClick={onClose}
-            className="h-9 w-9 rounded-lg bg-[var(--surface-2)] flex items-center justify-center text-[var(--text-secondary)]"
-            aria-label="Close combat HUD"
+            className="h-9 w-9 rounded-full bg-[var(--surface-2)] flex items-center justify-center text-[var(--text-secondary)] hover:text-white"
+            aria-label="Close workout"
           >
-            <X size={18} />
+            <X size={17} />
           </button>
         </div>
       </div>
 
-      {/* Arena Guardrail + Wall-Clock Count-Up Rest Stopwatch */}
-      <div className="px-4 py-2 bg-[var(--surface-1)]/60 border-b border-[var(--border-subtle)] flex items-center justify-between gap-2">
-        <p className="text-[11px] text-[var(--text-secondary)] leading-tight">
-          {split === "cardio_pool"
-            ? "PROTOCOL LOCK: Lift BEFORE CG Swimming Pool. Keep Zone-2 steady."
-            : arenaSpec.rule}
-        </p>
-
-        {elapsedRestSec !== null && restPhase && (
-          <div
-            className={`shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1 rounded border font-[family-name:var(--font-geist-mono)] text-[11px] font-bold ${restPhase.border} ${restPhase.color}`}
-          >
-            <Timer size={12} />
-            <span>{formatRestDuration(elapsedRestSec)}</span>
-            <span className="text-[9px] font-[family-name:var(--font-rajdhani)] uppercase tracking-wider">
-              {restPhase.label}
-            </span>
-            <button
-              onClick={clearActiveRestTimer}
-              className="ml-1 text-[9px] opacity-70 hover:opacity-100 underline"
-            >
-              CLR
-            </button>
-          </div>
-        )}
-      </div>
-
       {/* Exercise List */}
-      <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3 pb-28 max-w-lg w-full mx-auto">
-        {exercises.map((ex, idx) => {
+      <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4 pb-28 max-w-lg w-full mx-auto">
+        {split === "cardio_pool" && (
+          <p className="text-xs text-[var(--text-muted)] px-1">
+            Always lift before CG Pool swim. Keep cardio steady and knees protected.
+          </p>
+        )}
+        {exercises.map((ex) => {
           const isSwapped = Boolean(swappedExercises[ex.id]);
           const activeName = isSwapped ? ex.swap.name : ex.name;
           const activeSets = isSwapped ? ex.swap.sets : ex.sets;
           const activeReps = isSwapped ? ex.swap.reps : ex.reps;
           const activeLoad = isSwapped ? ex.swap.load : ex.load;
           const activeCue = isSwapped ? ex.swap.cue : ex.cue;
+          const hasTip = Boolean(activeCue || (!isSwapped && ex.pairHint));
+          const tipOpen = Boolean(openTips[ex.id]);
           const savedArr = completedSets[ex.id] ?? [];
           const checks = Array.from({ length: activeSets }, (_, i) => Boolean(savedArr[i]));
 
           return (
             <div
               key={ex.id}
-              className={`rounded-xl p-3.5 border ${
+              className={`rounded-2xl p-4 border ${
                 isSwapped
-                  ? "bg-[#151024] border-[#8b5cf6]/40"
+                  ? "bg-[#151226] border-[#8b5cf6]/35"
                   : "bg-[var(--surface-1)] border-[var(--border-subtle)]"
               }`}
             >
               <div className="flex items-start justify-between gap-2">
-                <div>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-[family-name:var(--font-geist-mono)] text-[10px] text-[var(--text-muted)]">
-                      0{idx + 1}
-                    </span>
-                    <h3 className="font-[family-name:var(--font-rajdhani)] text-base font-bold uppercase tracking-wide">
-                      {activeName}
-                    </h3>
-                    <span className="px-1.5 py-0.5 rounded bg-[var(--surface-2)] border border-[var(--border-subtle)] font-[family-name:var(--font-geist-mono)] text-[9px] uppercase text-[var(--text-muted)]">
-                      {ex.muscleGroup}
-                    </span>
-                  </div>
-                  <p className="font-[family-name:var(--font-geist-mono)] text-xs text-[#3b6cf6] mt-0.5">
-                    {activeSets} x {activeReps} · {activeLoad}
+                <div className="min-w-0">
+                  <h3 className="text-[15px] font-semibold leading-snug text-[var(--text-primary)]">
+                    {activeName}
+                  </h3>
+                  <p className="text-xs text-[var(--text-secondary)] mt-0.5">
+                    {ex.muscleGroup} · {activeSets} x {activeReps} · {activeLoad}
                   </p>
                 </div>
 
-                <button
-                  onClick={() => handleSwap(ex.id, activeName)}
-                  className={`shrink-0 inline-flex items-center gap-1 px-2 py-1 rounded text-[10px] font-[family-name:var(--font-rajdhani)] font-bold uppercase tracking-wider border ${
-                    isSwapped
-                      ? "bg-[#8b5cf6]/25 border-[#8b5cf6] text-[#c4b5fd]"
-                      : "bg-[var(--surface-2)] border-[var(--border-subtle)] text-[var(--text-secondary)]"
-                  }`}
-                >
-                  <RefreshCw size={10} /> {isSwapped ? "REVERT" : "IRON SWAP"}
-                </button>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  {hasTip && (
+                    <button
+                      onClick={() =>
+                        setOpenTips((prev) => ({ ...prev, [ex.id]: !prev[ex.id] }))
+                      }
+                      className={`h-8 px-2.5 rounded-lg text-xs font-medium inline-flex items-center gap-1 transition-colors ${
+                        tipOpen
+                          ? "bg-[var(--surface-3)] text-[var(--text-primary)]"
+                          : "bg-[var(--surface-2)] text-[var(--text-secondary)]"
+                      }`}
+                    >
+                      <Info size={12} /> Tip
+                    </button>
+                  )}
+                  <button
+                    onClick={() => handleSwap(ex.id, activeName)}
+                    className={`h-8 px-2.5 rounded-lg text-xs font-medium inline-flex items-center gap-1 transition-colors ${
+                      isSwapped
+                        ? "bg-[#8b5cf6]/25 text-[#c4b5fd]"
+                        : "bg-[var(--surface-2)] text-[var(--text-secondary)]"
+                    }`}
+                  >
+                    <RefreshCw size={11} /> {isSwapped ? "Revert" : "Swap"}
+                  </button>
+                </div>
               </div>
 
-              {activeCue && (
-                <p className="mt-1.5 text-[11px] text-[var(--text-secondary)] flex items-start gap-1.5">
-                  <ShieldAlert size={12} className="shrink-0 mt-0.5 text-[#f59e0b]" />
-                  <span>{activeCue}</span>
-                </p>
-              )}
-
-              {!isSwapped && ex.pairHint && (
-                <p className="mt-1 text-[10px] text-[#c4b5fd] flex items-start gap-1.5">
-                  <Sparkles size={11} className="shrink-0 mt-0.5" />
-                  <span>{ex.pairHint}</span>
-                </p>
+              {tipOpen && hasTip && (
+                <div className="mt-3 p-3 rounded-xl bg-[var(--surface-0)] text-xs text-[var(--text-secondary)] space-y-1">
+                  {activeCue && <p>{activeCue}</p>}
+                  {!isSwapped && ex.pairHint && (
+                    <p className="text-[#93c5fd]">{ex.pairHint}</p>
+                  )}
+                </div>
               )}
 
               {/* All-Lift Progressive Overload Bar */}
@@ -453,69 +460,55 @@ export function CombatSheet({ open, onClose }: CombatSheetProps) {
                 const readyToBump = Boolean(prev && prev.lastReps >= maxCap);
 
                 return (
-                  <div className="mt-2.5 p-2.5 rounded-lg bg-[var(--surface-2)] border border-[#3b6cf6]/25 flex flex-wrap items-center justify-between gap-2">
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <span
-                          className={`font-[family-name:var(--font-rajdhani)] text-[10px] font-bold uppercase tracking-wider ${
-                            ex.trackBench ? "text-[#f59e0b]" : "text-[#60a5fa]"
-                          }`}
-                        >
-                          {ex.trackBench
-                            ? `VULCAN 100 KG · e1RM ${estLift1Rm} KG`
-                            : prev
-                              ? `LAST: ${prev.lastWeightKg}kg x ${prev.lastReps}${ex.timeBased ? "s" : ""} (e1RM ${prev.bestE1rm})`
-                              : `BASE: ${weightKg}kg x ${reps}${ex.timeBased ? "s" : ""}`}
+                  <div className="mt-3.5 pt-3 border-t border-[var(--border-subtle)] flex flex-wrap items-center justify-between gap-2.5">
+                    <div className="flex items-center gap-2 flex-wrap min-w-0">
+                      <span className="text-xs text-[var(--text-secondary)] font-mono tabular-nums">
+                        {prev
+                          ? `Last ${prev.lastWeightKg} kg x ${prev.lastReps}${ex.timeBased ? "s" : ""}`
+                          : ex.trackBench
+                            ? `Bench e1RM ${estLift1Rm} kg`
+                            : `Start ${weightKg} kg x ${reps}${ex.timeBased ? "s" : ""}`}
+                      </span>
+                      {ex.trackBench && prev && (
+                        <span className="text-[11px] font-mono text-[var(--text-muted)]">
+                          e1RM {estLift1Rm} kg
                         </span>
-                        {readyToBump ? (
-                          <span className="px-1.5 py-0.5 rounded bg-[#f59e0b]/20 text-[#fbbf24] font-[family-name:var(--font-geist-mono)] text-[9px] font-bold">
-                            {isLowTime ? `MAX ${maxCap}` : `HIT ${maxCap}`} -&gt; BUMP +{stepKg}kg
-                          </span>
-                        ) : prev ? (
-                          <span className="px-1.5 py-0.5 rounded bg-[#3b6cf6]/15 text-[#93c5fd] font-[family-name:var(--font-geist-mono)] text-[9px]">
-                            {isLowTime
-                              ? `BEAT ${prev.lastReps} (<=${maxCap})`
-                              : `TARGET 3x${maxCap} (LAST ${prev.lastReps})`}
-                          </span>
-                        ) : (
-                          <span className="px-1.5 py-0.5 rounded bg-[var(--surface-1)] text-[var(--text-muted)] font-[family-name:var(--font-geist-mono)] text-[9px]">
-                            {isLowTime ? `2x TO FAIL (<=${maxCap})` : `TARGET 3x${maxCap}`}
-                          </span>
-                        )}
-                      </div>
-                      {ex.trackBench && (
-                        <p className="text-[10px] text-[var(--text-muted)] mt-0.5">
-                          Best: {benchBest.weightKg}kg x {benchBest.reps} ({benchBest.e1rm}kg e1RM)
-                        </p>
+                      )}
+                      {readyToBump && (
+                        <span className="px-2 py-0.5 rounded-full bg-[#f59e0b]/15 text-[#fbbf24] text-[11px] font-medium">
+                          Bump +{stepKg} kg
+                        </span>
                       )}
                     </div>
 
-                    <div className="flex items-center gap-1.5 font-[family-name:var(--font-geist-mono)] text-xs shrink-0">
+                    <div className="flex items-center gap-1.5 font-mono text-xs shrink-0">
                       <button
                         onClick={() =>
                           setActiveDraftLoad(progKey, Math.max(0, weightKg - stepKg), reps)
                         }
-                        className="px-2 py-1 rounded bg-[var(--surface-1)]"
+                        className="h-9 w-8 rounded-lg bg-[var(--surface-2)] text-[var(--text-secondary)] hover:text-white"
                       >
                         -
                       </button>
-                      <span>{weightKg}kg</span>
+                      <span className="min-w-[52px] text-center font-medium text-[var(--text-primary)]">
+                        {weightKg} kg
+                      </span>
                       <button
                         onClick={() => setActiveDraftLoad(progKey, weightKg + stepKg, reps)}
-                        className="px-2 py-1 rounded bg-[var(--surface-1)]"
+                        className="h-9 w-8 rounded-lg bg-[var(--surface-2)] text-[var(--text-secondary)] hover:text-white"
                       >
                         +
                       </button>
-                      <span className="text-[var(--text-muted)]">x</span>
+                      <span className="text-[var(--text-muted)] px-0.5">x</span>
                       <button
                         onClick={() =>
                           setActiveDraftLoad(progKey, weightKg, Math.max(1, reps - 1))
                         }
-                        className="px-2 py-1 rounded bg-[var(--surface-1)]"
+                        className="h-9 w-8 rounded-lg bg-[var(--surface-2)] text-[var(--text-secondary)] hover:text-white"
                       >
                         -
                       </button>
-                      <span>
+                      <span className="min-w-[28px] text-center font-medium text-[var(--text-primary)]">
                         {reps}
                         {ex.timeBased ? "s" : ""}
                       </span>
@@ -527,7 +520,7 @@ export function CombatSheet({ open, onClose }: CombatSheetProps) {
                             isLowTime ? Math.min(maxCap, reps + 1) : reps + 1
                           )
                         }
-                        className="px-2 py-1 rounded bg-[var(--surface-1)]"
+                        className="h-9 w-8 rounded-lg bg-[var(--surface-2)] text-[var(--text-secondary)] hover:text-white"
                       >
                         +
                       </button>
@@ -536,20 +529,30 @@ export function CombatSheet({ open, onClose }: CombatSheetProps) {
                 );
               })()}
 
-              {/* Set Taps */}
-              <div className="mt-3 flex flex-wrap gap-2">
+              {/* Tactile Full-Row Set Buttons */}
+              <div
+                className={`mt-3.5 grid gap-2 ${
+                  activeSets === 1
+                    ? "grid-cols-1"
+                    : activeSets === 2
+                      ? "grid-cols-2"
+                      : activeSets === 3
+                        ? "grid-cols-3"
+                        : "grid-cols-4"
+                }`}
+              >
                 {checks.map((done, setIdx) => (
                   <button
                     key={setIdx}
                     onClick={() => handleSetTap(ex.id, setIdx, activeSets)}
-                    className={`h-9 min-w-[64px] px-3 rounded-lg font-[family-name:var(--font-geist-mono)] text-xs font-semibold flex items-center justify-center gap-1 border transition-colors ${
+                    className={`h-11 rounded-xl font-medium text-sm flex items-center justify-center gap-1.5 border transition-colors ${
                       done
                         ? "bg-[#22c55e]/20 border-[#22c55e] text-[#4ade80]"
-                        : "bg-[var(--surface-2)] border-[var(--border-subtle)] text-[var(--text-secondary)]"
+                        : "bg-[var(--surface-2)] border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
                     }`}
                   >
-                    {done && <Check size={12} />}
-                    S{setIdx + 1}
+                    {done && <Check size={14} />}
+                    <span>Set {setIdx + 1}</span>
                   </button>
                 ))}
               </div>
@@ -558,14 +561,14 @@ export function CombatSheet({ open, onClose }: CombatSheetProps) {
         })}
       </div>
 
-      {/* Bottom Complete Bar */}
+      {/* Bottom Sticky Finish CTA */}
       <div className="fixed bottom-0 inset-x-0 p-4 bg-[var(--surface-0)]/95 border-t border-[var(--border-subtle)] backdrop-blur-md">
-        <div className="max-w-lg mx-auto flex gap-2">
+        <div className="max-w-lg mx-auto">
           <button
             onClick={handleComplete}
-            className="flex-1 h-12 rounded-xl bg-[#3b6cf6] hover:bg-[#2a5be6] font-[family-name:var(--font-rajdhani)] text-base font-bold uppercase tracking-[0.15em] text-white shadow-[0_0_24px_rgba(59,108,246,0.35)]"
+            className="w-full h-12 rounded-xl bg-[#3b6cf6] hover:bg-[#2a5be6] font-semibold text-sm text-white transition-colors"
           >
-            COMPLETE GATE · +{rankSpec.baseXp} XP
+            Finish Workout
           </button>
         </div>
       </div>

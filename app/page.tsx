@@ -4,18 +4,14 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Bluetooth,
   Check,
-  Dumbbell,
-  Flame,
-  Footprints,
+  ChevronDown,
+  ChevronUp,
   Lock,
   Plus,
   Scale,
-  Sparkles,
   Timer,
-  Utensils,
   X,
 } from "lucide-react";
-import { SystemPanel } from "@/components/ui/system-panel";
 import { CombatSheet, formatRestDuration } from "@/components/combat-sheet";
 import { MuteToggle } from "@/components/mute-toggle";
 import { useToastStore } from "@/components/ui/system-toast";
@@ -24,20 +20,19 @@ import {
   ARENAS,
   CONTEXT_LIST,
   CONTEXTS,
-  GATE_RANKS,
   getPrescribedWorkout,
   getPresetsForContext,
   SPLITS,
+  type ArenaId,
   type ContextId,
+  type SplitId,
 } from "@/lib/monarch-catalog";
 import {
-  computeStreakAndCombo,
   computeWeeklyTraining,
   createEmptyDay,
   getAmbientShadow,
   getDailyTotals,
   getTodayKey,
-  levelFromMonarchXp,
   MOVEMENT_PRESETS,
   useMonarchStore,
   type MovementKind,
@@ -48,11 +43,70 @@ import {
   playSystemPing,
 } from "@/lib/sounds";
 
+function formatSplitTitle(id: SplitId): string {
+  if (id === "upper_a") return "Upper A";
+  if (id === "lower_a") return "Lower A";
+  if (id === "upper_b") return "Upper B";
+  if (id === "lower_b") return "Lower B";
+  if (id === "full_body_plus") return "Full Body +";
+  return "Jog & Pool";
+}
+
+function formatArenaTitle(id: ArenaId): string {
+  if (id === "cg_gym") return "CG Gym";
+  if (id === "home_zero") return "Home";
+  return "Hotel";
+}
+
+function SheetModal({
+  open,
+  onClose,
+  title,
+  children,
+}: {
+  open: boolean;
+  onClose: () => void;
+  title: string;
+  children: React.ReactNode;
+}) {
+  if (!open) return null;
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={title}
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/65 backdrop-blur-xs"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-lg max-h-[85vh] overflow-y-auto rounded-t-2xl sm:rounded-2xl bg-[var(--surface-1)] border-t sm:border border-[var(--border-subtle)] p-5 pb-8 sm:pb-5 space-y-4"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between">
+          <h3 className="text-base font-semibold text-[var(--text-primary)]">{title}</h3>
+          <button
+            onClick={onClose}
+            className="h-8 w-8 rounded-full bg-[var(--surface-2)] flex items-center justify-center text-[var(--text-secondary)] hover:text-white"
+            aria-label={`Close ${title}`}
+          >
+            <X size={16} />
+          </button>
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}
+
 export default function CommandDeckPage() {
   const store = useMonarchStore();
   const addToast = useToastStore((s) => s.add);
 
   const [combatOpen, setCombatOpen] = useState(false);
+  const [switchOpen, setSwitchOpen] = useState(false);
+  const [fuelSheetOpen, setFuelSheetOpen] = useState(false);
+  const [stepsSheetOpen, setStepsSheetOpen] = useState(false);
+  const [contextSheetOpen, setContextSheetOpen] = useState(false);
   const [portion, setPortion] = useState<0.5 | 1 | 1.5>(1);
   const [weightEditorOpen, setWeightEditorOpen] = useState(false);
   const [draftWeight, setDraftWeight] = useState(112.4);
@@ -70,9 +124,6 @@ export default function CommandDeckPage() {
   const todayKey = getTodayKey();
   const today = store.days[todayKey] ?? createEmptyDay(todayKey);
   const totals = getDailyTotals(today);
-  const totalXp = store.legacyXp + store.earnedXp;
-  const lvl = levelFromMonarchXp(totalXp);
-  const streak = computeStreakAndCombo(store.days);
   const weekly = useMemo(() => computeWeeklyTraining(store.days), [store.days]);
   const directive = getAmbientShadow(store);
 
@@ -354,12 +405,8 @@ export default function CommandDeckPage() {
     }
   }
 
-  const activeRankSpec =
-    GATE_RANKS.find((g) => g.id === store.gateRank) ?? GATE_RANKS[1];
   const activeSplitSpec =
     SPLITS.find((s) => s.id === store.split) ?? SPLITS[0];
-  const nextCoreSpec =
-    SPLITS.find((s) => s.id === weekly.nextCoreSplit) ?? SPLITS[0];
   const coreSplits = SPLITS.filter((s) => s.tier === "core");
   const bonusSplits = SPLITS.filter((s) => s.tier === "bonus");
   const workoutDoneToday =
@@ -372,454 +419,66 @@ export default function CommandDeckPage() {
   const proteinPct = Math.min(100, Math.round((totals.proteinG / totals.targetProteinG) * 100));
   const kcalPct = Math.min(100, Math.round((totals.kcal / totals.targetKcal) * 100));
   const overKcal = totals.kcal > totals.targetKcal + 150;
+  const splitTitle = formatSplitTitle(store.split);
+  const actionableDirective =
+    directive && directive.soldier !== "Igris" ? directive : null;
+
+  const quickThreePresets = useMemo(() => {
+    const others = contextPresets.filter((p) => p.id !== "whey_skyr_seal");
+    const seal = contextPresets.find((p) => p.id === "whey_skyr_seal");
+    return [...others.slice(0, 2), ...(seal ? [seal] : [])].slice(0, 3);
+  }, [contextPresets]);
 
   return (
-    <div className="max-w-lg mx-auto px-4 pt-5 pb-6 space-y-3.5">
-      {/* HEADER PANEL */}
-      <SystemPanel variant="hero" className="p-3.5" animate={false}>
-        <div className="flex items-center justify-between gap-2">
-          <div>
-            <div className="flex items-center gap-2">
+    <div className="max-w-lg mx-auto px-5 pt-6 pb-24 space-y-5">
+      {/* 1. MINIMAL TOP BAR */}
+      <header className="h-11 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <h1 className="text-lg font-semibold tracking-tight text-[var(--text-primary)]">
+            Monarch
+          </h1>
+          <button
+            onClick={() => setContextSheetOpen(true)}
+            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-[var(--surface-2)] text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
+          >
+            <span className="truncate">{CONTEXTS[store.context].shortLabel}</span>
+            <ChevronDown size={13} />
+          </button>
+        </div>
+
+        <button
+          onClick={() => setWeightEditorOpen(true)}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[var(--surface-1)] border border-[var(--border-subtle)] font-mono tabular-nums text-xs font-medium text-[var(--text-primary)] hover:border-[var(--border-accent)] transition-colors shrink-0"
+        >
+          <Scale size={13} className="text-[var(--text-secondary)]" />
+          <span>{store.weightEma} kg</span>
+        </button>
+      </header>
+
+      {/* 2. TODAY'S VITALS STRIP */}
+      <section className="grid grid-cols-3 gap-2.5">
+        <button
+          onClick={() => setStepsSheetOpen(true)}
+          className="rounded-2xl bg-[var(--surface-1)] border border-[var(--border-subtle)] p-3.5 text-left hover:border-[var(--border-accent)] transition-colors"
+        >
+          <div className="flex items-center justify-between gap-1">
+            <span className="text-xs font-medium text-[var(--text-secondary)]">Steps</span>
+            {today.hcStepsLive && (
               <span
-                className="px-1.5 py-0.5 rounded text-[10px] font-[family-name:var(--font-rajdhani)] font-bold uppercase tracking-wider"
-                style={{
-                  backgroundColor: `${lvl.rank.color}25`,
-                  color: lvl.rank.color,
-                  border: `1px solid ${lvl.rank.color}55`,
-                }}
-              >
-                {lvl.rank.title}
-              </span>
-              <span className="font-[family-name:var(--font-geist-mono)] text-xs font-bold text-[var(--text-primary)]">
-                LV {lvl.level}
-              </span>
-              <span className="inline-flex items-center gap-0.5 text-[11px] font-[family-name:var(--font-geist-mono)] text-[#f59e0b]">
-                <Flame size={12} /> {streak.activeStreak}d · {streak.comboMultiplier}x
-              </span>
-            </div>
-            <p className="font-[family-name:var(--font-geist-mono)] text-[10px] text-[var(--text-secondary)] mt-1">
-              {lvl.xpIntoLevel}/{lvl.currentLevelXp} XP · {store.kiliMeters}m Kili · {store.benchBest.e1rm}kg Bench e1RM
-            </p>
-          </div>
-
-          <div className="flex items-center gap-1.5 shrink-0">
-            <button
-              onClick={() => setWeightEditorOpen((v) => !v)}
-              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[var(--surface-1)] border border-[var(--border-accent)] font-[family-name:var(--font-geist-mono)] text-xs font-semibold text-[var(--text-primary)]"
-            >
-              <Scale size={13} className="text-[#3b6cf6]" />
-              {store.weightEma}kg{store.bodyFatPct ? ` · ${store.bodyFatPct}%` : ""}
-            </button>
-            <MuteToggle />
-          </div>
-        </div>
-
-        {/* XP Bar */}
-        <div className="mt-2 h-1.5 rounded-full bg-[var(--surface-0)] overflow-hidden">
-          <div
-            className="h-full progress-blue transition-all duration-300"
-            style={{ width: `${lvl.progress}%` }}
-          />
-        </div>
-
-        {/* Inline Scale + OKOK Body-Comp + Web Bluetooth Scanner Drawer */}
-        {weightEditorOpen && (
-          <div className="mt-2.5 p-2.5 rounded-lg bg-[var(--surface-0)] border border-[var(--border-accent)] space-y-2">
-            <div className="flex items-center justify-between gap-2">
-              <span className="font-[family-name:var(--font-rajdhani)] text-xs uppercase tracking-wider text-[var(--text-secondary)]">
-                OKOK / SCALE (RAW KG):
-              </span>
-              <div className="flex items-center gap-1.5 font-[family-name:var(--font-geist-mono)] text-xs">
-                <button
-                  onClick={() => setDraftWeight((w) => Math.round((w - 0.2) * 10) / 10)}
-                  className="px-2 py-1 rounded bg-[var(--surface-2)]"
-                >
-                  -0.2
-                </button>
-                <span className="min-w-[50px] text-center font-bold">{draftWeight.toFixed(1)}</span>
-                <button
-                  onClick={() => setDraftWeight((w) => Math.round((w + 0.2) * 10) / 10)}
-                  className="px-2 py-1 rounded bg-[var(--surface-2)]"
-                >
-                  +0.2
-                </button>
-                <button
-                  onClick={handleSaveWeight}
-                  className="ml-1 px-2.5 py-1 rounded bg-[#3b6cf6] text-white font-bold"
-                >
-                  SAVE
-                </button>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-1.5">
-              <input
-                type="number"
-                step="0.1"
-                placeholder="OKOK BF %"
-                value={draftBf}
-                onChange={(e) => setDraftBf(e.target.value)}
-                className="w-24 px-2 py-1 rounded bg-[var(--surface-1)] border border-[var(--border-subtle)] font-[family-name:var(--font-geist-mono)] text-[11px]"
+                className="w-1.5 h-1.5 rounded-full bg-[#22c55e]"
+                title="Live Health Connect telemetry"
               />
-              <input
-                type="number"
-                step="0.1"
-                placeholder="Water %"
-                value={draftBw}
-                onChange={(e) => setDraftBw(e.target.value)}
-                className="w-24 px-2 py-1 rounded bg-[var(--surface-1)] border border-[var(--border-subtle)] font-[family-name:var(--font-geist-mono)] text-[11px]"
-              />
-              {bleReady && (
-                <button
-                  onClick={handleBleScan}
-                  disabled={bleBusy}
-                  className="ml-auto inline-flex items-center gap-1 px-2.5 py-1 rounded bg-[#22c55e]/20 border border-[#22c55e]/50 font-[family-name:var(--font-rajdhani)] text-[11px] font-bold uppercase text-[#4ade80] disabled:opacity-50"
-                >
-                  <Bluetooth size={11} /> {bleBusy ? "SCANNING..." : "SCAN BLE SCALE"}
-                </button>
-              )}
-            </div>
+            )}
           </div>
-        )}
-
-        {/* Single 4-Context Selector */}
-        <div className="mt-3 grid grid-cols-4 gap-1.5">
-          {CONTEXT_LIST.map((ctx) => {
-            const active = store.context === ctx.id;
-            return (
-              <button
-                key={ctx.id}
-                onClick={() => store.setContext(ctx.id)}
-                className={`py-1.5 px-1 rounded-md font-[family-name:var(--font-rajdhani)] text-[11px] font-bold uppercase tracking-wider border transition-colors ${
-                  active
-                    ? "bg-[#3b6cf6]/25 border-[#3b6cf6] text-white"
-                    : "bg-[var(--surface-1)] border-[var(--border-subtle)] text-[var(--text-secondary)]"
-                }`}
-              >
-                {ctx.shortLabel}
-              </button>
-            );
-          })}
-        </div>
-
-        <div className="mt-2 flex items-center justify-between gap-2">
-          <p className="text-[10px] text-[var(--text-secondary)] truncate">
-            {CONTEXTS[store.context].sub}
-          </p>
-          <div className="flex items-center gap-1.5 shrink-0">
-            <button
-              onClick={store.toggleLowMana}
-              className={`px-2 py-0.5 rounded text-[10px] font-[family-name:var(--font-rajdhani)] font-bold uppercase border ${
-                store.lowMana
-                  ? "bg-[#8b5cf6]/25 border-[#8b5cf6] text-[#c4b5fd]"
-                  : "bg-[var(--surface-1)] border-[var(--border-subtle)] text-[var(--text-muted)]"
-              }`}
-            >
-              Low Mana
-            </button>
-            <button
-              onClick={store.toggleDebloat}
-              className={`px-2 py-0.5 rounded text-[10px] font-[family-name:var(--font-rajdhani)] font-bold uppercase border ${
-                store.debloatMode
-                  ? "bg-[#f59e0b]/25 border-[#f59e0b] text-[#fcd34d]"
-                  : "bg-[var(--surface-1)] border-[var(--border-subtle)] text-[var(--text-muted)]"
-              }`}
-            >
-              De-Bloat
-            </button>
-          </div>
-        </div>
-      </SystemPanel>
-
-      {/* ANTIGRAVITY LIVE COACH OVERRIDE BANNER */}
-      {store.coachBanner.trim() && (
-        <div
-          className="rounded-xl p-3 bg-[#f59e0b]/10 border border-[#f59e0b]/45"
-          style={{ borderLeftWidth: "3px", borderLeftColor: "#f59e0b" }}
-        >
-          <p className="font-[family-name:var(--font-rajdhani)] text-[11px] font-bold uppercase tracking-[0.14em] text-[#fbbf24]">
-            COACH OVERRIDE (LIVE FROM SHEET)
-          </p>
-          <p className="text-xs text-[var(--text-primary)] leading-snug mt-0.5">
-            {store.coachBanner}
-          </p>
-        </div>
-      )}
-
-      {/* AMBIENT SHADOW DIRECTIVE */}
-      {directive && (
-        <div
-          className="rounded-xl p-3 bg-[var(--surface-1)] border border-[var(--border-subtle)] flex items-center justify-between gap-2.5"
-          style={{ borderLeftWidth: "3px", borderLeftColor: directive.color }}
-        >
-          <div className="min-w-0">
-            <p
-              className="font-[family-name:var(--font-rajdhani)] text-[11px] font-bold uppercase tracking-[0.14em]"
-              style={{ color: directive.color }}
-            >
-              {directive.title}
-            </p>
-            <p className="text-xs text-[var(--text-secondary)] leading-snug mt-0.5">
-              {directive.message}
-            </p>
-          </div>
-          {directive.actionLabel && (
-            <button
-              onClick={handleDirectiveAction}
-              className="shrink-0 px-2.5 py-1.5 rounded-lg font-[family-name:var(--font-rajdhani)] text-[11px] font-bold uppercase tracking-wider text-white"
-              style={{ backgroundColor: directive.color }}
-            >
-              {directive.actionLabel}
-            </button>
-          )}
-        </div>
-      )}
-
-      {/* CARD 1: TODAY'S GATE (WORKOUT & MOVEMENT) */}
-      <SystemPanel className="p-3.5" animate={false}>
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-1.5">
-            <Dumbbell size={14} className="text-[#3b6cf6]" />
-            <h2 className="font-[family-name:var(--font-rajdhani)] text-xs font-bold uppercase tracking-[0.15em] text-[var(--text-secondary)]">
-              TODAY&apos;S GATE (NO SKIPS)
-            </h2>
-          </div>
-          {workoutDoneToday && (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-[#22c55e]/20 text-[#4ade80] font-[family-name:var(--font-geist-mono)] text-[10px] font-bold">
-              <Check size={11} /> GREEN
+          <div className="mt-1.5 flex items-baseline gap-1 truncate">
+            <span className="font-mono tabular-nums text-base font-semibold text-[var(--text-primary)]">
+              {samsungSteps.toLocaleString()}
             </span>
-          )}
-        </div>
-
-        {/* Resume Active Long-Rest Session */}
-        {activeResume && (
-          <button
-            onClick={() => {
-              store.setSplit(activeResume.split);
-              store.setArena(activeResume.arena);
-              store.setGateRank(activeResume.gateRank);
-              setCombatOpen(true);
-            }}
-            className="mt-2.5 w-full px-3 py-2 rounded-xl bg-[#f59e0b]/15 hover:bg-[#f59e0b]/25 border border-[#f59e0b]/50 flex items-center justify-between text-left transition-colors"
-          >
-            <div className="flex items-center gap-2">
-              <Timer size={14} className="text-[#fbbf24] shrink-0" />
-              <div>
-                <div className="font-[family-name:var(--font-rajdhani)] text-xs font-bold uppercase tracking-wider text-[#fbbf24]">
-                  RESUME IN-PROGRESS GATE ({activeResume.checkedSets}/{activeResume.totalSets} SETS)
-                </div>
-                <div className="font-[family-name:var(--font-geist-mono)] text-[10px] text-[var(--text-secondary)]">
-                  {activeResume.lastSetAtMs
-                    ? `RESTING ${formatRestDuration(
-                        Math.max(0, Math.floor((nowMs - activeResume.lastSetAtMs) / 1000))
-                      )} · TAP TO CONTINUE`
-                    : "SAVED OFFLINE · TAP TO CONTINUE"}
-                </div>
-              </div>
-            </div>
-            <span className="font-[family-name:var(--font-rajdhani)] text-xs font-bold uppercase text-[#fbbf24]">
-              OPEN
+            <span className="font-mono text-[11px] text-[var(--text-muted)]">
+              / {Math.round(store.stepTarget / 1000)}k
             </span>
-          </button>
-        )}
-
-        {/* Weekly Rotation Tracker (Mon-Sun: 4 Core + 2 Bonus) */}
-        <div className="mt-2.5 flex items-center justify-between text-[10px] font-[family-name:var(--font-geist-mono)] text-[var(--text-secondary)]">
-          <span>
-            WEEKLY ROTATION ·{" "}
-            <strong className="text-[var(--text-primary)]">
-              {weekly.coreDoneCount}/4 CORE
-            </strong>
-            {weekly.bonusDoneCount > 0 ? ` + ${weekly.bonusDoneCount} BONUS` : ""}
-          </span>
-          <button
-            onClick={() => store.setSplit(weekly.nextCoreSplit)}
-            className="text-[#60a5fa] hover:underline font-bold"
-          >
-            NEXT: {nextCoreSpec.shortLabel}
-          </button>
-        </div>
-
-        {/* 2 Volume Modes: Low Time 2x Fail vs Regular 3x15 */}
-        <div className="mt-2 grid grid-cols-2 gap-1.5">
-          {GATE_RANKS.map((rank) => {
-            const active = store.gateRank === rank.id;
-            return (
-              <button
-                key={rank.id}
-                onClick={() => store.setGateRank(rank.id)}
-                className={`py-1.5 px-2.5 rounded-lg border text-left transition-colors ${
-                  active
-                    ? "bg-[#3b6cf6]/20 border-[#3b6cf6] text-white"
-                    : "bg-[var(--surface-2)]/60 border-[var(--border-subtle)] text-[var(--text-secondary)]"
-                }`}
-              >
-                <div className="flex items-center justify-between gap-1">
-                  <span className="font-[family-name:var(--font-rajdhani)] text-xs font-bold uppercase">
-                    {rank.tag} · {rank.label}
-                  </span>
-                </div>
-                <div className="font-[family-name:var(--font-geist-mono)] text-[9px] opacity-80">
-                  {rank.duration} · +{rank.baseXp}XP
-                </div>
-              </button>
-            );
-          })}
-        </div>
-
-        {/* 4 Core Rotation Splits (U-A, L-A, U-B, L-B) */}
-        <div className="mt-2 grid grid-cols-4 gap-1.5">
-          {coreSplits.map((sp) => {
-            const doneCount = weekly.completedThisWeek[sp.id] ?? 0;
-            const isNext = sp.id === weekly.nextCoreSplit;
-            const isSelected = store.split === sp.id;
-            return (
-              <button
-                key={sp.id}
-                onClick={() => store.setSplit(sp.id)}
-                className={`py-1.5 px-1 rounded-md font-[family-name:var(--font-rajdhani)] text-[11px] font-bold uppercase border flex items-center justify-center gap-1 ${
-                  isSelected
-                    ? "bg-[var(--surface-3)] border-[#3b6cf6] text-white"
-                    : isNext
-                      ? "bg-[#3b6cf6]/10 border-[#3b6cf6]/45 text-[#93c5fd]"
-                      : "bg-[var(--surface-0)] border-[var(--border-subtle)] text-[var(--text-muted)]"
-                }`}
-                title={`${sp.label}: ${sp.focus}`}
-              >
-                {doneCount > 0 && <Check size={10} className="text-[#4ade80] shrink-0" />}
-                <span>{sp.shortLabel}</span>
-              </button>
-            );
-          })}
-        </div>
-
-        {/* 2 Optional Bonus Days (Day 5 Full Body+ & Day 6 Jog/Pool) */}
-        <div className="mt-1.5 grid grid-cols-2 gap-1.5">
-          {bonusSplits.map((sp) => {
-            const doneCount = weekly.completedThisWeek[sp.id] ?? 0;
-            const isSelected = store.split === sp.id;
-            return (
-              <button
-                key={sp.id}
-                onClick={() => store.setSplit(sp.id)}
-                className={`py-1 px-2 rounded-md font-[family-name:var(--font-rajdhani)] text-[10px] font-bold uppercase tracking-wider border flex items-center justify-center gap-1 ${
-                  isSelected
-                    ? "bg-[var(--surface-3)] border-[#8b5cf6] text-white"
-                    : "bg-[var(--surface-0)] border-[var(--border-subtle)] text-[var(--text-muted)]"
-                }`}
-                title={sp.focus}
-              >
-                {doneCount > 0 && <Check size={10} className="text-[#4ade80] shrink-0" />}
-                <span>{sp.label}</span>
-              </button>
-            );
-          })}
-        </div>
-
-        <div className="mt-1.5 grid grid-cols-3 gap-1.5">
-          {ARENAS.map((ar) => (
-            <button
-              key={ar.id}
-              onClick={() => store.setArena(ar.id)}
-              className={`py-1 rounded font-[family-name:var(--font-rajdhani)] text-[10px] font-bold uppercase tracking-wider border ${
-                store.arena === ar.id
-                  ? "bg-[var(--surface-3)] border-[var(--text-secondary)]/50 text-[var(--text-primary)]"
-                  : "bg-[var(--surface-0)] border-[var(--border-subtle)] text-[var(--text-muted)]"
-              }`}
-            >
-              {ar.shortLabel}
-            </button>
-          ))}
-        </div>
-
-        {/* Split Focus + Exercise Preview */}
-        <p className="mt-2 text-[11px] text-[var(--text-secondary)] truncate">
-          <strong className="text-[var(--text-primary)]">{activeSplitSpec.label}:</strong>{" "}
-          {prescribedPreview.map((e) => e.name).join(" · ")}
-        </p>
-
-        {/* Primary Action */}
-        <div className="mt-2.5 flex gap-2">
-          <button
-            onClick={() => setCombatOpen(true)}
-            className="flex-1 h-11 rounded-xl bg-[#3b6cf6] hover:bg-[#2a5be6] font-[family-name:var(--font-rajdhani)] text-sm font-bold uppercase tracking-[0.14em] text-white"
-          >
-            ENTER GATE · {activeRankSpec.label.toUpperCase()}
-          </button>
-          <button
-            onClick={handleClear5mFloor}
-            className="px-3 h-11 rounded-xl bg-[var(--surface-2)] border border-[var(--border-subtle)] font-[family-name:var(--font-rajdhani)] text-[11px] font-bold uppercase text-[var(--text-secondary)]"
-            title="Quick 5m No-Skip survival check-in"
-          >
-            5m Floor
-          </button>
-        </div>
-
-        {/* Quick Cardio / Swim / Badminton / Kili Chips */}
-        <div className="mt-2.5 flex items-center gap-1.5 overflow-x-auto pb-1">
-          <Footprints size={12} className="shrink-0 text-[var(--text-muted)]" />
-          {(Object.keys(MOVEMENT_PRESETS) as MovementKind[]).map((kind) => {
-            const mp = MOVEMENT_PRESETS[kind];
-            return (
-              <button
-                key={kind}
-                onClick={() => handleQuickMove(kind)}
-                className="shrink-0 px-2.5 py-1 rounded-full bg-[var(--surface-2)] hover:bg-[var(--surface-3)] border border-[var(--border-subtle)] font-[family-name:var(--font-geist-mono)] text-[10px] text-[var(--text-secondary)]"
-              >
-                {mp.label} (+{mp.verticalGainM}m)
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Samsung Health Step Tracker Bar */}
-        <div className="mt-2.5 pt-2.5 border-t border-[var(--border-subtle)]">
-          <div className="flex items-center justify-between gap-2 text-[11px]">
-            <div className="flex items-center gap-1.5">
-              <span className="font-[family-name:var(--font-geist-mono)] text-[var(--text-secondary)]">
-                SAMSUNG STEPS:{" "}
-                <strong className="text-[var(--text-primary)]">
-                  {samsungSteps.toLocaleString()}
-                </strong>{" "}
-                / {store.stepTarget.toLocaleString()}
-              </span>
-              {today.hcStepsLive && (
-                <span className="px-1.5 py-0.5 rounded bg-[#22c55e]/20 border border-[#22c55e]/40 font-[family-name:var(--font-geist-mono)] text-[9px] font-bold uppercase text-[#22c55e]">
-                  LIVE
-                </span>
-              )}
-            </div>
-            <div className="flex items-center gap-1 font-[family-name:var(--font-geist-mono)] text-[10px]">
-              {samsungSteps > 0 && !today.hcStepsLive && (
-                <button
-                  onClick={() => handleSetSamsungSteps(0, true)}
-                  className="px-2 py-0.5 rounded bg-[var(--surface-2)] border border-[var(--border-subtle)] text-[var(--text-muted)]"
-                  title="Reset manual test steps to 0"
-                >
-                  0
-                </button>
-              )}
-              <button
-                onClick={() => handleSetSamsungSteps(samsungSteps + 2500)}
-                className="px-2 py-0.5 rounded bg-[var(--surface-2)] border border-[var(--border-subtle)] text-[var(--text-secondary)]"
-              >
-                +2.5k
-              </button>
-              <button
-                onClick={() => handleSetSamsungSteps(Math.max(samsungSteps, 10000))}
-                className="px-2 py-0.5 rounded bg-[var(--surface-2)] border border-[var(--border-subtle)] text-[var(--text-secondary)]"
-              >
-                10k
-              </button>
-              <button
-                onClick={() => handleSetSamsungSteps(Math.max(samsungSteps, 15000))}
-                className="px-2 py-0.5 rounded bg-[var(--surface-2)] border border-[var(--border-subtle)] text-[var(--text-secondary)]"
-              >
-                15k
-              </button>
-            </div>
           </div>
-          <div className="mt-1.5 h-1.5 rounded-full bg-[var(--surface-0)] overflow-hidden">
+          <div className="mt-2.5 h-1 rounded-full bg-[var(--surface-0)] overflow-hidden">
             <div
               className={`h-full transition-all duration-300 ${
                 samsungSteps >= 10000 ? "progress-green" : "progress-blue"
@@ -827,193 +486,699 @@ export default function CommandDeckPage() {
               style={{ width: `${stepPct}%` }}
             />
           </div>
-        </div>
-      </SystemPanel>
+        </button>
 
-      {/* CARD 2: VESSEL FUEL (LUNCH-OMAD + SKIP DINNER) */}
-      <SystemPanel className="p-3.5" animate={false}>
+        <button
+          onClick={() => setFuelSheetOpen(true)}
+          className="rounded-2xl bg-[var(--surface-1)] border border-[var(--border-subtle)] p-3.5 text-left hover:border-[var(--border-accent)] transition-colors"
+        >
+          <span className="text-xs font-medium text-[var(--text-secondary)]">Protein</span>
+          <div className="mt-1.5 flex items-baseline gap-1 truncate">
+            <span className="font-mono tabular-nums text-base font-semibold text-[var(--text-primary)]">
+              {totals.proteinG}g
+            </span>
+            <span className="font-mono text-[11px] text-[var(--text-muted)]">
+              / {totals.targetProteinG}g
+            </span>
+          </div>
+          <div className="mt-2.5 h-1 rounded-full bg-[var(--surface-0)] overflow-hidden">
+            <div
+              className={`h-full transition-all duration-300 ${
+                totals.proteinG >= 145 ? "progress-green" : "progress-blue"
+              }`}
+              style={{ width: `${proteinPct}%` }}
+            />
+          </div>
+        </button>
+
+        <button
+          onClick={() => setFuelSheetOpen(true)}
+          className="rounded-2xl bg-[var(--surface-1)] border border-[var(--border-subtle)] p-3.5 text-left hover:border-[var(--border-accent)] transition-colors"
+        >
+          <span className="text-xs font-medium text-[var(--text-secondary)]">Calories</span>
+          <div className="mt-1.5 flex items-baseline gap-1 truncate">
+            <span className="font-mono tabular-nums text-base font-semibold text-[var(--text-primary)]">
+              {totals.kcal}
+            </span>
+            <span className="font-mono text-[11px] text-[var(--text-muted)]">
+              / {totals.targetKcal}
+            </span>
+          </div>
+          <div className="mt-2.5 h-1 rounded-full bg-[var(--surface-0)] overflow-hidden">
+            <div
+              className={`h-full transition-all duration-300 ${
+                overKcal ? "progress-red" : "progress-blue"
+              }`}
+              style={{ width: `${kcalPct}%` }}
+            />
+          </div>
+        </button>
+      </section>
+
+      {/* OPTIONAL SINGLE-LINE ACTIONABLE BANNER */}
+      {store.coachBanner.trim() ? (
+        <div className="rounded-2xl px-4 py-3 bg-[var(--surface-1)] border border-[#f59e0b]/35 flex items-center justify-between gap-3">
+          <p className="text-xs text-[var(--text-primary)] leading-snug">
+            <span className="font-semibold text-[#fbbf24] mr-1.5">Note:</span>
+            {store.coachBanner}
+          </p>
+        </div>
+      ) : activeResume ? (
+        <button
+          onClick={() => {
+            store.setSplit(activeResume.split);
+            store.setArena(activeResume.arena);
+            store.setGateRank(activeResume.gateRank);
+            setCombatOpen(true);
+          }}
+          className="w-full rounded-2xl px-4 py-3 bg-[var(--surface-1)] border border-[#3b6cf6]/40 flex items-center justify-between text-left"
+        >
+          <div className="flex items-center gap-2.5 min-w-0">
+            <Timer size={15} className="text-[#60a5fa] shrink-0" />
+            <span className="text-xs font-medium text-[var(--text-primary)] truncate">
+              {formatSplitTitle(activeResume.split)} in progress ({activeResume.checkedSets}/
+              {activeResume.totalSets} sets)
+              {activeResume.lastSetAtMs
+                ? ` · Resting ${formatRestDuration(
+                    Math.max(0, Math.floor((nowMs - activeResume.lastSetAtMs) / 1000))
+                  )}`
+                : ""}
+            </span>
+          </div>
+          <span className="text-xs font-semibold text-[#60a5fa] shrink-0">Resume</span>
+        </button>
+      ) : actionableDirective ? (
+        <div className="rounded-2xl px-4 py-3 bg-[var(--surface-1)] border border-[var(--border-subtle)] flex items-center justify-between gap-3">
+          <p className="text-xs text-[var(--text-secondary)] leading-snug">
+            {actionableDirective.message}
+          </p>
+          {actionableDirective.actionLabel && (
+            <button
+              onClick={handleDirectiveAction}
+              className="shrink-0 px-3 py-1.5 rounded-lg bg-[var(--surface-2)] text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-3)]"
+            >
+              {actionableDirective.actionKind === "seal_whey"
+                ? "Add Whey+Skyr"
+                : actionableDirective.actionKind === "lock_skip"
+                  ? "Skip dinner"
+                  : actionableDirective.actionKind === "floor_5m"
+                    ? "5m Floor"
+                    : "De-bloat meal"}
+            </button>
+          )}
+        </div>
+      ) : null}
+
+      {/* 3. TODAY'S WORKOUT CARD */}
+      <section className="rounded-2xl bg-[var(--surface-1)] border border-[var(--border-subtle)] p-5">
         <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-1.5">
-            <Utensils size={14} className="text-[#f59e0b]" />
-            <h2 className="font-[family-name:var(--font-rajdhani)] text-xs font-bold uppercase tracking-[0.15em] text-[var(--text-secondary)]">
-              VESSEL FUEL (LUNCH + SKIP DINNER)
-            </h2>
+          <div className="flex items-center gap-2.5">
+            <span className="text-xs font-medium text-[var(--text-secondary)]">
+              This week · {weekly.coreDoneCount}/4
+            </span>
+            <div className="flex items-center gap-1.5" aria-label="Weekly core workout progress">
+              {coreSplits.map((sp) => {
+                const done = (weekly.completedThisWeek[sp.id] ?? 0) > 0;
+                const isNext = sp.id === weekly.nextCoreSplit;
+                return (
+                  <span
+                    key={sp.id}
+                    title={formatSplitTitle(sp.id)}
+                    className={`w-2 h-2 rounded-full ${
+                      done
+                        ? "bg-[#22c55e]"
+                        : isNext
+                          ? "bg-[#3b6cf6]/40 ring-1 ring-[#3b6cf6]"
+                          : "bg-[var(--surface-3)]"
+                    }`}
+                  />
+                );
+              })}
+            </div>
           </div>
 
-          <div className="flex items-center gap-1">
+          <button
+            onClick={() => setSwitchOpen((v) => !v)}
+            className="inline-flex items-center gap-1 text-xs font-medium text-[#60a5fa] hover:text-[#93c5fd]"
+          >
+            <span>Change</span>
+            {switchOpen ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+          </button>
+        </div>
+
+        <div className="mt-3 flex items-center justify-between gap-2">
+          <h2 className="text-xl font-semibold tracking-tight text-[var(--text-primary)]">
+            {splitTitle}
+          </h2>
+          {workoutDoneToday && (
+            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[#22c55e]/15 text-[#4ade80] text-[11px] font-medium">
+              <Check size={11} /> Done
+            </span>
+          )}
+        </div>
+
+        <p className="mt-1 text-xs text-[var(--text-secondary)] truncate">
+          {activeSplitSpec.focus} · {formatArenaTitle(store.arena)} · {prescribedPreview.length} exercises
+        </p>
+
+        {/* iOS Segmented Mode Pill */}
+        <div className="mt-4 bg-[var(--surface-0)] p-1 rounded-xl grid grid-cols-2 gap-1">
+          {(["regular_3x15", "low_time_2x"] as const).map((rankId) => {
+            const active = store.gateRank === rankId;
+            return (
+              <button
+                key={rankId}
+                onClick={() => store.setGateRank(rankId)}
+                className={`py-2 px-3 rounded-lg text-xs font-medium transition-colors ${
+                  active
+                    ? "bg-[var(--surface-2)] text-[var(--text-primary)] shadow-xs"
+                    : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                }`}
+              >
+                {rankId === "regular_3x15" ? "Regular · 3x15" : "Low Time · 2x Fail"}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Collapsible Change Drawer */}
+        {switchOpen && (
+          <div className="mt-4 pt-4 border-t border-[var(--border-subtle)] space-y-3">
+            <div>
+              <p className="text-[11px] font-medium text-[var(--text-muted)] mb-2">
+                Core weekly rotation
+              </p>
+              <div className="grid grid-cols-4 gap-1.5">
+                {coreSplits.map((sp) => {
+                  const doneCount = weekly.completedThisWeek[sp.id] ?? 0;
+                  const isNext = sp.id === weekly.nextCoreSplit;
+                  const isSelected = store.split === sp.id;
+                  return (
+                    <button
+                      key={sp.id}
+                      onClick={() => store.setSplit(sp.id)}
+                      className={`py-2 px-1.5 rounded-xl text-xs font-medium border flex flex-col items-center gap-0.5 transition-colors ${
+                        isSelected
+                          ? "bg-[var(--surface-2)] border-[#3b6cf6] text-[var(--text-primary)]"
+                          : "bg-[var(--surface-0)] border-[var(--border-subtle)] text-[var(--text-secondary)]"
+                      }`}
+                    >
+                      <span className="flex items-center gap-1">
+                        {doneCount > 0 && <Check size={11} className="text-[#4ade80]" />}
+                        {formatSplitTitle(sp.id)}
+                      </span>
+                      {isNext && (
+                        <span className="text-[10px] text-[#60a5fa]">Next</span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div>
+              <p className="text-[11px] font-medium text-[var(--text-muted)] mb-2">
+                Optional 5th-6th day
+              </p>
+              <div className="grid grid-cols-2 gap-1.5">
+                {bonusSplits.map((sp) => {
+                  const doneCount = weekly.completedThisWeek[sp.id] ?? 0;
+                  const isSelected = store.split === sp.id;
+                  return (
+                    <button
+                      key={sp.id}
+                      onClick={() => store.setSplit(sp.id)}
+                      className={`py-2 px-3 rounded-xl text-xs font-medium border flex items-center justify-center gap-1.5 transition-colors ${
+                        isSelected
+                          ? "bg-[var(--surface-2)] border-[#3b6cf6] text-[var(--text-primary)]"
+                          : "bg-[var(--surface-0)] border-[var(--border-subtle)] text-[var(--text-secondary)]"
+                      }`}
+                    >
+                      {doneCount > 0 && <Check size={11} className="text-[#4ade80]" />}
+                      <span>{sp.id === "full_body_plus" ? "Day 5 · Full Body +" : "Day 6 · Jog & Pool"}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div>
+              <p className="text-[11px] font-medium text-[var(--text-muted)] mb-2">
+                Location
+              </p>
+              <div className="grid grid-cols-3 gap-1.5">
+                {ARENAS.map((ar) => (
+                  <button
+                    key={ar.id}
+                    onClick={() => store.setArena(ar.id)}
+                    className={`py-2 px-2 rounded-xl text-xs font-medium border transition-colors ${
+                      store.arena === ar.id
+                        ? "bg-[var(--surface-2)] border-[#3b6cf6] text-[var(--text-primary)]"
+                        : "bg-[var(--surface-0)] border-[var(--border-subtle)] text-[var(--text-secondary)]"
+                    }`}
+                  >
+                    {formatArenaTitle(ar.id)}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <button
+              onClick={handleClear5mFloor}
+              className="w-full text-center text-xs text-[var(--text-muted)] hover:text-[var(--text-secondary)] pt-1"
+            >
+              Need an emergency check-in? Log 5m No-Skip Floor
+            </button>
+          </div>
+        )}
+
+        <button
+          onClick={() => setCombatOpen(true)}
+          className="mt-4 h-12 w-full rounded-xl bg-[#3b6cf6] hover:bg-[#2a5be6] font-semibold text-sm text-white transition-colors"
+        >
+          {activeResume
+            ? `Resume ${splitTitle} (${activeResume.checkedSets}/${activeResume.totalSets})`
+            : `Start ${splitTitle}`}
+        </button>
+      </section>
+
+      {/* 4. FUEL CARD */}
+      <section className="rounded-2xl bg-[var(--surface-1)] border border-[var(--border-subtle)] p-5">
+        <div className="flex items-center justify-between gap-2">
+          <h2 className="text-base font-semibold text-[var(--text-primary)]">Fuel</h2>
+          <span
+            className={`text-xs font-medium ${
+              today.dinnerSkipped ? "text-[#4ade80]" : "text-[var(--text-muted)]"
+            }`}
+          >
+            {today.dinnerSkipped ? "Dinner skipped ✓" : "Lunch + skip dinner"}
+          </span>
+        </div>
+
+        <div className="mt-3.5 grid grid-cols-2 gap-2.5">
+          <button
+            onClick={() => setFuelSheetOpen(true)}
+            className="h-11 rounded-xl bg-[var(--surface-2)] hover:bg-[var(--surface-3)] text-sm font-medium text-[var(--text-primary)] flex items-center justify-center gap-1.5 transition-colors"
+          >
+            <Plus size={15} />
+            <span>Log meal</span>
+          </button>
+
+          <button
+            onClick={handleLockDinnerSkip}
+            disabled={today.dinnerSkipped}
+            className={`h-11 rounded-xl text-sm font-medium flex items-center justify-center gap-1.5 border transition-colors ${
+              today.dinnerSkipped
+                ? "bg-[#22c55e]/15 border-[#22c55e]/35 text-[#4ade80]"
+                : "bg-[var(--surface-0)] hover:bg-[var(--surface-2)] border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+            }`}
+          >
+            {today.dinnerSkipped ? (
+              <>
+                <Check size={15} />
+                <span>Dinner skipped</span>
+              </>
+            ) : (
+              <>
+                <Lock size={14} />
+                <span>Lock skip dinner</span>
+              </>
+            )}
+          </button>
+        </div>
+
+        {/* Top 3 Quick-Log Pills */}
+        <div className="mt-3 flex flex-wrap gap-2">
+          {quickThreePresets.map((preset) => (
+            <button
+              key={preset.id}
+              onClick={() => handleFoodChip(preset.id)}
+              className="px-3 py-1.5 rounded-full bg-[var(--surface-2)] hover:bg-[var(--surface-3)] text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
+            >
+              {preset.shortLabel}
+            </button>
+          ))}
+        </div>
+
+        {/* Clean Single-Column Logged Meals */}
+        {today.foods.length > 0 && (
+          <div className="mt-3.5 pt-3.5 border-t border-[var(--border-subtle)] space-y-2">
+            {today.foods.map((entry) => (
+              <div
+                key={entry.id}
+                className="flex items-center justify-between gap-3 text-xs"
+              >
+                <span className="text-[var(--text-primary)] truncate">{entry.label}</span>
+                <div className="flex items-center gap-2.5 shrink-0">
+                  <span className="font-mono tabular-nums text-[var(--text-secondary)]">
+                    {entry.proteinG}g P · {entry.kcal} kcal
+                  </span>
+                  <button
+                    onClick={() => store.removeFoodEntry(todayKey, entry.id)}
+                    className="text-[var(--text-muted)] hover:text-[#ef4444]"
+                    aria-label={`Remove ${entry.label}`}
+                  >
+                    <X size={13} />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* BOTTOM SHEET: LOG MEAL */}
+      <SheetModal
+        open={fuelSheetOpen}
+        onClose={() => setFuelSheetOpen(false)}
+        title="Log meal"
+      >
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-xs text-[var(--text-secondary)]">Portion size</span>
+          <div className="bg-[var(--surface-0)] p-1 rounded-xl grid grid-cols-3 gap-1">
             {([0.5, 1, 1.5] as const).map((mult) => (
               <button
                 key={mult}
                 onClick={() => setPortion(mult)}
-                className={`px-1.5 py-0.5 rounded font-[family-name:var(--font-geist-mono)] text-[10px] font-bold border ${
+                className={`px-3 py-1 rounded-lg font-mono text-xs font-medium transition-colors ${
                   portion === mult
-                    ? "bg-[#3b6cf6]/25 border-[#3b6cf6] text-white"
-                    : "bg-[var(--surface-0)] border-[var(--border-subtle)] text-[var(--text-muted)]"
+                    ? "bg-[var(--surface-2)] text-[var(--text-primary)]"
+                    : "text-[var(--text-secondary)]"
                 }`}
               >
                 {mult}x
               </button>
             ))}
-            <button
-              onClick={() => setCustomOpen((v) => !v)}
-              className="ml-1 px-1.5 py-0.5 rounded bg-[var(--surface-2)] border border-[var(--border-subtle)] font-[family-name:var(--font-rajdhani)] text-[10px] font-bold uppercase text-[var(--text-secondary)] inline-flex items-center gap-0.5"
-            >
-              <Plus size={10} /> Custom
-            </button>
           </div>
         </div>
 
-        {/* Macro Bars */}
-        <div className="mt-2.5 grid grid-cols-2 gap-3">
-          <div>
-            <div className="flex items-baseline justify-between text-[11px]">
-              <span className="font-[family-name:var(--font-rajdhani)] font-bold uppercase text-[#f59e0b]">
-                PROTEIN
-              </span>
-              <span className="font-[family-name:var(--font-geist-mono)] tabular-nums text-xs font-bold">
-                {totals.proteinG} / {totals.targetProteinG}g
-              </span>
-            </div>
-            <div className="mt-1 h-1.5 rounded-full bg-[var(--surface-0)] overflow-hidden">
-              <div
-                className={`h-full transition-all duration-300 ${
-                  totals.proteinG >= 145 ? "progress-green" : "progress-gold"
-                }`}
-                style={{ width: `${proteinPct}%` }}
-              />
-            </div>
-          </div>
-
-          <div>
-            <div className="flex items-baseline justify-between text-[11px]">
-              <span className="font-[family-name:var(--font-rajdhani)] font-bold uppercase text-[#3b6cf6]">
-                KCAL {totals.activeFlexKcal > 0 ? `+${totals.activeFlexKcal}` : ""}
-              </span>
-              <span className="font-[family-name:var(--font-geist-mono)] tabular-nums text-xs font-bold">
-                {totals.kcal} / {totals.targetKcal}
-              </span>
-            </div>
-            <div className="mt-1 h-1.5 rounded-full bg-[var(--surface-0)] overflow-hidden">
-              <div
-                className={`h-full transition-all duration-300 ${
-                  overKcal ? "progress-red" : "progress-blue"
-                }`}
-                style={{ width: `${kcalPct}%` }}
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Custom Inline Form */}
-        {customOpen && (
-          <form onSubmit={handleCustomSubmit} className="mt-2.5 grid grid-cols-12 gap-1.5">
-            <input
-              type="text"
-              placeholder="Meal name"
-              value={customLabel}
-              onChange={(e) => setCustomLabel(e.target.value)}
-              className="col-span-5 px-2.5 py-1.5 rounded bg-[var(--surface-0)] border border-[var(--border-subtle)] text-xs"
-            />
-            <input
-              type="number"
-              placeholder="kcal"
-              value={customKcal}
-              onChange={(e) => setCustomKcal(e.target.value)}
-              className="col-span-3 px-2 py-1.5 rounded bg-[var(--surface-0)] border border-[var(--border-subtle)] text-xs font-[family-name:var(--font-geist-mono)]"
-              required
-            />
-            <input
-              type="number"
-              placeholder="P (g)"
-              value={customProtein}
-              onChange={(e) => setCustomProtein(e.target.value)}
-              className="col-span-2 px-2 py-1.5 rounded bg-[var(--surface-0)] border border-[var(--border-subtle)] text-xs font-[family-name:var(--font-geist-mono)]"
-            />
-            <button
-              type="submit"
-              className="col-span-2 rounded bg-[#3b6cf6] text-white font-[family-name:var(--font-rajdhani)] text-xs font-bold uppercase"
-            >
-              ADD
-            </button>
-          </form>
-        )}
-
-        {/* Context-Matched 1-Tap Spot Chips */}
-        <div className="mt-3 grid grid-cols-2 gap-1.5">
+        <div className="space-y-2">
           {contextPresets.map((preset) => {
-            const isRaid = preset.tags.includes("abs_raid");
-            const isSeal = preset.tags.includes("seal");
-            const isSolo = preset.tags.includes("salsa_solo");
             const scaledKcal = Math.round(preset.kcal * portion);
             const scaledP = Math.round(preset.proteinG * portion);
-
             return (
               <button
                 key={preset.id}
-                onClick={() => handleFoodChip(preset.id)}
-                className={`p-2 rounded-lg border text-left transition-colors ${
-                  isRaid
-                    ? "bg-[#8b5cf6]/15 border-[#8b5cf6]/45 hover:bg-[#8b5cf6]/25"
-                    : isSeal
-                      ? "bg-[#22c55e]/10 border-[#22c55e]/35 hover:bg-[#22c55e]/20"
-                      : isSolo
-                        ? "bg-[#f59e0b]/10 border-[#f59e0b]/35 hover:bg-[#f59e0b]/20"
-                        : "bg-[var(--surface-2)]/70 border-[var(--border-subtle)] hover:border-[var(--border-accent)]"
-                }`}
+                onClick={() => {
+                  handleFoodChip(preset.id);
+                  setFuelSheetOpen(false);
+                }}
+                className="w-full p-3.5 rounded-xl bg-[var(--surface-2)] hover:bg-[var(--surface-3)] flex items-center justify-between gap-3 text-left transition-colors"
               >
-                <div className="font-[family-name:var(--font-rajdhani)] text-xs font-bold leading-tight text-[var(--text-primary)] truncate">
-                  {preset.shortLabel}
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-[var(--text-primary)] truncate">
+                    {preset.shortLabel}
+                  </p>
+                  <p className="text-xs text-[var(--text-muted)] truncate mt-0.5">
+                    {preset.spot}
+                  </p>
                 </div>
-                <div className="font-[family-name:var(--font-geist-mono)] text-[10px] text-[var(--text-secondary)] mt-0.5">
-                  {scaledKcal} kcal · <span className="text-[#f59e0b]">{scaledP}g P</span>
+                <div className="text-right shrink-0 font-mono tabular-nums text-xs">
+                  <div className="text-[var(--text-primary)] font-semibold">{scaledP}g P</div>
+                  <div className="text-[var(--text-secondary)]">{scaledKcal} kcal</div>
                 </div>
               </button>
             );
           })}
         </div>
 
-        {/* Today's Logged Meals */}
-        {today.foods.length > 0 && (
-          <div className="mt-2.5 flex flex-wrap gap-1.5">
-            {today.foods.map((entry) => (
-              <span
-                key={entry.id}
-                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[var(--surface-0)] border border-[var(--border-subtle)] font-[family-name:var(--font-geist-mono)] text-[10px] text-[var(--text-secondary)]"
+        <div className="pt-2 border-t border-[var(--border-subtle)]">
+          <button
+            onClick={() => setCustomOpen((v) => !v)}
+            className="text-xs font-medium text-[#60a5fa] hover:text-[#93c5fd]"
+          >
+            {customOpen ? "Hide custom meal" : "+ Custom meal"}
+          </button>
+
+          {customOpen && (
+            <form
+              onSubmit={(e) => {
+                handleCustomSubmit(e);
+                setFuelSheetOpen(false);
+              }}
+              className="mt-3 grid grid-cols-12 gap-2"
+            >
+              <input
+                type="text"
+                placeholder="Meal name"
+                value={customLabel}
+                onChange={(e) => setCustomLabel(e.target.value)}
+                className="col-span-5 px-3 py-2 rounded-xl bg-[var(--surface-0)] border border-[var(--border-subtle)] text-xs"
+              />
+              <input
+                type="number"
+                placeholder="kcal"
+                value={customKcal}
+                onChange={(e) => setCustomKcal(e.target.value)}
+                className="col-span-3 px-2.5 py-2 rounded-xl bg-[var(--surface-0)] border border-[var(--border-subtle)] text-xs font-mono"
+                required
+              />
+              <input
+                type="number"
+                placeholder="P (g)"
+                value={customProtein}
+                onChange={(e) => setCustomProtein(e.target.value)}
+                className="col-span-2 px-2.5 py-2 rounded-xl bg-[var(--surface-0)] border border-[var(--border-subtle)] text-xs font-mono"
+              />
+              <button
+                type="submit"
+                className="col-span-2 rounded-xl bg-[#3b6cf6] text-white text-xs font-semibold"
               >
-                {entry.label} ({entry.proteinG}g)
+                Add
+              </button>
+            </form>
+          )}
+        </div>
+      </SheetModal>
+
+      {/* BOTTOM SHEET: SCALE & BODY COMP */}
+      <SheetModal
+        open={weightEditorOpen}
+        onClose={() => setWeightEditorOpen(false)}
+        title="Weight & body comp"
+      >
+        <div className="p-3.5 rounded-xl bg-[var(--surface-0)] flex items-center justify-between gap-2">
+          <div>
+            <p className="text-xs text-[var(--text-secondary)]">Raw weigh-in (kg)</p>
+            <p className="text-[11px] text-[var(--text-muted)]">7d EMA: {store.weightEma} kg</p>
+          </div>
+          <div className="flex items-center gap-2 font-mono text-sm">
+            <button
+              onClick={() => setDraftWeight((w) => Math.round((w - 0.2) * 10) / 10)}
+              className="h-9 px-3 rounded-lg bg-[var(--surface-2)] text-[var(--text-primary)]"
+            >
+              -0.2
+            </button>
+            <span className="min-w-[54px] text-center font-semibold">
+              {draftWeight.toFixed(1)}
+            </span>
+            <button
+              onClick={() => setDraftWeight((w) => Math.round((w + 0.2) * 10) / 10)}
+              className="h-9 px-3 rounded-lg bg-[var(--surface-2)] text-[var(--text-primary)]"
+            >
+              +0.2
+            </button>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2.5">
+          <input
+            type="number"
+            step="0.1"
+            placeholder="OKOK BF %"
+            value={draftBf}
+            onChange={(e) => setDraftBf(e.target.value)}
+            className="px-3 py-2.5 rounded-xl bg-[var(--surface-0)] border border-[var(--border-subtle)] font-mono text-xs"
+          />
+          <input
+            type="number"
+            step="0.1"
+            placeholder="Water %"
+            value={draftBw}
+            onChange={(e) => setDraftBw(e.target.value)}
+            className="px-3 py-2.5 rounded-xl bg-[var(--surface-0)] border border-[var(--border-subtle)] font-mono text-xs"
+          />
+        </div>
+
+        <div className="flex gap-2">
+          <button
+            onClick={handleSaveWeight}
+            className="flex-1 h-11 rounded-xl bg-[#3b6cf6] text-white text-sm font-semibold"
+          >
+            Save weight
+          </button>
+          {bleReady && (
+            <button
+              onClick={handleBleScan}
+              disabled={bleBusy}
+              className="h-11 px-4 rounded-xl bg-[var(--surface-2)] text-[var(--text-primary)] text-xs font-medium inline-flex items-center gap-1.5 disabled:opacity-50"
+            >
+              <Bluetooth size={14} className="text-[#4ade80]" />
+              <span>{bleBusy ? "Scanning..." : "Scan BLE Scale"}</span>
+            </button>
+          )}
+        </div>
+      </SheetModal>
+
+      {/* BOTTOM SHEET: MOVEMENT & STEPS */}
+      <SheetModal
+        open={stepsSheetOpen}
+        onClose={() => setStepsSheetOpen(false)}
+        title="Steps & activity"
+      >
+        <div className="p-3.5 rounded-xl bg-[var(--surface-0)] flex items-center justify-between">
+          <div>
+            <p className="text-xs text-[var(--text-secondary)]">
+              {today.hcStepsLive ? "Samsung Health (Live)" : "Daily steps"}
+            </p>
+            <p className="font-mono tabular-nums text-lg font-semibold text-[var(--text-primary)] mt-0.5">
+              {samsungSteps.toLocaleString()} / {store.stepTarget.toLocaleString()}
+            </p>
+          </div>
+          {today.hcStepsLive && (
+            <span className="px-2.5 py-1 rounded-full bg-[#22c55e]/15 text-[#4ade80] text-xs font-medium">
+              Live
+            </span>
+          )}
+        </div>
+
+        <div>
+          <p className="text-xs font-medium text-[var(--text-secondary)] mb-2">
+            Log activity (+Kilimanjaro vertical)
+          </p>
+          <div className="grid grid-cols-2 gap-2">
+            {(Object.keys(MOVEMENT_PRESETS) as MovementKind[]).map((kind) => {
+              const mp = MOVEMENT_PRESETS[kind];
+              return (
                 <button
-                  onClick={() => store.removeFoodEntry(todayKey, entry.id)}
-                  className="text-[var(--text-muted)] hover:text-[#ef4444]"
-                  aria-label={`Remove ${entry.label}`}
+                  key={kind}
+                  onClick={() => {
+                    handleQuickMove(kind);
+                    setStepsSheetOpen(false);
+                  }}
+                  className="p-3 rounded-xl bg-[var(--surface-2)] hover:bg-[var(--surface-3)] text-left transition-colors"
                 >
-                  <X size={10} />
+                  <p className="text-xs font-medium text-[var(--text-primary)]">{mp.label}</p>
+                  <p className="font-mono text-[11px] text-[var(--text-muted)] mt-0.5">
+                    +{mp.verticalGainM}m · +{mp.xp} XP
+                  </p>
                 </button>
-              </span>
-            ))}
+              );
+            })}
+          </div>
+        </div>
+
+        {!today.hcStepsLive && (
+          <div className="pt-2 border-t border-[var(--border-subtle)]">
+            <p className="text-xs text-[var(--text-muted)] mb-2">Manual step override</p>
+            <div className="grid grid-cols-4 gap-2 font-mono text-xs">
+              {samsungSteps > 0 ? (
+                <button
+                  onClick={() => handleSetSamsungSteps(0, true)}
+                  className="py-2 rounded-xl bg-[var(--surface-0)] border border-[var(--border-subtle)] text-[var(--text-muted)]"
+                >
+                  Reset 0
+                </button>
+              ) : (
+                <div />
+              )}
+              <button
+                onClick={() => handleSetSamsungSteps(samsungSteps + 2500)}
+                className="py-2 rounded-xl bg-[var(--surface-2)] text-[var(--text-primary)]"
+              >
+                +2.5k
+              </button>
+              <button
+                onClick={() => handleSetSamsungSteps(Math.max(samsungSteps, 10000))}
+                className="py-2 rounded-xl bg-[var(--surface-2)] text-[var(--text-primary)]"
+              >
+                10k
+              </button>
+              <button
+                onClick={() => handleSetSamsungSteps(Math.max(samsungSteps, 15000))}
+                className="py-2 rounded-xl bg-[var(--surface-2)] text-[var(--text-primary)]"
+              >
+                15k
+              </button>
+            </div>
           </div>
         )}
+      </SheetModal>
 
-        {/* Signature Skip-Dinner Early Fasting Seal */}
-        <button
-          onClick={handleLockDinnerSkip}
-          disabled={today.dinnerSkipped}
-          className={`mt-3 w-full h-11 rounded-xl font-[family-name:var(--font-rajdhani)] text-sm font-bold uppercase tracking-[0.14em] flex items-center justify-center gap-2 border transition-colors ${
-            today.dinnerSkipped
-              ? "bg-[#22c55e]/15 border-[#22c55e]/45 text-[#4ade80]"
-              : "bg-[#8b5cf6]/20 hover:bg-[#8b5cf6]/30 border-[#8b5cf6] text-[#e9d5ff]"
-          }`}
-        >
-          {today.dinnerSkipped ? (
-            <>
-              <Sparkles size={15} /> EARLY FASTING SEAL ACTIVE · DINNER SKIPPED
-            </>
-          ) : (
-            <>
-              <Lock size={14} /> LOCK DINNER SKIP · +30 XP EARLY SEAL
-            </>
-          )}
-        </button>
-      </SystemPanel>
+      {/* BOTTOM SHEET: CONTEXT & MODES */}
+      <SheetModal
+        open={contextSheetOpen}
+        onClose={() => setContextSheetOpen(false)}
+        title="Context & modes"
+      >
+        <div className="grid grid-cols-2 gap-2">
+          {CONTEXT_LIST.map((ctx) => {
+            const active = store.context === ctx.id;
+            return (
+              <button
+                key={ctx.id}
+                onClick={() => store.setContext(ctx.id)}
+                className={`p-3 rounded-xl border text-left transition-colors ${
+                  active
+                    ? "bg-[var(--surface-2)] border-[#3b6cf6] text-[var(--text-primary)]"
+                    : "bg-[var(--surface-0)] border-[var(--border-subtle)] text-[var(--text-secondary)]"
+                }`}
+              >
+                <p className="text-xs font-semibold">{ctx.label}</p>
+                <p className="text-[11px] text-[var(--text-muted)] truncate mt-0.5">{ctx.sub}</p>
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="space-y-2 pt-2 border-t border-[var(--border-subtle)]">
+          <button
+            onClick={store.toggleLowMana}
+            className="w-full p-3 rounded-xl bg-[var(--surface-0)] flex items-center justify-between text-left"
+          >
+            <div>
+              <p className="text-xs font-medium text-[var(--text-primary)]">Low mana mode</p>
+              <p className="text-[11px] text-[var(--text-muted)]">Short sleep -&gt; switches to 2x Fail</p>
+            </div>
+            <span
+              className={`px-2.5 py-1 rounded-full text-xs font-medium ${
+                store.lowMana
+                  ? "bg-[#3b6cf6]/20 text-[#93c5fd]"
+                  : "bg-[var(--surface-2)] text-[var(--text-muted)]"
+              }`}
+            >
+              {store.lowMana ? "On" : "Off"}
+            </span>
+          </button>
+
+          <button
+            onClick={store.toggleDebloat}
+            className="w-full p-3 rounded-xl bg-[var(--surface-0)] flex items-center justify-between text-left"
+          >
+            <div>
+              <p className="text-xs font-medium text-[var(--text-primary)]">36h de-bloat mode</p>
+              <p className="text-[11px] text-[var(--text-muted)]">Highlights hydration & lean food guard</p>
+            </div>
+            <span
+              className={`px-2.5 py-1 rounded-full text-xs font-medium ${
+                store.debloatMode
+                  ? "bg-[#f59e0b]/20 text-[#fbbf24]"
+                  : "bg-[var(--surface-2)] text-[var(--text-muted)]"
+              }`}
+            >
+              {store.debloatMode ? "On" : "Off"}
+            </span>
+          </button>
+
+          <div className="w-full p-3 rounded-xl bg-[var(--surface-0)] flex items-center justify-between">
+            <div>
+              <p className="text-xs font-medium text-[var(--text-primary)]">Sound cues</p>
+              <p className="text-[11px] text-[var(--text-muted)]">Set timer chime & completion tones</p>
+            </div>
+            <MuteToggle />
+          </div>
+        </div>
+      </SheetModal>
 
       {/* Live Workout Combat Sheet */}
       <CombatSheet open={combatOpen} onClose={() => setCombatOpen(false)} />

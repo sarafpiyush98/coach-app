@@ -88,7 +88,7 @@ export function SystemToastContainer() {
   const toasts = useToastStore((s) => s.toasts);
 
   return (
-    <div className="fixed inset-x-0 top-0 z-50 flex flex-col items-center gap-2 p-4 pointer-events-none">
+    <div className="fixed inset-x-0 top-0 z-[70] flex flex-col items-center gap-2 p-4 pointer-events-none">
       <AnimatePresence mode="popLayout">
         {toasts.map((t) => (
           <div key={t.id} className="pointer-events-auto w-full max-w-sm">

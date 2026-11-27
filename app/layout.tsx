@@ -2,7 +2,6 @@ import type { Metadata, Viewport } from "next";
 import { ServiceWorkerRegistration } from "@/components/ServiceWorkerRegistration";
 import { BottomNav } from "@/components/BottomNav";
 import { SystemToastContainer } from "@/components/ui/system-toast";
-import { MuteToggle } from "@/components/mute-toggle";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -42,8 +41,7 @@ export default function RootLayout({
       <body className="min-h-full flex flex-col bg-background text-foreground">
         <ServiceWorkerRegistration />
         <SystemToastContainer />
-        <MuteToggle />
-        <main className="relative z-10 flex-1 pb-20">{children}</main>
+        <main className="flex-1 pb-20">{children}</main>
         <BottomNav />
       </body>
     </html>

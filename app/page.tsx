@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { SystemPanel } from "@/components/ui/system-panel";
 import { CombatSheet } from "@/components/combat-sheet";
+import { MuteToggle } from "@/components/mute-toggle";
 import { useToastStore } from "@/components/ui/system-toast";
 import {
   ARENAS,
@@ -286,13 +287,16 @@ export default function CommandDeckPage() {
             </p>
           </div>
 
-          <button
-            onClick={() => setWeightEditorOpen((v) => !v)}
-            className="shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[var(--surface-1)] border border-[var(--border-accent)] font-[family-name:var(--font-geist-mono)] text-xs font-semibold text-[var(--text-primary)]"
-          >
-            <Scale size={13} className="text-[#3b6cf6]" />
-            {store.weightEma} kg
-          </button>
+          <div className="flex items-center gap-1.5 shrink-0">
+            <button
+              onClick={() => setWeightEditorOpen((v) => !v)}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[var(--surface-1)] border border-[var(--border-accent)] font-[family-name:var(--font-geist-mono)] text-xs font-semibold text-[var(--text-primary)]"
+            >
+              <Scale size={13} className="text-[#3b6cf6]" />
+              {store.weightEma} kg
+            </button>
+            <MuteToggle />
+          </div>
         </div>
 
         {/* XP Bar */}

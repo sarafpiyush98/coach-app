@@ -114,6 +114,16 @@ export function CombatSheet({ open, onClose }: CombatSheetProps) {
     return () => clearInterval(id);
   }, [restLeft]);
 
+  // Dismiss modal cleanly with Escape key
+  useEffect(() => {
+    if (!open) return;
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose();
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [open, onClose]);
+
   if (!open) return null;
 
   const totalSets = exercises.reduce((acc, ex) => {
@@ -193,7 +203,12 @@ export function CombatSheet({ open, onClose }: CombatSheetProps) {
   const secs = String(restLeft % 60).padStart(2, "0");
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-[var(--surface-0)] text-[var(--text-primary)]">
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Combat HUD"
+      className="fixed inset-0 z-[60] flex flex-col bg-[var(--surface-0)] text-[var(--text-primary)]"
+    >
       {/* Top Bar */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--border-subtle)] bg-[var(--surface-1)]">
         <div>

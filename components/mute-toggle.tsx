@@ -19,7 +19,7 @@ export function MuteToggle() {
   return (
     <button
       onClick={handleToggle}
-      className="fixed top-4 right-4 z-20 flex h-7 w-7 items-center justify-center rounded-md bg-[var(--surface-1)] transition-opacity hover:opacity-80 active:scale-95"
+      className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--surface-1)] border border-[var(--border-subtle)] transition-opacity hover:opacity-80 active:scale-95"
       aria-label={mute ? "Unmute sounds" : "Mute sounds"}
     >
       {mute ? (

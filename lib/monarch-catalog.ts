@@ -182,13 +182,15 @@ const WORKOUT_MATRIX: Record<ArenaId, Record<SplitId, ExerciseSpec[]>> = {
         name: "Flat Barbell Bench Press",
         muscleGroup: "Chest",
         sets: 3,
-        reps: "10-15",
-        load: "50-65 kg",
+        reps: "6-10",
+        load: "55-67.5 kg",
         restSec: 150,
         trackBench: true,
         trackLoad: true,
         defaultWeightKg: 55,
         stepKg: 2.5,
+        maxRepsRegular: 10,
+        maxRepsLowTime: 12,
         cue: "Baseline 50x15 -> lock scapula + leg drive; warm up w/ empty bar (NO push-ups)",
         swap: {
           name: "Pec Deck Machine Fly",
@@ -348,12 +350,14 @@ const WORKOUT_MATRIX: Record<ArenaId, Record<SplitId, ExerciseSpec[]>> = {
         name: "Barbell RDL (Straps On)",
         muscleGroup: "Hamstrings",
         sets: 3,
-        reps: "10-15",
+        reps: "8-12",
         load: "50-75 kg",
         restSec: 120,
         trackLoad: true,
         defaultWeightKg: 55,
         stepKg: 5,
+        maxRepsRegular: 12,
+        maxRepsLowTime: 15,
         cue: "Primary hamstring builder past 25 kg DB cap; bar shaves thighs",
         swap: {
           name: "Lying DB Hamstring Curl",
@@ -509,9 +513,9 @@ const WORKOUT_MATRIX: Record<ArenaId, Record<SplitId, ExerciseSpec[]>> = {
         },
       },
       {
-        id: "cg_rope_tri",
-        name: "Cable Rope Pushdown (2:1)",
-        muscleGroup: "Triceps",
+        id: "cg_oh_cable_tri",
+        name: "Overhead Cable Rope Extension (2:1)",
+        muscleGroup: "Triceps Long Head",
         sets: 3,
         reps: "12-15",
         load: "24-36 kg stack (12-18 eff)",
@@ -519,57 +523,56 @@ const WORKOUT_MATRIX: Record<ArenaId, Record<SplitId, ExerciseSpec[]>> = {
         trackLoad: true,
         defaultWeightKg: 24,
         stepKg: 6,
-        cue: "Full elbow flex past 90 deg (Bench Dips & Kickbacks BANNED)",
+        cue: "Overhead stretch hits long head ~40% better than pushdowns alone; zero bench dips",
         pairHint: "Long-rest pair: optional between Face Pull breaks",
         swap: {
-          name: "Lying Small EZ Skullcrusher",
+          name: "Cable Rope Pushdown (2:1)",
           sets: 3,
           reps: "12-15",
-          load: "15-25 kg",
-          cue: "Elbows locked slightly back for long-head stretch",
+          load: "24-36 kg stack",
+          cue: "Full elbow flex past 90 deg",
         },
       },
     ],
     lower_b: [
       {
-        id: "cg_bb_rdl_b",
-        progressKey: "cg_bb_rdl",
-        name: "Barbell RDL (Straps On)",
-        muscleGroup: "Hamstrings",
+        id: "cg_lying_db_curl",
+        name: "Lying DB Hamstring Curl",
+        muscleGroup: "Hamstrings (Flexion)",
         sets: 3,
-        reps: "10-15",
-        load: "50-75 kg",
-        restSec: 120,
+        reps: "12-15",
+        load: "10-17.5 kg DB",
+        restSec: 90,
         trackLoad: true,
-        defaultWeightKg: 55,
-        stepKg: 5,
-        cue: "Tracks unified RDL progression across Lower A & B; keep hips driving back",
+        defaultWeightKg: 12.5,
+        stepKg: 2.5,
+        cue: "Clamp DB cleanly between feet on bench; trains short head that RDL misses",
         swap: {
-          name: "Lying DB Hamstring Curl",
+          name: "Barbell RDL (Straps On)",
           sets: 3,
-          reps: "12-15",
-          load: "12.5-17.5 kg DB",
-          cue: "Smooth control, zero lower-back strain",
+          reps: "8-12",
+          load: "50-75 kg",
+          cue: "Hip-hinge fallback if bench curl feels awkward",
         },
       },
       {
-        id: "cg_goblet_box",
-        name: "Goblet Box Squat (Heels Elevated)",
-        muscleGroup: "Quads",
+        id: "cg_sl_leg_press",
+        name: "Single-Leg Controlled Leg Press",
+        muscleGroup: "Quads (Unilateral)",
         sets: 3,
-        reps: "12-15",
-        load: "17.5-25 kg",
+        reps: "12-15/leg",
+        load: "45-70 kg",
         restSec: 90,
         trackLoad: true,
-        defaultWeightKg: 20,
-        stepKg: 2.5,
-        cue: "Shoulder-width stance, tap bench lightly (NO wide Sumo drop)",
+        defaultWeightKg: 50,
+        stepKg: 5,
+        cue: "Beats CG 25 kg DB ceiling cleanly with zero lumbar fatigue; foot aligned w/ hip",
         swap: {
-          name: "Controlled Leg Press",
+          name: "Goblet Box Squat (Heels Elevated)",
           sets: 3,
           reps: "12-15",
-          load: "90-130 kg",
-          cue: "2s lower, zero lockout snap",
+          load: "20-25 kg",
+          cue: "Tap bench lightly, upright torso",
         },
       },
       {
@@ -624,13 +627,34 @@ const WORKOUT_MATRIX: Record<ArenaId, Record<SplitId, ExerciseSpec[]>> = {
         trackLoad: true,
         defaultWeightKg: 40,
         stepKg: 5,
-        cue: "Tracks unified Calf progression; pair w/ Plank if energy is high",
+        cue: "Tracks unified Calf progression; pause 2s at bottom stretch",
         swap: {
           name: "Farmer Walk (Straps, 45s)",
           sets: 3,
           reps: "45s",
           load: "25 kg/hand",
           cue: "Tall posture, protects palm calluses",
+        },
+      },
+      {
+        id: "cg_pallof",
+        name: "Cable Pallof Press (Anti-Rotation)",
+        muscleGroup: "Core (Bracing)",
+        sets: 3,
+        reps: "12-15/side",
+        load: "12-24 kg stack",
+        restSec: 60,
+        trackLoad: true,
+        defaultWeightKg: 18,
+        stepKg: 6,
+        cue: "Press straight out & hold 2s/rep; builds trunk stability for Badminton & Kili pack",
+        pairHint: "Long-rest pair: optional between Calf breaks",
+        swap: {
+          name: "Heavy Farmer Walk (Straps)",
+          sets: 3,
+          reps: "45s",
+          load: "25 kg / hand",
+          cue: "Tall ribs, straps on",
         },
       },
     ],
@@ -679,23 +703,23 @@ const WORKOUT_MATRIX: Record<ArenaId, Record<SplitId, ExerciseSpec[]>> = {
         },
       },
       {
-        id: "cg_ez_skull",
-        name: "EZ-Bar Lying Skullcrusher",
-        muscleGroup: "Triceps Long Head",
+        id: "cg_rope_tri",
+        name: "Cable Rope Pushdown (2:1)",
+        muscleGroup: "Triceps Lateral/Medial",
         sets: 3,
         reps: "12-15",
-        load: "17.5-25 kg",
+        load: "24-36 kg stack (12-18 eff)",
         restSec: 60,
         trackLoad: true,
-        defaultWeightKg: 20,
-        stepKg: 2.5,
-        cue: "Hits long head stretched overhead; balances Upper B rope pushdowns",
+        defaultWeightKg: 24,
+        stepKg: 6,
+        cue: "Balances Upper B overhead long-head stretch; full elbow flex past 90 deg",
         swap: {
-          name: "Overhead Cable Rope Extension",
+          name: "EZ-Bar Lying Skullcrusher",
           sets: 3,
           reps: "12-15",
-          load: "24 kg stack",
-          cue: "Smooth elbow hinge",
+          load: "17.5-25 kg",
+          cue: "Elbows slightly back",
         },
       },
       {
@@ -710,7 +734,7 @@ const WORKOUT_MATRIX: Record<ArenaId, Record<SplitId, ExerciseSpec[]>> = {
         defaultWeightKg: 24,
         stepKg: 6,
         cue: "Brachialis & forearm armor; elbow-friendly neutral grip",
-        pairHint: "Long-rest pair: optional between Skullcrusher breaks",
+        pairHint: "Long-rest pair: optional between Pushdown breaks",
         swap: {
           name: "Preacher EZ-Bar Curl",
           sets: 3,
@@ -1674,20 +1698,27 @@ export function getPrescribedWorkout(
     const isLowTime = gateRank === "low_time_2x";
     const scaledSets = isLowTime ? 2 : 3;
     const scaledSwapSets = scaledSets;
-    const isCompound = ex.id === "cg_bench" || ex.id === "cg_bb_rdl" || ex.id === "cg_bb_rdl_b" || ex.id === "cg_bench_vol";
+    const lowCap = ex.maxRepsLowTime ?? 19;
+    const regCap = ex.maxRepsRegular ?? 15;
     const scaledReps = ex.timeBased
       ? ex.reps
       : isLowTime
-        ? "Fail (<=19)"
-        : isCompound
-          ? "10-15"
-          : "12-15";
+        ? `Fail (<=${lowCap})`
+        : regCap === 10
+          ? "6-10"
+          : regCap === 12
+            ? "8-12"
+            : "12-15";
     const isSwapTimeBased = /\d+s\b|\bmin\b/i.test(ex.swap.reps);
     const scaledSwapReps = isSwapTimeBased
       ? ex.swap.reps
       : isLowTime
-        ? "Fail (<=19)"
-        : "12-15";
+        ? `Fail (<=${lowCap})`
+        : regCap === 10
+          ? "6-10"
+          : regCap === 12
+            ? "8-12"
+            : "12-15";
 
     return {
       ...ex,

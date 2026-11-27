@@ -524,6 +524,8 @@ function makeId(prefix: string): string {
 }
 
 export const DEFAULT_LEDGER_SHEET_ID = "17JNkD65FyxmWtl6iR1bvAYrXq4w8b0fWbq43VKwfR20";
+export const DEFAULT_WEBHOOK_URL =
+  "https://script.google.com/macros/s/AKfycbxC324Dza-ITDsejFUcPnPLtiQDMvMhpkMrlk48Rwb8a8JjZctF8d7PAU7NKSkkVEQt1g/exec";
 
 function enqueuePending(existing: string[], dateKey: string): string[] {
   return existing.includes(dateKey) ? existing : [...existing, dateKey];
@@ -583,7 +585,7 @@ const INITIAL_PERSISTED_STATE: MonarchPersistedState = {
   benchBest: { weightKg: 50, reps: 15, e1rm: 75, updatedAt: "2026-11-26" },
   kiliMeters: 1240,
   lateNightsSaved: 6,
-  webhookUrl: "",
+  webhookUrl: DEFAULT_WEBHOOK_URL,
   swappedExercises: {},
   activeSession: null,
   days: {},
@@ -1332,6 +1334,9 @@ export const useMonarchStore = create<MonarchStore>()(
       name: "monarch-v2-state",
       storage: createJSONStorage(() => monarchIdbStorage),
       onRehydrateStorage: () => (state) => {
+        if (state && !state.webhookUrl?.trim()) {
+          state.setWebhookUrl(DEFAULT_WEBHOOK_URL);
+        }
         state?.setHasHydrated(true);
       },
       partialize: (state): MonarchPersistedState => ({

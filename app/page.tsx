@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  Bluetooth,
   Check,
   Dumbbell,
   Flame,
@@ -18,6 +19,7 @@ import { SystemPanel } from "@/components/ui/system-panel";
 import { CombatSheet, formatRestDuration } from "@/components/combat-sheet";
 import { MuteToggle } from "@/components/mute-toggle";
 import { useToastStore } from "@/components/ui/system-toast";
+import { canUseWebBluetooth, readBleScaleWeight } from "@/lib/ble-scale";
 import {
   ARENAS,
   CONTEXT_LIST,
@@ -53,6 +55,10 @@ export default function CommandDeckPage() {
   const [portion, setPortion] = useState<0.5 | 1 | 1.5>(1);
   const [weightEditorOpen, setWeightEditorOpen] = useState(false);
   const [draftWeight, setDraftWeight] = useState(112.4);
+  const [draftBf, setDraftBf] = useState("");
+  const [draftBw, setDraftBw] = useState("");
+  const [bleBusy, setBleBusy] = useState(false);
+  const [bleReady, setBleReady] = useState(false);
   const [customOpen, setCustomOpen] = useState(false);
   const [customLabel, setCustomLabel] = useState("");
   const [customKcal, setCustomKcal] = useState("");
@@ -109,12 +115,33 @@ export default function CommandDeckPage() {
     [store.context]
   );
 
-  // Sync draft scale weight when hydrated
+  // Sync draft scale inputs & check Web Bluetooth capability
   useEffect(() => {
+    setBleReady(canUseWebBluetooth());
     if (store.hasHydrated) {
       setDraftWeight(store.rawWeight);
+      setDraftBf(store.bodyFatPct ? String(store.bodyFatPct) : "");
+      setDraftBw(store.bodyWaterPct ? String(store.bodyWaterPct) : "");
     }
-  }, [store.hasHydrated, store.rawWeight]);
+  }, [store.hasHydrated, store.rawWeight, store.bodyFatPct, store.bodyWaterPct]);
+
+  // Silent 2-way Google Sheet Ledger sync on mount, return from background, and reconnect
+  useEffect(() => {
+    if (!store.hasHydrated || !store.webhookUrl.trim()) return;
+    store.syncWithLedger().catch(() => {});
+
+    const onFocusOrOnline = () => {
+      if (document.visibilityState === "visible" && navigator.onLine) {
+        store.syncWithLedger().catch(() => {});
+      }
+    };
+    document.addEventListener("visibilitychange", onFocusOrOnline);
+    window.addEventListener("online", onFocusOrOnline);
+    return () => {
+      document.removeEventListener("visibilitychange", onFocusOrOnline);
+      window.removeEventListener("online", onFocusOrOnline);
+    };
+  }, [store.hasHydrated, store.webhookUrl]);
 
   // Execute Android WebAPK shortcuts & Samsung Modes/Routines URL intents once hydrated
   useEffect(() => {
@@ -258,13 +285,55 @@ export default function CommandDeckPage() {
   }
 
   function handleSaveWeight() {
-    const res = store.logScaleWeight(draftWeight);
+    const bfNum = draftBf.trim() ? Number(draftBf) : null;
+    const bwNum = draftBw.trim() ? Number(draftBw) : null;
+    const res = store.logScaleWeight(draftWeight, bfNum, bwNum);
     playSystemPing();
     setWeightEditorOpen(false);
     addToast({
       title: `EMA UPDATED: ${res.ema} KG`,
-      message: `Raw ${res.raw} kg smoothed via 7d EMA (Bosses track EMA)`,
+      message: `Raw ${res.raw} kg${bfNum ? ` · ${bfNum}% BF` : ""} smoothed via 7d EMA`,
       variant: "info",
+    });
+  }
+
+  async function handleBleScan() {
+    if (bleBusy) return;
+    setBleBusy(true);
+    try {
+      const reading = await readBleScaleWeight();
+      setDraftWeight(reading.weightKg);
+      const bfNum = draftBf.trim() ? Number(draftBf) : null;
+      const bwNum = draftBw.trim() ? Number(draftBw) : null;
+      const res = store.logScaleWeight(reading.weightKg, bfNum, bwNum);
+      playQuestComplete();
+      setWeightEditorOpen(false);
+      addToast({
+        title: `BLE SCALE: ${reading.weightKg} KG`,
+        message: `${reading.deviceName || "Smart Scale"} -> EMA ${res.ema} kg`,
+        variant: "success",
+      });
+    } catch (err) {
+      addToast({
+        title: "BLE SCALE READ CANCELLED",
+        message: err instanceof Error ? err.message : "Could not read Bluetooth scale.",
+        variant: "warning",
+      });
+    } finally {
+      setBleBusy(false);
+    }
+  }
+
+  function handleSetSamsungSteps(steps: number) {
+    const res = store.setSamsungSteps(steps);
+    playQuestComplete();
+    addToast({
+      title: `SAMSUNG STEPS: ${steps.toLocaleString()}`,
+      message:
+        res.xpAwarded > 0
+          ? `Milestone cleared · +${res.verticalGainM}m Kili · +${res.xpAwarded} XP`
+          : "Step count synced cleanly.",
+      variant: "success",
     });
   }
 
@@ -286,7 +355,10 @@ export default function CommandDeckPage() {
   const workoutDoneToday =
     today.survivalFloorCleared ||
     today.workouts.length > 0 ||
-    today.movements.length > 0;
+    today.movements.length > 0 ||
+    (today.samsungSteps ?? 0) >= 8000;
+  const samsungSteps = today.samsungSteps ?? 0;
+  const stepPct = Math.min(100, Math.round((samsungSteps / Math.max(store.stepTarget, 1)) * 100));
   const proteinPct = Math.min(100, Math.round((totals.proteinG / totals.targetProteinG) * 100));
   const kcalPct = Math.min(100, Math.round((totals.kcal / totals.targetKcal) * 100));
   const overKcal = totals.kcal > totals.targetKcal + 150;
@@ -326,7 +398,7 @@ export default function CommandDeckPage() {
               className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[var(--surface-1)] border border-[var(--border-accent)] font-[family-name:var(--font-geist-mono)] text-xs font-semibold text-[var(--text-primary)]"
             >
               <Scale size={13} className="text-[#3b6cf6]" />
-              {store.weightEma} kg
+              {store.weightEma}kg{store.bodyFatPct ? ` · ${store.bodyFatPct}%` : ""}
             </button>
             <MuteToggle />
           </div>
@@ -340,32 +412,62 @@ export default function CommandDeckPage() {
           />
         </div>
 
-        {/* Inline Scale Weight Logger */}
+        {/* Inline Scale + OKOK Body-Comp + Web Bluetooth Scanner Drawer */}
         {weightEditorOpen && (
-          <div className="mt-2.5 p-2.5 rounded-lg bg-[var(--surface-0)] border border-[var(--border-accent)] flex items-center justify-between gap-2">
-            <span className="font-[family-name:var(--font-rajdhani)] text-xs uppercase tracking-wider text-[var(--text-secondary)]">
-              TODAY SCALE (RAW):
-            </span>
-            <div className="flex items-center gap-1.5 font-[family-name:var(--font-geist-mono)] text-xs">
-              <button
-                onClick={() => setDraftWeight((w) => Math.round((w - 0.2) * 10) / 10)}
-                className="px-2 py-1 rounded bg-[var(--surface-2)]"
-              >
-                -0.2
-              </button>
-              <span className="min-w-[54px] text-center font-bold">{draftWeight.toFixed(1)}</span>
-              <button
-                onClick={() => setDraftWeight((w) => Math.round((w + 0.2) * 10) / 10)}
-                className="px-2 py-1 rounded bg-[var(--surface-2)]"
-              >
-                +0.2
-              </button>
-              <button
-                onClick={handleSaveWeight}
-                className="ml-1 px-2.5 py-1 rounded bg-[#3b6cf6] text-white font-bold"
-              >
-                SAVE
-              </button>
+          <div className="mt-2.5 p-2.5 rounded-lg bg-[var(--surface-0)] border border-[var(--border-accent)] space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <span className="font-[family-name:var(--font-rajdhani)] text-xs uppercase tracking-wider text-[var(--text-secondary)]">
+                OKOK / SCALE (RAW KG):
+              </span>
+              <div className="flex items-center gap-1.5 font-[family-name:var(--font-geist-mono)] text-xs">
+                <button
+                  onClick={() => setDraftWeight((w) => Math.round((w - 0.2) * 10) / 10)}
+                  className="px-2 py-1 rounded bg-[var(--surface-2)]"
+                >
+                  -0.2
+                </button>
+                <span className="min-w-[50px] text-center font-bold">{draftWeight.toFixed(1)}</span>
+                <button
+                  onClick={() => setDraftWeight((w) => Math.round((w + 0.2) * 10) / 10)}
+                  className="px-2 py-1 rounded bg-[var(--surface-2)]"
+                >
+                  +0.2
+                </button>
+                <button
+                  onClick={handleSaveWeight}
+                  className="ml-1 px-2.5 py-1 rounded bg-[#3b6cf6] text-white font-bold"
+                >
+                  SAVE
+                </button>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-1.5">
+              <input
+                type="number"
+                step="0.1"
+                placeholder="OKOK BF %"
+                value={draftBf}
+                onChange={(e) => setDraftBf(e.target.value)}
+                className="w-24 px-2 py-1 rounded bg-[var(--surface-1)] border border-[var(--border-subtle)] font-[family-name:var(--font-geist-mono)] text-[11px]"
+              />
+              <input
+                type="number"
+                step="0.1"
+                placeholder="Water %"
+                value={draftBw}
+                onChange={(e) => setDraftBw(e.target.value)}
+                className="w-24 px-2 py-1 rounded bg-[var(--surface-1)] border border-[var(--border-subtle)] font-[family-name:var(--font-geist-mono)] text-[11px]"
+              />
+              {bleReady && (
+                <button
+                  onClick={handleBleScan}
+                  disabled={bleBusy}
+                  className="ml-auto inline-flex items-center gap-1 px-2.5 py-1 rounded bg-[#22c55e]/20 border border-[#22c55e]/50 font-[family-name:var(--font-rajdhani)] text-[11px] font-bold uppercase text-[#4ade80] disabled:opacity-50"
+                >
+                  <Bluetooth size={11} /> {bleBusy ? "SCANNING..." : "SCAN BLE SCALE"}
+                </button>
+              )}
             </div>
           </div>
         )}
@@ -418,6 +520,21 @@ export default function CommandDeckPage() {
           </div>
         </div>
       </SystemPanel>
+
+      {/* ANTIGRAVITY LIVE COACH OVERRIDE BANNER */}
+      {store.coachBanner.trim() && (
+        <div
+          className="rounded-xl p-3 bg-[#f59e0b]/10 border border-[#f59e0b]/45"
+          style={{ borderLeftWidth: "3px", borderLeftColor: "#f59e0b" }}
+        >
+          <p className="font-[family-name:var(--font-rajdhani)] text-[11px] font-bold uppercase tracking-[0.14em] text-[#fbbf24]">
+            COACH OVERRIDE (LIVE FROM SHEET)
+          </p>
+          <p className="text-xs text-[var(--text-primary)] leading-snug mt-0.5">
+            {store.coachBanner}
+          </p>
+        </div>
+      )}
 
       {/* AMBIENT SHADOW DIRECTIVE */}
       {directive && (
@@ -610,6 +727,47 @@ export default function CommandDeckPage() {
               </button>
             );
           })}
+        </div>
+
+        {/* Samsung Health Step Tracker Bar */}
+        <div className="mt-2.5 pt-2.5 border-t border-[var(--border-subtle)]">
+          <div className="flex items-center justify-between gap-2 text-[11px]">
+            <span className="font-[family-name:var(--font-geist-mono)] text-[var(--text-secondary)]">
+              SAMSUNG STEPS:{" "}
+              <strong className="text-[var(--text-primary)]">
+                {samsungSteps.toLocaleString()}
+              </strong>{" "}
+              / {store.stepTarget.toLocaleString()}
+            </span>
+            <div className="flex items-center gap-1 font-[family-name:var(--font-geist-mono)] text-[10px]">
+              <button
+                onClick={() => handleSetSamsungSteps(samsungSteps + 2500)}
+                className="px-2 py-0.5 rounded bg-[var(--surface-2)] border border-[var(--border-subtle)] text-[var(--text-secondary)]"
+              >
+                +2.5k
+              </button>
+              <button
+                onClick={() => handleSetSamsungSteps(Math.max(samsungSteps, 10000))}
+                className="px-2 py-0.5 rounded bg-[var(--surface-2)] border border-[var(--border-subtle)] text-[var(--text-secondary)]"
+              >
+                10k
+              </button>
+              <button
+                onClick={() => handleSetSamsungSteps(Math.max(samsungSteps, 15000))}
+                className="px-2 py-0.5 rounded bg-[var(--surface-2)] border border-[var(--border-subtle)] text-[var(--text-secondary)]"
+              >
+                15k
+              </button>
+            </div>
+          </div>
+          <div className="mt-1.5 h-1.5 rounded-full bg-[var(--surface-0)] overflow-hidden">
+            <div
+              className={`h-full transition-all duration-300 ${
+                samsungSteps >= 10000 ? "progress-green" : "progress-blue"
+              }`}
+              style={{ width: `${stepPct}%` }}
+            />
+          </div>
         </div>
       </SystemPanel>
 

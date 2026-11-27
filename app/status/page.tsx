@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Copy, Download, Smartphone, Upload } from "lucide-react";
+import { Copy, Download, ExternalLink, RefreshCw, Smartphone, Upload } from "lucide-react";
 import { SystemPanel } from "@/components/ui/system-panel";
 import { RadarChart } from "@/components/ui/radar-chart";
 import { XPRing } from "@/components/ui/xp-ring";
@@ -9,6 +9,7 @@ import { useToastStore } from "@/components/ui/system-toast";
 import { SHADOW_PASSIVES } from "@/lib/monarch-catalog";
 import {
   computeMonarchStats,
+  DEFAULT_LEDGER_SHEET_ID,
   levelFromMonarchXp,
   useMonarchStore,
 } from "@/lib/monarch-store";
@@ -27,6 +28,22 @@ export default function HunterStatusPage() {
   const addToast = useToastStore((s) => s.add);
   const [importText, setImportText] = useState("");
   const [importOpen, setImportOpen] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+
+  const sheetUrl = `https://docs.google.com/spreadsheets/d/${
+    store.ledgerSheetId || DEFAULT_LEDGER_SHEET_ID
+  }/edit`;
+
+  async function handleSyncNow() {
+    setSyncing(true);
+    const res = await store.syncWithLedger();
+    setSyncing(false);
+    addToast({
+      title: res.ok ? "2-WAY LEDGER SYNCED" : "SYNC STATUS",
+      message: res.message,
+      variant: res.ok ? "success" : "warning",
+    });
+  }
 
   const totalXp = store.legacyXp + store.earnedXp;
   const lvl = levelFromMonarchXp(totalXp);
@@ -186,13 +203,68 @@ export default function HunterStatusPage() {
         </div>
       </SystemPanel>
 
-      {/* ZERO-BACKEND BACKUP & OPTIONAL WEBHOOK */}
-      <SystemPanel className="p-4 space-y-2.5" animate={false}>
-        <h2 className="font-[family-name:var(--font-rajdhani)] text-xs font-bold uppercase tracking-[0.15em] text-[var(--text-secondary)]">
-          PORTABLE JSON BACKUP &amp; OPTIONAL SYNC URL
-        </h2>
+      {/* 2-WAY GOOGLE SHEET SPINE + BACKUP */}
+      <SystemPanel className="p-4 space-y-3" animate={false}>
+        <div className="flex items-center justify-between gap-2">
+          <h2 className="font-[family-name:var(--font-rajdhani)] text-xs font-bold uppercase tracking-[0.15em] text-[#f59e0b]">
+            MONARCH_LEDGER (ANTIGRAVITY + S25 SYNC)
+          </h2>
+          <a
+            href={sheetUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 px-2 py-1 rounded bg-[#3b6cf6]/20 border border-[#3b6cf6]/50 font-[family-name:var(--font-rajdhani)] text-[11px] font-bold uppercase text-[#93c5fd]"
+          >
+            OPEN SHEET <ExternalLink size={11} />
+          </a>
+        </div>
 
-        <div className="flex gap-2">
+        <div className="p-2.5 rounded-lg bg-[var(--surface-0)] border border-[var(--border-subtle)] text-[11px] space-y-1 text-[var(--text-secondary)]">
+          <p>
+            <strong className="text-[var(--text-primary)]">1.</strong> Open{" "}
+            <code className="text-[#3b6cf6]">MONARCH_LEDGER</code> -&gt; Extensions -&gt; Apps Script, paste{" "}
+            <code className="text-[#3b6cf6]">MONARCH_APPS_SCRIPT.gs</code> &amp; Deploy Web App (Anyone).
+          </p>
+          <p>
+            <strong className="text-[var(--text-primary)]">2.</strong> On S25 Ultra: OKOK -&gt; Google Fit ON, and Samsung Health -&gt; Settings -&gt; Health Connect ON.
+          </p>
+          <p>
+            <strong className="text-[var(--text-primary)]">3.</strong> Paste the same Web App URL in <strong className="text-[var(--text-primary)]">HC Webhook</strong> &amp; below (0 double-counted steps).
+          </p>
+        </div>
+
+        <div>
+          <div className="flex items-center justify-between mb-1">
+            <label className="font-[family-name:var(--font-rajdhani)] text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)]">
+              Apps Script Web App / HC Webhook URL
+            </label>
+            <span className="font-[family-name:var(--font-geist-mono)] text-[9px] text-[var(--text-muted)]">
+              {store.pendingSyncDates.length > 0
+                ? `${store.pendingSyncDates.length} day(s) queued`
+                : store.lastSyncedAt
+                  ? `Synced ${store.lastSyncedAt.slice(11, 16)}`
+                  : "Offline-first ready"}
+            </span>
+          </div>
+          <div className="flex gap-1.5">
+            <input
+              type="url"
+              placeholder="https://script.google.com/macros/s/.../exec"
+              value={store.webhookUrl}
+              onChange={(e) => store.setWebhookUrl(e.target.value)}
+              className="flex-1 px-2.5 py-1.5 rounded bg-[var(--surface-0)] border border-[var(--border-subtle)] font-[family-name:var(--font-geist-mono)] text-xs"
+            />
+            <button
+              onClick={handleSyncNow}
+              disabled={syncing}
+              className="px-3 rounded bg-[#22c55e] hover:bg-[#16a34a] font-[family-name:var(--font-rajdhani)] text-xs font-bold uppercase text-[#051b0e] inline-flex items-center gap-1 disabled:opacity-50"
+            >
+              <RefreshCw size={12} className={syncing ? "animate-spin" : ""} /> SYNC
+            </button>
+          </div>
+        </div>
+
+        <div className="flex gap-2 pt-1">
           <button
             onClick={handleDownloadBackup}
             className="flex-1 h-9 rounded-lg bg-[var(--surface-2)] border border-[var(--border-subtle)] font-[family-name:var(--font-rajdhani)] text-xs font-bold uppercase flex items-center justify-center gap-1.5"
@@ -230,19 +302,6 @@ export default function HunterStatusPage() {
             </button>
           </div>
         )}
-
-        <div>
-          <label className="block font-[family-name:var(--font-rajdhani)] text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)] mb-1">
-            Optional Google Apps Script / HC Webhook Sync URL
-          </label>
-          <input
-            type="url"
-            placeholder="https://script.google.com/macros/s/.../exec"
-            value={store.webhookUrl}
-            onChange={(e) => store.setWebhookUrl(e.target.value)}
-            className="w-full px-2.5 py-1.5 rounded bg-[var(--surface-0)] border border-[var(--border-subtle)] font-[family-name:var(--font-geist-mono)] text-xs"
-          />
-        </div>
       </SystemPanel>
     </div>
   );

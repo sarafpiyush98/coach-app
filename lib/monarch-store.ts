@@ -155,6 +155,11 @@ export interface DayRecord {
   gluttonyRaidAwarded: boolean;
   activeFlexKcal: number;
   scaleWeightKg: number | null;
+  bodyFatPct: number | null;
+  bodyWaterPct: number | null;
+  samsungSteps: number;
+  steps10kAwarded: boolean;
+  steps15kAwarded: boolean;
 }
 
 export interface BenchBest {
@@ -188,6 +193,13 @@ export interface MonarchPersistedState {
   totalPrs: number;
   weightEma: number;
   rawWeight: number;
+  bodyFatPct: number | null;
+  bodyWaterPct: number | null;
+  stepTarget: number;
+  coachBanner: string;
+  ledgerSheetId: string;
+  lastSyncedAt: string | null;
+  pendingSyncDates: string[];
   benchBest: BenchBest;
   kiliMeters: number;
   lateNightsSaved: number;
@@ -232,8 +244,14 @@ export interface MonarchActions {
   logCustomFood: (label: string, kcal: number, proteinG: number) => { xpAwarded: number };
   removeFoodEntry: (dateKey: string, entryId: string) => void;
   lockDinnerSkip: () => { xpAwarded: number; alreadyLocked: boolean };
-  logScaleWeight: (kg: number) => { ema: number; raw: number };
+  logScaleWeight: (
+    kg: number,
+    bodyFatPct?: number | null,
+    bodyWaterPct?: number | null
+  ) => { ema: number; raw: number };
+  setSamsungSteps: (steps: number) => { xpAwarded: number; verticalGainM: number };
   setWebhookUrl: (url: string) => void;
+  syncWithLedger: () => Promise<{ ok: boolean; message: string }>;
   exportJson: () => string;
   importJson: (raw: string) => { ok: boolean; error?: string };
 }
@@ -263,6 +281,11 @@ export function createEmptyDay(date: string): DayRecord {
     gluttonyRaidAwarded: false,
     activeFlexKcal: 0,
     scaleWeightKg: null,
+    bodyFatPct: null,
+    bodyWaterPct: null,
+    samsungSteps: 0,
+    steps10kAwarded: false,
+    steps15kAwarded: false,
   };
 }
 
@@ -315,7 +338,8 @@ export function isDayActive(day: DayRecord | undefined): boolean {
     day.workouts.length > 0 ||
     day.movements.length > 0 ||
     day.foods.length > 0 ||
-    day.dinnerSkipped
+    day.dinnerSkipped ||
+    (day.samsungSteps ?? 0) >= 8000
   );
 }
 
@@ -499,23 +523,22 @@ function makeId(prefix: string): string {
   return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
 }
 
+export const DEFAULT_LEDGER_SHEET_ID = "17JNkD65FyxmWtl6iR1bvAYrXq4w8b0fWbq43VKwfR20";
+
+function enqueuePending(existing: string[], dateKey: string): string[] {
+  return existing.includes(dateKey) ? existing : [...existing, dateKey];
+}
+
 function fireWebhookIfConfigured(
   webhookUrl: string,
-  event: string,
-  payload: Record<string, unknown>
+  _event: string,
+  _payload: Record<string, unknown>,
+  triggerSync?: () => Promise<unknown>
 ) {
-  const url = webhookUrl.trim();
-  if (!url || typeof window === "undefined") return;
-  try {
-    fetch(url, {
-      method: "POST",
-      mode: "no-cors",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ event, ts: new Date().toISOString(), ...payload }),
-    }).catch(() => {});
-  } catch {
-    // non-blocking optional backup
-  }
+  if (!webhookUrl.trim() || typeof window === "undefined" || !triggerSync) return;
+  queueMicrotask(() => {
+    triggerSync().catch(() => {});
+  });
 }
 
 // ============================================================
@@ -550,6 +573,13 @@ const INITIAL_PERSISTED_STATE: MonarchPersistedState = {
   totalPrs: 3,
   weightEma: 112.4,
   rawWeight: 112.4,
+  bodyFatPct: null,
+  bodyWaterPct: null,
+  stepTarget: 12000,
+  coachBanner: "",
+  ledgerSheetId: DEFAULT_LEDGER_SHEET_ID,
+  lastSyncedAt: null,
+  pendingSyncDates: [],
   benchBest: { weightKg: 50, reps: 15, e1rm: 75, updatedAt: "2026-11-26" },
   kiliMeters: 1240,
   lateNightsSaved: 6,
@@ -687,15 +717,18 @@ export const useMonarchStore = create<MonarchStore>()(
         set((s) => ({
           earnedXp: s.earnedXp + xpAwarded,
           kiliMeters: s.kiliMeters + 25,
+          pendingSyncDates: enqueuePending(s.pendingSyncDates, key),
           days: {
             ...s.days,
             [key]: { ...existing, survivalFloorCleared: true },
           },
         }));
-        fireWebhookIfConfigured(get().webhookUrl, "clear_survival_floor", {
-          date: key,
-          xpAwarded,
-        });
+        fireWebhookIfConfigured(
+          get().webhookUrl,
+          "clear_survival_floor",
+          { date: key, xpAwarded },
+          get().syncWithLedger
+        );
         return { xpAwarded, alreadyCleared: false };
       },
 
@@ -757,6 +790,7 @@ export const useMonarchStore = create<MonarchStore>()(
           benchBest: nextBench,
           kiliMeters: state.kiliMeters + gainM,
           activeSession: null,
+          pendingSyncDates: enqueuePending(state.pendingSyncDates, key),
           days: {
             ...state.days,
             [key]: {
@@ -767,10 +801,12 @@ export const useMonarchStore = create<MonarchStore>()(
           },
         });
 
-        fireWebhookIfConfigured(state.webhookUrl, "complete_workout", {
-          date: key,
-          ...summary,
-        });
+        fireWebhookIfConfigured(
+          state.webhookUrl,
+          "complete_workout",
+          { date: key, ...summary },
+          get().syncWithLedger
+        );
 
         return { xpAwarded, isPr, newE1rm };
       },
@@ -795,23 +831,42 @@ export const useMonarchStore = create<MonarchStore>()(
           ? Math.max(existing.activeFlexKcal, 220)
           : existing.activeFlexKcal;
 
+        const curSteps = existing.samsungSteps ?? 0;
+        let nextSteps = curSteps;
+        let steps10kAwarded = existing.steps10kAwarded ?? false;
+        let steps15kAwarded = existing.steps15kAwarded ?? false;
+        if (kind === "steps_10k") {
+          nextSteps = Math.max(curSteps, 10000);
+          steps10kAwarded = true;
+        } else if (kind === "steps_15k") {
+          nextSteps = Math.max(curSteps, 15000);
+          steps10kAwarded = true;
+          steps15kAwarded = true;
+        }
+
         set({
           earnedXp: state.earnedXp + spec.xp,
           kiliMeters: state.kiliMeters + spec.verticalGainM,
+          pendingSyncDates: enqueuePending(state.pendingSyncDates, key),
           days: {
             ...state.days,
             [key]: {
               ...existing,
               activeFlexKcal: nextFlex,
+              samsungSteps: nextSteps,
+              steps10kAwarded,
+              steps15kAwarded,
               movements: [...existing.movements, entry],
             },
           },
         });
 
-        fireWebhookIfConfigured(state.webhookUrl, "log_movement", {
-          date: key,
-          ...entry,
-        });
+        fireWebhookIfConfigured(
+          state.webhookUrl,
+          "log_movement",
+          { date: key, ...entry },
+          get().syncWithLedger
+        );
 
         return { xpAwarded: spec.xp, verticalGainM: spec.verticalGainM };
       },
@@ -859,6 +914,7 @@ export const useMonarchStore = create<MonarchStore>()(
         set({
           earnedXp: state.earnedXp + xpAwarded,
           lateNightsSaved,
+          pendingSyncDates: enqueuePending(state.pendingSyncDates, key),
           days: {
             ...state.days,
             [key]: {
@@ -870,10 +926,12 @@ export const useMonarchStore = create<MonarchStore>()(
           },
         });
 
-        fireWebhookIfConfigured(state.webhookUrl, "log_food", {
-          date: key,
-          ...entry,
-        });
+        fireWebhookIfConfigured(
+          state.webhookUrl,
+          "log_food",
+          { date: key, ...entry },
+          get().syncWithLedger
+        );
 
         return { xpAwarded, isAbsRaid, label: entry.label };
       },
@@ -893,6 +951,7 @@ export const useMonarchStore = create<MonarchStore>()(
         };
         set({
           earnedXp: state.earnedXp + xpAwarded,
+          pendingSyncDates: enqueuePending(state.pendingSyncDates, key),
           days: {
             ...state.days,
             [key]: {
@@ -901,6 +960,12 @@ export const useMonarchStore = create<MonarchStore>()(
             },
           },
         });
+        fireWebhookIfConfigured(
+          state.webhookUrl,
+          "log_custom_food",
+          { date: key, ...entry },
+          get().syncWithLedger
+        );
         return { xpAwarded };
       },
 
@@ -909,6 +974,7 @@ export const useMonarchStore = create<MonarchStore>()(
         const day = state.days[dateKey];
         if (!day) return;
         set({
+          pendingSyncDates: enqueuePending(state.pendingSyncDates, dateKey),
           days: {
             ...state.days,
             [dateKey]: {
@@ -917,6 +983,12 @@ export const useMonarchStore = create<MonarchStore>()(
             },
           },
         });
+        fireWebhookIfConfigured(
+          state.webhookUrl,
+          "remove_food",
+          { date: dateKey, entryId },
+          get().syncWithLedger
+        );
       },
 
       lockDinnerSkip: () => {
@@ -930,6 +1002,7 @@ export const useMonarchStore = create<MonarchStore>()(
         set({
           earnedXp: state.earnedXp + xpAwarded,
           lateNightsSaved: state.lateNightsSaved + 1,
+          pendingSyncDates: enqueuePending(state.pendingSyncDates, key),
           days: {
             ...state.days,
             [key]: {
@@ -939,40 +1012,269 @@ export const useMonarchStore = create<MonarchStore>()(
             },
           },
         });
-        fireWebhookIfConfigured(state.webhookUrl, "lock_dinner_skip", {
-          date: key,
-          xpAwarded,
-        });
+        fireWebhookIfConfigured(
+          state.webhookUrl,
+          "lock_dinner_skip",
+          { date: key, xpAwarded },
+          get().syncWithLedger
+        );
         return { xpAwarded, alreadyLocked: false };
       },
 
-      logScaleWeight: (kg) => {
-        const clamped = Math.round(Math.max(50, Math.min(200, kg)) * 10) / 10;
+      logScaleWeight: (kg, bodyFatPct = null, bodyWaterPct = null) => {
+        const clamped = Math.round(Math.max(45, Math.min(200, kg)) * 10) / 10;
         const key = getTodayKey();
         const state = get();
         const existing = state.days[key] ?? createEmptyDay(key);
         const ema = Math.round((state.weightEma * 0.75 + clamped * 0.25) * 10) / 10;
 
+        const cleanBf =
+          bodyFatPct !== null && bodyFatPct !== undefined && bodyFatPct > 0
+            ? Math.round(bodyFatPct * 10) / 10
+            : existing.bodyFatPct ?? state.bodyFatPct;
+        const cleanBw =
+          bodyWaterPct !== null && bodyWaterPct !== undefined && bodyWaterPct > 0
+            ? Math.round(bodyWaterPct * 10) / 10
+            : existing.bodyWaterPct ?? state.bodyWaterPct;
+
         set({
           rawWeight: clamped,
           weightEma: ema,
+          bodyFatPct: cleanBf,
+          bodyWaterPct: cleanBw,
           earnedXp: state.earnedXp + (existing.scaleWeightKg === null ? 15 : 0),
+          pendingSyncDates: enqueuePending(state.pendingSyncDates, key),
           days: {
             ...state.days,
-            [key]: { ...existing, scaleWeightKg: clamped },
+            [key]: {
+              ...existing,
+              scaleWeightKg: clamped,
+              bodyFatPct: cleanBf,
+              bodyWaterPct: cleanBw,
+            },
           },
         });
 
-        fireWebhookIfConfigured(state.webhookUrl, "log_weight", {
-          date: key,
-          raw: clamped,
-          ema,
-        });
+        fireWebhookIfConfigured(
+          state.webhookUrl,
+          "log_weight",
+          { date: key, raw: clamped, ema },
+          get().syncWithLedger
+        );
 
         return { ema, raw: clamped };
       },
 
+      setSamsungSteps: (steps) => {
+        const key = getTodayKey();
+        const state = get();
+        const existing = state.days[key] ?? createEmptyDay(key);
+        const nextSteps = Math.max(existing.samsungSteps ?? 0, Math.round(steps));
+
+        let xpAwarded = 0;
+        let verticalGainM = 0;
+        let steps10kAwarded = existing.steps10kAwarded ?? false;
+        let steps15kAwarded = existing.steps15kAwarded ?? false;
+
+        if (nextSteps >= 10000 && !steps10kAwarded) {
+          steps10kAwarded = true;
+          xpAwarded += 30;
+          verticalGainM += 45;
+        }
+        if (nextSteps >= 15000 && !steps15kAwarded) {
+          steps15kAwarded = true;
+          xpAwarded += 15;
+          verticalGainM += 35;
+        }
+
+        set({
+          earnedXp: state.earnedXp + xpAwarded,
+          kiliMeters: state.kiliMeters + verticalGainM,
+          pendingSyncDates: enqueuePending(state.pendingSyncDates, key),
+          days: {
+            ...state.days,
+            [key]: {
+              ...existing,
+              samsungSteps: nextSteps,
+              steps10kAwarded,
+              steps15kAwarded,
+            },
+          },
+        });
+
+        fireWebhookIfConfigured(
+          state.webhookUrl,
+          "set_samsung_steps",
+          { date: key, samsungSteps: nextSteps },
+          get().syncWithLedger
+        );
+
+        return { xpAwarded, verticalGainM };
+      },
+
       setWebhookUrl: (webhookUrl) => set({ webhookUrl }),
+
+      syncWithLedger: async () => {
+        const state = get();
+        const url = state.webhookUrl.trim();
+        if (!url) {
+          return { ok: false, message: "Paste your MONARCH_LEDGER Apps Script Web App URL first." };
+        }
+        if (typeof window === "undefined") {
+          return { ok: false, message: "Sync runs in browser only." };
+        }
+
+        const todayKey = getTodayKey();
+        const datesToPush = Array.from(new Set([...state.pendingSyncDates, todayKey]));
+        const pushDays = datesToPush.map((dt) => {
+          const day = state.days[dt] ?? createEmptyDay(dt);
+          const totals = getDailyTotals(day);
+          return {
+            date: dt,
+            rawWeightKg: day.scaleWeightKg,
+            weightEmaKg: state.weightEma,
+            bodyFatPct: day.bodyFatPct,
+            bodyWaterPct: day.bodyWaterPct,
+            samsungSteps: day.samsungSteps ?? 0,
+            kcalTotal: totals.kcal,
+            proteinG: totals.proteinG,
+            dinnerSkipped: day.dinnerSkipped,
+            workoutsCount:
+              day.workouts.length + (day.survivalFloorCleared ? 1 : 0),
+            benchBestE1rmKg: state.benchBest.e1rm,
+            kiliTotalM: state.kiliMeters,
+          };
+        });
+
+        try {
+          // text/plain avoids CORS OPTIONS preflight against Google Apps Script Web Apps
+          const res = await fetch(url, {
+            method: "POST",
+            headers: { "Content-Type": "text/plain;charset=utf-8" },
+            body: JSON.stringify({
+              source: "monarch_pwa",
+              reason: "two_way_sync",
+              days: pushDays,
+            }),
+            redirect: "follow",
+          });
+          if (!res.ok) {
+            return { ok: false, message: `HTTP ${res.status} from Apps Script.` };
+          }
+          const json = (await res.json()) as {
+            ok?: boolean;
+            syncedAt?: string;
+            todayMetrics?: {
+              date: string;
+              rawWeightKg?: number | null;
+              weightEmaKg?: number | null;
+              bodyFatPct?: number | null;
+              bodyWaterPct?: number | null;
+              samsungSteps?: number;
+            } | null;
+            recentMetrics?: Array<{
+              date: string;
+              rawWeightKg?: number | null;
+              weightEmaKg?: number | null;
+              bodyFatPct?: number | null;
+              bodyWaterPct?: number | null;
+              samsungSteps?: number;
+            }>;
+            coachOverrides?: {
+              coach_banner?: string;
+              step_target?: number;
+            };
+          };
+
+          if (!json?.ok) {
+            return { ok: false, message: "Apps Script returned error response." };
+          }
+
+          const latest = get();
+          const mergedDays = { ...latest.days };
+          let bonusXp = 0;
+          let bonusKili = 0;
+          let nextRawWeight = latest.rawWeight;
+          let nextEmaWeight = latest.weightEma;
+          let nextBf = latest.bodyFatPct;
+          let nextBw = latest.bodyWaterPct;
+
+          const incoming = [
+            ...(json.recentMetrics ?? []),
+            ...(json.todayMetrics ? [json.todayMetrics] : []),
+          ];
+
+          for (const m of incoming) {
+            if (!m || !m.date) continue;
+            const cur = mergedDays[m.date] ?? createEmptyDay(m.date);
+            const steps = Math.max(cur.samsungSteps ?? 0, m.samsungSteps ?? 0);
+            let s10 = cur.steps10kAwarded ?? false;
+            let s15 = cur.steps15kAwarded ?? false;
+            if (steps >= 10000 && !s10) {
+              s10 = true;
+              bonusXp += 30;
+              bonusKili += 45;
+            }
+            if (steps >= 15000 && !s15) {
+              s15 = true;
+              bonusXp += 15;
+              bonusKili += 35;
+            }
+
+            const rawKg = m.rawWeightKg ?? cur.scaleWeightKg ?? null;
+            const bf = m.bodyFatPct ?? cur.bodyFatPct ?? null;
+            const bw = m.bodyWaterPct ?? cur.bodyWaterPct ?? null;
+
+            mergedDays[m.date] = {
+              ...cur,
+              samsungSteps: steps,
+              steps10kAwarded: s10,
+              steps15kAwarded: s15,
+              scaleWeightKg: rawKg,
+              bodyFatPct: bf,
+              bodyWaterPct: bw,
+            };
+
+            if (m.date === todayKey || (rawKg !== null && m.date >= (json.todayMetrics?.date || todayKey))) {
+              if (rawKg !== null) {
+                nextRawWeight = rawKg;
+                if (m.weightEmaKg && m.weightEmaKg > 20) {
+                  nextEmaWeight = m.weightEmaKg;
+                }
+              }
+              if (bf !== null) nextBf = bf;
+              if (bw !== null) nextBw = bw;
+            }
+          }
+
+          const coachBanner = String(json.coachOverrides?.coach_banner || "");
+          const stepTarget =
+            Number(json.coachOverrides?.step_target) > 0
+              ? Number(json.coachOverrides?.step_target)
+              : latest.stepTarget;
+
+          set({
+            days: mergedDays,
+            earnedXp: latest.earnedXp + bonusXp,
+            kiliMeters: latest.kiliMeters + bonusKili,
+            rawWeight: nextRawWeight,
+            weightEma: nextEmaWeight,
+            bodyFatPct: nextBf,
+            bodyWaterPct: nextBw,
+            coachBanner,
+            stepTarget,
+            pendingSyncDates: [],
+            lastSyncedAt: json.syncedAt || new Date().toISOString(),
+          });
+
+          return { ok: true, message: "2-Way Sync complete." };
+        } catch (err) {
+          return {
+            ok: false,
+            message: err instanceof Error ? err.message : "Network sync failed (queued offline).",
+          };
+        }
+      },
 
       exportJson: () => {
         const s = get();
@@ -989,6 +1291,13 @@ export const useMonarchStore = create<MonarchStore>()(
           totalPrs: s.totalPrs,
           weightEma: s.weightEma,
           rawWeight: s.rawWeight,
+          bodyFatPct: s.bodyFatPct,
+          bodyWaterPct: s.bodyWaterPct,
+          stepTarget: s.stepTarget,
+          coachBanner: s.coachBanner,
+          ledgerSheetId: s.ledgerSheetId,
+          lastSyncedAt: s.lastSyncedAt,
+          pendingSyncDates: s.pendingSyncDates,
           benchBest: s.benchBest,
           kiliMeters: s.kiliMeters,
           lateNightsSaved: s.lateNightsSaved,
@@ -1038,6 +1347,13 @@ export const useMonarchStore = create<MonarchStore>()(
         totalPrs: state.totalPrs,
         weightEma: state.weightEma,
         rawWeight: state.rawWeight,
+        bodyFatPct: state.bodyFatPct,
+        bodyWaterPct: state.bodyWaterPct,
+        stepTarget: state.stepTarget,
+        coachBanner: state.coachBanner,
+        ledgerSheetId: state.ledgerSheetId,
+        lastSyncedAt: state.lastSyncedAt,
+        pendingSyncDates: state.pendingSyncDates,
         benchBest: state.benchBest,
         kiliMeters: state.kiliMeters,
         lateNightsSaved: state.lateNightsSaved,

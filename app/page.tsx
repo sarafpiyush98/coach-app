@@ -324,14 +324,16 @@ export default function CommandDeckPage() {
     }
   }
 
-  function handleSetSamsungSteps(steps: number) {
-    const res = store.setSamsungSteps(steps);
+  function handleSetSamsungSteps(steps: number, allowLower = false) {
+    const res = store.setSamsungSteps(steps, allowLower);
     playQuestComplete();
     addToast({
       title: `SAMSUNG STEPS: ${steps.toLocaleString()}`,
       message:
         res.xpAwarded > 0
           ? `Milestone cleared · +${res.verticalGainM}m Kili · +${res.xpAwarded} XP`
+          : allowLower && steps === 0
+          ? "Manual test steps cleared to 0."
           : "Step count synced cleanly.",
       variant: "success",
     });
@@ -732,14 +734,30 @@ export default function CommandDeckPage() {
         {/* Samsung Health Step Tracker Bar */}
         <div className="mt-2.5 pt-2.5 border-t border-[var(--border-subtle)]">
           <div className="flex items-center justify-between gap-2 text-[11px]">
-            <span className="font-[family-name:var(--font-geist-mono)] text-[var(--text-secondary)]">
-              SAMSUNG STEPS:{" "}
-              <strong className="text-[var(--text-primary)]">
-                {samsungSteps.toLocaleString()}
-              </strong>{" "}
-              / {store.stepTarget.toLocaleString()}
-            </span>
+            <div className="flex items-center gap-1.5">
+              <span className="font-[family-name:var(--font-geist-mono)] text-[var(--text-secondary)]">
+                SAMSUNG STEPS:{" "}
+                <strong className="text-[var(--text-primary)]">
+                  {samsungSteps.toLocaleString()}
+                </strong>{" "}
+                / {store.stepTarget.toLocaleString()}
+              </span>
+              {today.hcStepsLive && (
+                <span className="px-1.5 py-0.5 rounded bg-[#22c55e]/20 border border-[#22c55e]/40 font-[family-name:var(--font-geist-mono)] text-[9px] font-bold uppercase text-[#22c55e]">
+                  LIVE
+                </span>
+              )}
+            </div>
             <div className="flex items-center gap-1 font-[family-name:var(--font-geist-mono)] text-[10px]">
+              {samsungSteps > 0 && !today.hcStepsLive && (
+                <button
+                  onClick={() => handleSetSamsungSteps(0, true)}
+                  className="px-2 py-0.5 rounded bg-[var(--surface-2)] border border-[var(--border-subtle)] text-[var(--text-muted)]"
+                  title="Reset manual test steps to 0"
+                >
+                  0
+                </button>
+              )}
               <button
                 onClick={() => handleSetSamsungSteps(samsungSteps + 2500)}
                 className="px-2 py-0.5 rounded bg-[var(--surface-2)] border border-[var(--border-subtle)] text-[var(--text-secondary)]"

@@ -158,6 +158,8 @@ export interface DayRecord {
   bodyFatPct: number | null;
   bodyWaterPct: number | null;
   samsungSteps: number;
+  hcStepsLive?: boolean;
+  pendingStepReset?: boolean;
   steps10kAwarded: boolean;
   steps15kAwarded: boolean;
 }
@@ -249,7 +251,7 @@ export interface MonarchActions {
     bodyFatPct?: number | null,
     bodyWaterPct?: number | null
   ) => { ema: number; raw: number };
-  setSamsungSteps: (steps: number) => { xpAwarded: number; verticalGainM: number };
+  setSamsungSteps: (steps: number, allowLower?: boolean) => { xpAwarded: number; verticalGainM: number };
   setWebhookUrl: (url: string) => void;
   syncWithLedger: () => Promise<{ ok: boolean; message: string }>;
   exportJson: () => string;
@@ -1067,11 +1069,13 @@ export const useMonarchStore = create<MonarchStore>()(
         return { ema, raw: clamped };
       },
 
-      setSamsungSteps: (steps) => {
+      setSamsungSteps: (steps, allowLower = false) => {
         const key = getTodayKey();
         const state = get();
         const existing = state.days[key] ?? createEmptyDay(key);
-        const nextSteps = Math.max(existing.samsungSteps ?? 0, Math.round(steps));
+        const nextSteps = allowLower
+          ? Math.max(0, Math.round(steps))
+          : Math.max(existing.samsungSteps ?? 0, Math.round(steps));
 
         let xpAwarded = 0;
         let verticalGainM = 0;
@@ -1098,6 +1102,7 @@ export const useMonarchStore = create<MonarchStore>()(
             [key]: {
               ...existing,
               samsungSteps: nextSteps,
+              pendingStepReset: allowLower ? true : existing.pendingStepReset,
               steps10kAwarded,
               steps15kAwarded,
             },
@@ -1138,6 +1143,7 @@ export const useMonarchStore = create<MonarchStore>()(
             bodyFatPct: day.bodyFatPct,
             bodyWaterPct: day.bodyWaterPct,
             samsungSteps: day.samsungSteps ?? 0,
+            resetSteps: Boolean(day.pendingStepReset),
             kcalTotal: totals.kcal,
             proteinG: totals.proteinG,
             dinnerSkipped: day.dinnerSkipped,
@@ -1173,6 +1179,7 @@ export const useMonarchStore = create<MonarchStore>()(
               bodyFatPct?: number | null;
               bodyWaterPct?: number | null;
               samsungSteps?: number;
+              hcStepsLive?: boolean;
             } | null;
             recentMetrics?: Array<{
               date: string;
@@ -1181,6 +1188,7 @@ export const useMonarchStore = create<MonarchStore>()(
               bodyFatPct?: number | null;
               bodyWaterPct?: number | null;
               samsungSteps?: number;
+              hcStepsLive?: boolean;
             }>;
             coachOverrides?: {
               coach_banner?: string;
@@ -1209,7 +1217,10 @@ export const useMonarchStore = create<MonarchStore>()(
           for (const m of incoming) {
             if (!m || !m.date) continue;
             const cur = mergedDays[m.date] ?? createEmptyDay(m.date);
-            const steps = Math.max(cur.samsungSteps ?? 0, m.samsungSteps ?? 0);
+            const isLive = Boolean(m.hcStepsLive);
+            const steps = isLive || cur.pendingStepReset
+              ? Math.max(0, m.samsungSteps ?? 0)
+              : Math.max(cur.samsungSteps ?? 0, m.samsungSteps ?? 0);
             let s10 = cur.steps10kAwarded ?? false;
             let s15 = cur.steps15kAwarded ?? false;
             if (steps >= 10000 && !s10) {
@@ -1230,6 +1241,8 @@ export const useMonarchStore = create<MonarchStore>()(
             mergedDays[m.date] = {
               ...cur,
               samsungSteps: steps,
+              hcStepsLive: isLive,
+              pendingStepReset: false,
               steps10kAwarded: s10,
               steps15kAwarded: s15,
               scaleWeightKg: rawKg,

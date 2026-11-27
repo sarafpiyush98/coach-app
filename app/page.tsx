@@ -371,7 +371,7 @@ export default function CommandDeckPage() {
     }
 
     if (sheet === "gate") {
-      setCombatOpen(true);
+      requestAnimationFrame(() => setCombatOpen(true));
     }
 
     window.history.replaceState({}, "", "/");

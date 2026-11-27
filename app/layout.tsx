@@ -28,7 +28,7 @@ const rajdhani = Rajdhani({
 
 export const metadata: Metadata = {
   metadataBase: new URL(
-    process.env.NEXT_PUBLIC_SITE_URL || "https://coach-app-monarch.vercel.app"
+    process.env.NEXT_PUBLIC_SITE_URL || "https://coach-app-bice.vercel.app"
   ),
   title: "THE SYSTEM · MONARCH",
   description: "Solo Leveling strength, OMAD cut & Kilimanjaro readiness tracker.",

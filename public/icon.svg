@@ -1,37 +1,49 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
   <defs>
-    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
-      <feGaussianBlur in="SourceGraphic" stdDeviation="6" result="blur"/>
-      <feColorMatrix in="blur" type="matrix"
-        values="0.23 0 0 0 0  0.42 0 0 0 0  0.96 0 0 0 0  0 0 0 0.5 0"/>
-      <feMerge>
-        <feMergeNode/>
-        <feMergeNode in="SourceGraphic"/>
-      </feMerge>
-    </filter>
+    <linearGradient id="monarchEdge" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#3b6cf6"/>
+      <stop offset="55%" stop-color="#60a5fa"/>
+      <stop offset="100%" stop-color="#8b5cf6"/>
+    </linearGradient>
+    <radialGradient id="monarchGlow" cx="50%" cy="48%" r="42%">
+      <stop offset="0%" stop-color="#3b6cf6" stop-opacity="0.35"/>
+      <stop offset="60%" stop-color="#8b5cf6" stop-opacity="0.14"/>
+      <stop offset="100%" stop-color="#0b0c10" stop-opacity="0"/>
+    </radialGradient>
   </defs>
 
-  <!-- Background -->
-  <rect width="512" height="512" rx="108" fill="#0a0b10"/>
+  <rect width="512" height="512" rx="108" fill="#0b0c10"/>
+  <circle cx="256" cy="248" r="190" fill="url(#monarchGlow)"/>
 
-  <!-- Circle border with glow -->
-  <circle cx="256" cy="256" r="190" fill="none" stroke="#3b6cf6" stroke-width="3" filter="url(#glow)"/>
+  <!-- Twin crossed shadow daggers -->
+  <g stroke="url(#monarchEdge)" stroke-width="5" stroke-linejoin="round" fill="#e5e7eb">
+    <path d="M168 352 L214 274 L196 262 L210 246 L228 258 L302 152 L248 272 L264 282 L250 298 L232 286 L168 352 Z"/>
+    <path d="M344 352 L298 274 L316 262 L302 246 L284 258 L210 152 L264 272 L248 282 L262 298 L280 286 L344 352 Z"/>
+  </g>
 
-  <!-- Dagger blade — angular geometric upward-pointing -->
+  <!-- Shadow Sovereign Crown -->
   <path
-    d="M256 100 L288 300 L272 320 L256 340 L240 320 L224 300 Z"
-    fill="#e8eaf0"
+    d="M150 246 L130 162 L192 204 L222 146 L246 186 L256 118 L266 186 L290 146 L320 204 L382 162 L362 246 C318 262 194 262 150 246 Z"
+    fill="#13161f"
+    stroke="url(#monarchEdge)"
+    stroke-width="7"
+    stroke-linejoin="round"
   />
-
-  <!-- Crossguard -->
   <path
-    d="M208 300 L304 300 L296 316 L216 316 Z"
-    fill="#e8eaf0"
+    d="M168 242 L256 142 L344 242 C304 253 208 253 168 242 Z"
+    fill="#e8ecf8"
+    fill-opacity="0.92"
   />
-
-  <!-- Grip -->
-  <rect x="246" y="320" width="20" height="50" rx="3" fill="#e8eaf0"/>
-
-  <!-- Pommel -->
-  <circle cx="256" cy="384" r="12" fill="#e8eaf0"/>
+  <path
+    d="M256 142 L256 250 L344 242 Z"
+    fill="#9ca3af"
+    fill-opacity="0.55"
+  />
+  <path
+    d="M154 252 C196 268 316 268 358 252 L352 268 C312 282 200 282 160 268 Z"
+    fill="#0b0c10"
+    stroke="url(#monarchEdge)"
+    stroke-width="5"
+    stroke-linejoin="round"
+  />
 </svg>

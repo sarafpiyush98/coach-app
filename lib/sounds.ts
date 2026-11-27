@@ -9,6 +9,7 @@ export function toggleMute(): boolean {
   muted = !muted;
   if (typeof window !== "undefined") {
     localStorage.setItem("system-muted", String(muted));
+    window.dispatchEvent(new Event("monarch-mute-change"));
   }
   return muted;
 }

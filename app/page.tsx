@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import {
   Bluetooth,
   BookOpen,
@@ -8,17 +9,23 @@ import {
   Check,
   ChevronDown,
   ChevronUp,
+  Droplets,
   Lock,
+  Moon,
+  Pill,
   Plus,
   Scale,
+  Sparkles,
   Timer,
   X,
+  Zap,
 } from "lucide-react";
 import { CombatSheet, formatRestDuration } from "@/components/combat-sheet";
 import { FuelSheet, tierBadgeStyle } from "@/components/fuel-sheet";
 import { MealPlanSheet } from "@/components/meal-plan-sheet";
 import { MuteToggle } from "@/components/mute-toggle";
 import { ReadingSheet } from "@/components/reading-sheet";
+import { WeightTrendChart } from "@/components/weight-trend-chart";
 import { useToastStore } from "@/components/ui/system-toast";
 import { canUseWebBluetooth, readBleScaleWeight } from "@/lib/ble-scale";
 import {
@@ -28,40 +35,51 @@ import {
   CONTEXTS,
   DEFAULT_WEEKLY_MEAL_PLAN,
   evaluateFoodViability,
+  FOOD_PRESETS,
   getPrescribedWorkout,
   getPresetsForContext,
   getTodayWeekdayKey,
+  normalizeGateRankInput,
   SPLITS,
   type ArenaId,
   type ContextId,
+  type GateRankId,
   type PlannedMealItem,
   type SplitId,
 } from "@/lib/monarch-catalog";
 import {
+  computeDeloadAdvisory,
   computeReadingStreak,
+  computeWeeklyAvgKcal,
   computeWeeklyTraining,
   createEmptyDay,
   getAmbientShadow,
   getDailyReadingPages,
   getDailyTotals,
-  getTodayKey,
+  levelFromMonarchXp,
   MOVEMENT_PRESETS,
   useMonarchStore,
   type MovementKind,
 } from "@/lib/monarch-store";
+import { useTodayKey } from "@/lib/use-today-key";
+import { DEFAULT_EMA_ALPHA, recomputeWeightTrend } from "@/lib/weight-engine";
 import {
   playQuestComplete,
   playShadowArise,
   playSystemPing,
 } from "@/lib/sounds";
 
+function nowEpochMs(): number {
+  return Date.now();
+}
+
 function formatSplitTitle(id: SplitId): string {
   if (id === "upper_a") return "Upper A";
   if (id === "lower_a") return "Lower A";
   if (id === "upper_b") return "Upper B";
   if (id === "lower_b") return "Lower B";
-  if (id === "ul_combo_a") return "U+L A (2-in-1)";
-  if (id === "ul_combo_b") return "U+L B (2-in-1)";
+  if (id === "ul_combo_a") return "U+L A (Heavy)";
+  if (id === "ul_combo_b") return "U+L B (Heavy)";
   if (id === "full_body_plus") return "Full Body +";
   return "Jog & Pool";
 }
@@ -112,9 +130,20 @@ function SheetModal({
   );
 }
 
+const noopSubscribe = () => () => {};
+
 export default function CommandDeckPage() {
   const store = useMonarchStore();
   const addToast = useToastStore((s) => s.add);
+
+  const hasHydrated = useMonarchStore((s) => s.hasHydrated);
+  const webhookUrl = useMonarchStore((s) => s.webhookUrl);
+  const syncWithLedger = useMonarchStore((s) => s.syncWithLedger);
+  const maybeAutoDetectContext = useMonarchStore((s) => s.maybeAutoDetectContext);
+  const setContext = useMonarchStore((s) => s.setContext);
+  const clearSurvivalFloor = useMonarchStore((s) => s.clearSurvivalFloor);
+  const logFoodPreset = useMonarchStore((s) => s.logFoodPreset);
+  const lockDinnerSkip = useMonarchStore((s) => s.lockDinnerSkip);
 
   const [combatOpen, setCombatOpen] = useState(false);
   const [switchOpen, setSwitchOpen] = useState(false);
@@ -129,15 +158,41 @@ export default function CommandDeckPage() {
   const [draftBf, setDraftBf] = useState("");
   const [draftBw, setDraftBw] = useState("");
   const [bleBusy, setBleBusy] = useState(false);
-  const [bleReady, setBleReady] = useState(false);
-  const [nowMs, setNowMs] = useState<number>(() => Date.now());
+  const [blePendingConfirmKg, setBlePendingConfirmKg] = useState<number | null>(null);
+  const [nowMs, setNowMs] = useState<number>(() => nowEpochMs());
   const handledUrlRef = useRef(false);
 
-  const todayKey = getTodayKey();
+  const bleReady = useSyncExternalStore(
+    noopSubscribe,
+    canUseWebBluetooth,
+    () => false
+  );
+
+  const todayKey = useTodayKey();
   const today = store.days[todayKey] ?? createEmptyDay(todayKey);
-  const totals = getDailyTotals(today);
+  const totals = getDailyTotals(today, store.kcalTarget, store.proteinTargetG);
   const weekly = useMemo(() => computeWeeklyTraining(store.days), [store.days]);
+  const weeklyAvgKcal = useMemo(() => computeWeeklyAvgKcal(store.days), [store.days]);
+  const deload = useMemo(
+    () => computeDeloadAdvisory(store.days, store.lastDeloadDate),
+    [store.days, store.lastDeloadDate]
+  );
+  const weightTrend = useMemo(
+    () =>
+      recomputeWeightTrend(
+        store.days,
+        112.4,
+        store.rawWeight,
+        DEFAULT_EMA_ALPHA,
+        todayKey
+      ),
+    [store.days, store.rawWeight, todayKey]
+  );
   const directive = getAmbientShadow(store);
+  const lvl = useMemo(
+    () => levelFromMonarchXp(store.legacyXp + store.earnedXp),
+    [store.legacyXp, store.earnedXp]
+  );
 
   const books = store.books ?? [];
   const activeBook =
@@ -159,6 +214,14 @@ export default function CommandDeckPage() {
   const dinnerOutMode = Boolean(
     today.dinnerOutMode ?? (todayPlan?.dinnerOut && !today.dinnerSkipped)
   );
+
+  const trainedFastedBeforeNoon = useMemo(
+    () =>
+      today.workouts.some((w) => new Date(w.timeIso).getHours() < 12) &&
+      totals.proteinG === 0,
+    [today.workouts, totals.proteinG]
+  );
+
   const coachAdvice = useMemo(
     () =>
       computeNutritionCoachAdvice({
@@ -168,8 +231,10 @@ export default function CommandDeckPage() {
         proteinTargetG: totals.targetProteinG,
         dinnerSkipped: today.dinnerSkipped,
         dinnerOutMode,
-        loggedLabels: today.foods.map((f) => f.label),
+        loggedFoods: today.foods,
         todayPlan,
+        weeklyAvgKcal,
+        trainedFastedBeforeNoon,
       }),
     [
       totals.kcal,
@@ -180,6 +245,8 @@ export default function CommandDeckPage() {
       dinnerOutMode,
       today.foods,
       todayPlan,
+      weeklyAvgKcal,
+      trainedFastedBeforeNoon,
     ]
   );
 
@@ -200,7 +267,7 @@ export default function CommandDeckPage() {
     return {
       split: sess.split,
       arena: sess.arena,
-      gateRank: sess.gateRank,
+      gateRank: normalizeGateRankInput(sess.gateRank as string),
       checkedSets,
       totalSets,
       lastSetAtMs: sess.lastSetAtMs,
@@ -209,14 +276,14 @@ export default function CommandDeckPage() {
 
   useEffect(() => {
     if (!activeResume?.lastSetAtMs) return;
-    setNowMs(Date.now());
-    const id = setInterval(() => setNowMs(Date.now()), 1000);
+    const id = setInterval(() => setNowMs(nowEpochMs()), 1000);
     return () => clearInterval(id);
   }, [activeResume?.lastSetAtMs]);
 
+  const normGateRank = normalizeGateRankInput(store.gateRank as string);
   const prescribedPreview = useMemo(
-    () => getPrescribedWorkout(store.arena, store.split, store.gateRank),
-    [store.arena, store.split, store.gateRank]
+    () => getPrescribedWorkout(store.arena, store.split, normGateRank),
+    [store.arena, store.split, normGateRank]
   );
 
   const contextPresets = useMemo(
@@ -224,24 +291,20 @@ export default function CommandDeckPage() {
     [store.context]
   );
 
-  // Sync draft scale inputs & check Web Bluetooth capability
+  // Auto-detect context once per day on hydration
   useEffect(() => {
-    setBleReady(canUseWebBluetooth());
-    if (store.hasHydrated) {
-      setDraftWeight(store.rawWeight);
-      setDraftBf(store.bodyFatPct ? String(store.bodyFatPct) : "");
-      setDraftBw(store.bodyWaterPct ? String(store.bodyWaterPct) : "");
-    }
-  }, [store.hasHydrated, store.rawWeight, store.bodyFatPct, store.bodyWaterPct]);
+    if (!hasHydrated) return;
+    maybeAutoDetectContext();
+  }, [hasHydrated, maybeAutoDetectContext]);
 
   // Silent 2-way Google Sheet Ledger sync on mount, return from background, and reconnect
   useEffect(() => {
-    if (!store.hasHydrated || !store.webhookUrl.trim()) return;
-    store.syncWithLedger().catch(() => {});
+    if (!hasHydrated || !webhookUrl.trim()) return;
+    syncWithLedger().catch(() => {});
 
     const onFocusOrOnline = () => {
       if (document.visibilityState === "visible" && navigator.onLine) {
-        store.syncWithLedger().catch(() => {});
+        syncWithLedger().catch(() => {});
       }
     };
     document.addEventListener("visibilitychange", onFocusOrOnline);
@@ -250,11 +313,11 @@ export default function CommandDeckPage() {
       document.removeEventListener("visibilitychange", onFocusOrOnline);
       window.removeEventListener("online", onFocusOrOnline);
     };
-  }, [store.hasHydrated, store.webhookUrl]);
+  }, [hasHydrated, webhookUrl, syncWithLedger]);
 
   // Execute Android WebAPK shortcuts & Samsung Modes/Routines URL intents once hydrated
   useEffect(() => {
-    if (!store.hasHydrated || handledUrlRef.current) return;
+    if (!hasHydrated || handledUrlRef.current) return;
     if (typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
     const quick = params.get("quick");
@@ -265,11 +328,11 @@ export default function CommandDeckPage() {
     handledUrlRef.current = true;
 
     if (ctxParam && CONTEXTS[ctxParam]) {
-      store.setContext(ctxParam);
+      setContext(ctxParam);
     }
 
     if (quick === "noskip") {
-      const res = store.clearSurvivalFloor();
+      const res = clearSurvivalFloor();
       playQuestComplete();
       addToast({
         title: res.alreadyCleared ? "GATE ALREADY GREEN" : "E-RANK FLOOR CLEARED",
@@ -279,8 +342,8 @@ export default function CommandDeckPage() {
         variant: "success",
       });
     } else if (quick === "salsa-stack") {
-      store.setContext("hsr_office");
-      store.logFoodPreset("hebe_salsa_chicken", 1);
+      setContext("hsr_office");
+      logFoodPreset("hebe_salsa_chicken", 1);
       playQuestComplete();
       addToast({
         title: "SALSA EGG + CHICKEN LOGGED",
@@ -288,21 +351,21 @@ export default function CommandDeckPage() {
         variant: "success",
       });
     } else if (quick === "seal-fast") {
-      store.logFoodPreset("whey_skyr_seal", 1);
-      store.lockDinnerSkip();
+      logFoodPreset("whey_skyr_seal", 1);
+      lockDinnerSkip();
       playShadowArise();
       addToast({
-        title: "5 PM SEAL + DINNER SKIPPED",
+        title: "5 PM SEAL + OMAD CLOSED",
         message: "+70g P · Early Fasting Seal active",
         variant: "quest",
       });
     } else if (quick === "abs-raid") {
-      store.setContext("raid_social");
-      store.logFoodPreset("abs_omad_raid", 1);
+      setContext("raid_social");
+      logFoodPreset("abs_omad_raid", 1);
       playShadowArise();
       addToast({
         title: "GLUTTONY GATE: AB's RAID LOGGED",
-        message: "1,550 kcal · 160g P OMAD · Dinner Skip locked",
+        message: "1,550 kcal · 160g P OMAD · Window locked",
         variant: "warning",
       });
     }
@@ -312,7 +375,22 @@ export default function CommandDeckPage() {
     }
 
     window.history.replaceState({}, "", "/");
-  }, [store.hasHydrated]);
+  }, [
+    hasHydrated,
+    setContext,
+    clearSurvivalFloor,
+    logFoodPreset,
+    lockDinnerSkip,
+    addToast,
+  ]);
+
+  function openWeightEditor() {
+    setDraftWeight(store.rawWeight);
+    setDraftBf(store.bodyFatPct ? String(store.bodyFatPct) : "");
+    setDraftBw(store.bodyWaterPct ? String(store.bodyWaterPct) : "");
+    setBlePendingConfirmKg(null);
+    setWeightEditorOpen(true);
+  }
 
   function handleClear5mFloor() {
     const res = store.clearSurvivalFloor();
@@ -349,7 +427,7 @@ export default function CommandDeckPage() {
     addToast({
       title: res.isRest ? "REST DAY LOGGED" : "REST DAY CLEARED",
       message: res.isRest
-        ? "Intentional recovery day logged - active streak stays protected."
+        ? "Intentional recovery day logged (max 2 consecutive rest days)."
         : "Rest day toggle cleared.",
       variant: "info",
       duration: 2200,
@@ -380,8 +458,8 @@ export default function CommandDeckPage() {
     addToast({
       title: next ? "LOW MANA MODE ON" : "LOW MANA MODE OFF",
       message: next
-        ? "Switched to 2x Fail + 5m Floor guard."
-        : "Restored Regular 3x15 volume.",
+        ? "Switched to 2 recovery sets @ RIR 2-3 (zero failure)."
+        : "Restored Regular volume.",
       variant: "info",
       duration: 2400,
     });
@@ -408,7 +486,7 @@ export default function CommandDeckPage() {
     if (res.floorJustCleared) {
       playShadowArise();
       addToast({
-        title: "DAILY READING FLOOR CLEARED (+25 XP)",
+        title: `DAILY READING FLOOR CLEARED (+${res.xpAwarded} XP)`,
         message: `${activeBook.title} · now p. ${targetPage} (${res.todayPages}/${readingMin}p today)`,
         variant: "quest",
         duration: 2400,
@@ -436,8 +514,8 @@ export default function CommandDeckPage() {
     if (res.isAbsRaid) {
       playShadowArise();
       addToast({
-        title: "AB's LUNCH RAID LOGGED (+75 XP RAID)",
-        message: "160g P single-sitting bolus · Dinner Skip auto-sealed!",
+        title: `AB's LUNCH RAID LOGGED (+${res.xpAwarded} XP)`,
+        message: "160g P single-sitting bolus · OMAD auto-sealed!",
         variant: "warning",
       });
     } else {
@@ -495,21 +573,23 @@ export default function CommandDeckPage() {
     if (res.alreadyLocked) return;
     playShadowArise();
     addToast({
-      title: "EARLY FASTING SEAL LOCKED",
-      message: `Dinner skipped cleanly · +${res.xpAwarded} XP · Swiggy intercepted`,
+      title: "OMAD WINDOW SEALED",
+      message: `Fasting window locked · +${res.xpAwarded} XP · Swiggy intercepted`,
       variant: "quest",
     });
   }
 
-  function handleSaveWeight() {
+  function handleSaveWeight(overrideKg?: number) {
+    const kgToSave = overrideKg ?? draftWeight;
     const bfNum = draftBf.trim() ? Number(draftBf) : null;
     const bwNum = draftBw.trim() ? Number(draftBw) : null;
-    const res = store.logScaleWeight(draftWeight, bfNum, bwNum);
+    const res = store.logScaleWeight(kgToSave, bfNum, bwNum);
     playSystemPing();
+    setBlePendingConfirmKg(null);
     setWeightEditorOpen(false);
     addToast({
-      title: `EMA UPDATED: ${res.ema} KG`,
-      message: `Raw ${res.raw} kg${bfNum ? ` · ${bfNum}% BF` : ""} smoothed via 7d EMA`,
+      title: `TREND UPDATED: ${res.ema} KG`,
+      message: `Raw ${res.raw} kg${bfNum ? ` · ${bfNum}% BF` : ""} smoothed deterministically`,
       variant: "info",
     });
   }
@@ -517,19 +597,21 @@ export default function CommandDeckPage() {
   async function handleBleScan() {
     if (bleBusy) return;
     setBleBusy(true);
+    setBlePendingConfirmKg(null);
     try {
       const reading = await readBleScaleWeight();
       setDraftWeight(reading.weightKg);
-      const bfNum = draftBf.trim() ? Number(draftBf) : null;
-      const bwNum = draftBw.trim() ? Number(draftBw) : null;
-      const res = store.logScaleWeight(reading.weightKg, bfNum, bwNum);
-      playQuestComplete();
-      setWeightEditorOpen(false);
-      addToast({
-        title: `BLE SCALE: ${reading.weightKg} KG`,
-        message: `${reading.deviceName || "Smart Scale"} -> EMA ${res.ema} kg`,
-        variant: "success",
-      });
+      if (Math.abs(reading.weightKg - store.rawWeight) > 12) {
+        setBlePendingConfirmKg(reading.weightKg);
+        playSystemPing();
+        addToast({
+          title: `CONFIRM SCALE READ: ${reading.weightKg} KG`,
+          message: "Large jump from last weight - confirm inside Weight sheet.",
+          variant: "warning",
+        });
+        return;
+      }
+      handleSaveWeight(reading.weightKg);
     } catch (err) {
       addToast({
         title: "BLE SCALE READ CANCELLED",
@@ -550,8 +632,8 @@ export default function CommandDeckPage() {
         res.xpAwarded > 0
           ? `Milestone cleared · +${res.verticalGainM}m Kili · +${res.xpAwarded} XP`
           : allowLower && steps === 0
-          ? "Manual test steps cleared to 0."
-          : "Step count synced cleanly.",
+            ? "Manual test steps cleared to 0."
+            : "Step count synced cleanly.",
       variant: "success",
     });
   }
@@ -566,6 +648,18 @@ export default function CommandDeckPage() {
       handleClear5mFloor();
     } else if (directive.actionKind === "debloat_food") {
       handleFoodChip("hotel_debloat");
+    }
+  }
+
+  function handleRitual(kind: "water" | "electrolytes" | "creatine", label: string) {
+    const res = store.toggleDailyRitual(kind);
+    playSystemPing();
+    if (res.done && res.xpAwarded > 0) {
+      addToast({
+        title: `${label.toUpperCase()} LOCKED (+${res.xpAwarded} XP)`,
+        variant: "success",
+        duration: 1600,
+      });
     }
   }
 
@@ -587,6 +681,9 @@ export default function CommandDeckPage() {
   const splitTitle = formatSplitTitle(store.split);
   const actionableDirective =
     directive && directive.soldier !== "Igris" ? directive : null;
+  const sleepLowAlert = Boolean(
+    today.sleepHours && today.sleepHours > 0 && today.sleepHours < 5.5 && !store.lowMana
+  );
 
   const quickThreePresets = useMemo(() => {
     const others = contextPresets.filter((p) => p.id !== "whey_skyr_seal");
@@ -594,54 +691,52 @@ export default function CommandDeckPage() {
     return [...others.slice(0, 2), ...(seal ? [seal] : [])].slice(0, 3);
   }, [contextPresets]);
 
+  const rawVsEmaDelta = weightTrend.rawVsEmaDeltaKg;
+
   return (
-    <div className="max-w-lg mx-auto px-5 pt-6 pb-24 space-y-5">
-      {/* 1. MINIMAL TOP BAR */}
-      <header className="h-11 flex items-center justify-between gap-2">
-        <div className="flex items-center gap-1.5 min-w-0 overflow-hidden">
-          <h1 className="text-lg font-semibold tracking-tight text-[var(--text-primary)] shrink-0">
+    <div className="max-w-lg mx-auto px-5 pt-6 pb-24 space-y-4">
+      {/* 1. SOLO LEVELING MINIMAL TOP BAR */}
+      <header className="h-11 flex items-center justify-between gap-1.5">
+        <div className="flex items-center gap-1.5 min-w-0">
+          <h1 className="font-[family-name:var(--font-rajdhani)] text-lg font-bold tracking-wider uppercase text-[var(--text-primary)] shrink-0">
             Monarch
           </h1>
+          <Link
+            href="/status"
+            className="px-1.5 py-0.5 rounded-full bg-[#3b6cf6]/15 border border-[#3b6cf6]/35 font-mono text-[10px] font-semibold text-[#93c5fd] whitespace-nowrap shrink-0 hover:border-[#3b6cf6]"
+            title={`Lv.${lvl.level} · ${lvl.rank.title} · Hunter Status`}
+          >
+            Lv.{lvl.level} ·{" "}
+            {lvl.rank.title
+              .replace("-Rank", "")
+              .replace(" Level", "")
+              .replace("Shadow ", "")}
+          </Link>
           <button
             onClick={() => setContextSheetOpen(true)}
-            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-[var(--surface-2)] text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors whitespace-nowrap shrink-0"
+            className="inline-flex items-center gap-0.5 px-2 py-1 rounded-full bg-[var(--surface-2)] text-[10px] font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors whitespace-nowrap shrink-0"
           >
             <span>{CONTEXTS[store.context].shortLabel}</span>
-            <ChevronDown size={13} />
+            <ChevronDown size={11} />
           </button>
-          {store.lowMana && store.debloatMode ? (
-            <button
-              onClick={() => setContextSheetOpen(true)}
-              className="px-2 py-0.5 rounded-full bg-[#8b5cf6]/20 border border-[#8b5cf6]/35 text-[10px] font-medium text-[#c4b5fd] whitespace-nowrap shrink-0"
-              title="Low mana & 36h de-bloat modes active"
-            >
-              2 modes
-            </button>
-          ) : store.lowMana ? (
-            <button
-              onClick={() => setContextSheetOpen(true)}
-              className="px-2 py-0.5 rounded-full bg-[#3b6cf6]/20 border border-[#3b6cf6]/35 text-[10px] font-medium text-[#93c5fd] whitespace-nowrap shrink-0"
-              title="Low mana mode active"
-            >
-              Low
-            </button>
-          ) : store.debloatMode ? (
-            <button
-              onClick={() => setContextSheetOpen(true)}
-              className="px-2 py-0.5 rounded-full bg-[#f59e0b]/20 border border-[#f59e0b]/35 text-[10px] font-medium text-[#fbbf24] whitespace-nowrap shrink-0"
-              title="36h de-bloat mode active"
-            >
-              De-bloat
-            </button>
-          ) : null}
         </div>
 
         <button
-          onClick={() => setWeightEditorOpen(true)}
-          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-[var(--surface-1)] border border-[var(--border-subtle)] font-mono tabular-nums text-xs font-medium text-[var(--text-primary)] hover:border-[var(--border-accent)] transition-colors whitespace-nowrap shrink-0"
+          onClick={openWeightEditor}
+          className="inline-flex items-center gap-1 px-2 py-1.5 rounded-full bg-[var(--surface-1)] border border-[var(--border-subtle)] font-mono tabular-nums text-[11px] font-medium text-[var(--text-primary)] hover:border-[var(--border-accent)] transition-colors whitespace-nowrap shrink-0"
+          title={`Trend ${store.weightEma} kg · Raw ${store.rawWeight} kg`}
         >
-          <Scale size={13} className="text-[var(--text-secondary)]" />
+          <Scale size={12} className="text-[var(--text-secondary)]" />
           <span>{store.weightEma} kg</span>
+          {Math.abs(rawVsEmaDelta) >= 1.0 && (
+            <span
+              className={`text-[10px] ${
+                rawVsEmaDelta > 0 ? "text-[#fbbf24]" : "text-[#4ade80]"
+              }`}
+            >
+              {rawVsEmaDelta > 0 ? `+${rawVsEmaDelta}` : rawVsEmaDelta}
+            </span>
+          )}
         </button>
       </header>
 
@@ -694,7 +789,7 @@ export default function CommandDeckPage() {
           <div className="mt-2.5 h-1 rounded-full bg-[var(--surface-0)] overflow-hidden">
             <div
               className={`h-full transition-all duration-300 ${
-                totals.proteinG >= 145 ? "progress-green" : "progress-blue"
+                totals.proteinG >= totals.targetProteinG - 20 ? "progress-green" : "progress-blue"
               }`}
               style={{ width: `${proteinPct}%` }}
             />
@@ -725,15 +820,116 @@ export default function CommandDeckPage() {
         </button>
       </section>
 
-      {/* OPTIONAL ACTIONABLE BANNERS */}
-      {(store.coachBanner.trim() || activeResume || actionableDirective) && (
-        <div className="space-y-3">
+      {/* DAILY OMAD & HYDRATION RITUALS STRIP */}
+      <section className="grid grid-cols-4 gap-1.5">
+        <button
+          onClick={() => handleRitual("water", "4L Water")}
+          className={`h-9 px-2 rounded-xl border text-[11px] font-medium inline-flex items-center justify-center gap-1 transition-colors ${
+            today.waterDone
+              ? "bg-[#22c55e]/15 border-[#22c55e]/35 text-[#4ade80]"
+              : "bg-[var(--surface-1)] border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+          }`}
+        >
+          <Droplets size={12} />
+          <span>4L Water</span>
+        </button>
+
+        <button
+          onClick={() => handleRitual("electrolytes", "Electrolytes")}
+          className={`h-9 px-2 rounded-xl border text-[11px] font-medium inline-flex items-center justify-center gap-1 transition-colors ${
+            today.electrolytesDone
+              ? "bg-[#3b6cf6]/15 border-[#3b6cf6]/35 text-[#93c5fd]"
+              : "bg-[var(--surface-1)] border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+          }`}
+        >
+          <Zap size={12} />
+          <span>Salt/ORS</span>
+        </button>
+
+        <button
+          onClick={() => handleRitual("creatine", "Creatine 5g")}
+          className={`h-9 px-2 rounded-xl border text-[11px] font-medium inline-flex items-center justify-center gap-1 transition-colors ${
+            today.creatineDone
+              ? "bg-[#8b5cf6]/15 border-[#8b5cf6]/35 text-[#c4b5fd]"
+              : "bg-[var(--surface-1)] border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+          }`}
+        >
+          <Pill size={12} />
+          <span>Creatine</span>
+        </button>
+
+        <div
+          className={`h-9 px-2 rounded-xl border text-[11px] font-mono inline-flex items-center justify-center gap-1 ${
+            today.sleepHours && today.sleepHours < 5.5
+              ? "bg-[#f59e0b]/15 border-[#f59e0b]/35 text-[#fbbf24]"
+              : "bg-[var(--surface-1)] border-[var(--border-subtle)] text-[var(--text-muted)]"
+          }`}
+          title="Sleep synced from Health Connect"
+        >
+          <Moon size={12} />
+          <span>{today.sleepHours ? `${today.sleepHours}h` : "Sleep"}</span>
+        </div>
+      </section>
+
+      {/* OPTIONAL ACTIONABLE SYSTEM BANNERS */}
+      {(store.coachBanner.trim() ||
+        activeResume ||
+        sleepLowAlert ||
+        deload.recommended ||
+        actionableDirective) && (
+        <div className="space-y-2.5">
           {store.coachBanner.trim() && (
             <div className="rounded-2xl px-4 py-3 bg-[var(--surface-1)] border border-[#f59e0b]/35 flex items-center justify-between gap-3">
               <p className="text-xs text-[var(--text-primary)] leading-snug">
-                <span className="font-semibold text-[#fbbf24] mr-1.5">Note:</span>
+                <span className="font-semibold text-[#fbbf24] mr-1.5">System Note:</span>
                 {store.coachBanner}
               </p>
+            </div>
+          )}
+
+          {sleepLowAlert && (
+            <div className="rounded-2xl px-4 py-3 bg-[#8b5cf6]/10 border border-[#8b5cf6]/35 flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-[11px] font-semibold text-[#c4b5fd]">
+                  BERU · SHORT SLEEP DETECTED ({today.sleepHours}h)
+                </p>
+                <p className="text-xs text-[var(--text-secondary)] mt-0.5">
+                  Switch to Low Mana (2 sets @ RIR 2-3) to protect recovery.
+                </p>
+              </div>
+              <button
+                onClick={handleToggleLowMana}
+                className="shrink-0 px-3 py-1.5 rounded-lg bg-[#8b5cf6] text-white text-xs font-semibold"
+              >
+                Low Mana
+              </button>
+            </div>
+          )}
+
+          {deload.recommended && (
+            <div className="rounded-2xl px-4 py-3 bg-[#f59e0b]/10 border border-[#f59e0b]/35 flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-[11px] font-semibold text-[#fbbf24]">
+                  RECOVERY GATE · DELOAD DUE
+                </p>
+                <p className="text-xs text-[var(--text-secondary)] mt-0.5">
+                  {deload.reason}
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  store.markDeloadWeek();
+                  playSystemPing();
+                  addToast({
+                    title: "DELOAD WEEK STARTED",
+                    message: "Switched to RIR 2-3 recovery volume for 7 days.",
+                    variant: "info",
+                  });
+                }}
+                className="shrink-0 px-3 py-1.5 rounded-lg bg-[var(--surface-2)] text-xs font-medium text-[var(--text-primary)]"
+              >
+                Deload
+              </button>
             </div>
           )}
 
@@ -789,7 +985,7 @@ export default function CommandDeckPage() {
                   {actionableDirective.actionKind === "seal_whey"
                     ? "Add Whey+Skyr"
                     : actionableDirective.actionKind === "lock_skip"
-                      ? "Skip dinner"
+                      ? "Close OMAD"
                       : actionableDirective.actionKind === "floor_5m"
                         ? "5m Floor"
                         : "De-bloat meal"}
@@ -800,8 +996,8 @@ export default function CommandDeckPage() {
         </div>
       )}
 
-      {/* 3. TODAY'S WORKOUT CARD */}
-      <section className="rounded-2xl bg-[var(--surface-1)] border border-[var(--border-subtle)] p-5">
+      {/* 3. TODAY'S GATE WORKOUT CARD */}
+      <section className="rounded-2xl monarch-hero p-5">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2.5">
             <span
@@ -842,7 +1038,7 @@ export default function CommandDeckPage() {
         </div>
 
         <div className="mt-3 flex items-center justify-between gap-2">
-          <h2 className="text-xl font-semibold tracking-tight text-[var(--text-primary)]">
+          <h2 className="font-[family-name:var(--font-rajdhani)] text-2xl font-bold tracking-wide text-[var(--text-primary)]">
             {splitTitle}
           </h2>
           {workoutDoneToday ? (
@@ -856,25 +1052,33 @@ export default function CommandDeckPage() {
           ) : null}
         </div>
 
-        <p className="mt-1 text-xs text-[var(--text-secondary)] truncate">
+        <p className="mt-0.5 text-xs text-[var(--text-secondary)] leading-snug">
           {activeSplitSpec.focus} · {formatArenaTitle(store.arena)} · {prescribedPreview.length} exercises
         </p>
 
-        {/* iOS Segmented Mode Pill */}
-        <div className="mt-4 bg-[var(--surface-0)] p-1 rounded-xl grid grid-cols-2 gap-1">
-          {(["regular_3x15", "low_time_2x"] as const).map((rankId) => {
-            const active = store.gateRank === rankId;
+        {/* 3-Mode Training Effort Selector */}
+        <div className="mt-4 bg-[var(--surface-0)] p-1 rounded-xl grid grid-cols-3 gap-1">
+          {(
+            [
+              { id: "regular", label: "Regular 3x" },
+              { id: "express_2x", label: "Low Time 2x" },
+              { id: "low_mana_rir2", label: "Low Mana RIR2" },
+            ] as { id: GateRankId; label: string }[]
+          ).map((mode) => {
+            const active = normGateRank === mode.id;
             return (
               <button
-                key={rankId}
-                onClick={() => store.setGateRank(rankId)}
-                className={`py-2 px-3 rounded-lg text-xs font-medium transition-colors ${
+                key={mode.id}
+                onClick={() => store.setGateRank(mode.id)}
+                className={`py-2 px-1 rounded-lg text-[11px] font-medium transition-colors whitespace-nowrap ${
                   active
-                    ? "bg-[var(--surface-2)] text-[var(--text-primary)] shadow-xs"
+                    ? mode.id === "low_mana_rir2"
+                      ? "bg-[#8b5cf6]/25 text-[#c4b5fd]"
+                      : "bg-[var(--surface-2)] text-[var(--text-primary)] shadow-xs"
                     : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
                 }`}
               >
-                {rankId === "regular_3x15" ? "Regular · 3x15" : "Low Time · 2x Fail"}
+                {mode.label}
               </button>
             );
           })}
@@ -917,7 +1121,7 @@ export default function CommandDeckPage() {
 
             <div>
               <p className="text-[11px] font-medium text-[var(--text-muted)] mb-2">
-                Weekend 2-in-1 (3-4h)
+                Weekend 7-Lift Heavy (75-90m)
               </p>
               <div className="grid grid-cols-2 gap-1.5">
                 {comboSplits.map((sp) => {
@@ -938,7 +1142,7 @@ export default function CommandDeckPage() {
                         <span>{sp.shortLabel}</span>
                       </span>
                       <span className="text-[10px] text-[var(--text-muted)]">
-                        {sp.id === "ul_combo_a" ? "Upper A + Lower A" : "Upper B + Lower B"}
+                        {sp.id === "ul_combo_a" ? "Upper A + Quads" : "Upper B + Hinge"}
                       </span>
                     </button>
                   );
@@ -1001,7 +1205,7 @@ export default function CommandDeckPage() {
         >
           {activeResume
             ? `Resume ${splitTitle} (${activeResume.checkedSets}/${activeResume.totalSets})`
-            : `Start ${splitTitle}`}
+            : `Enter ${splitTitle} Gate`}
         </button>
 
         {/* Quick Workout Modes: 5m No-Skip, Cardio & Rest */}
@@ -1066,9 +1270,11 @@ export default function CommandDeckPage() {
       </section>
 
       {/* 4. FUEL CARD */}
-      <section className="rounded-2xl bg-[var(--surface-1)] border border-[var(--border-subtle)] p-5 space-y-3.5">
+      <section className="rounded-2xl monarch-card p-5 space-y-3.5">
         <div className="flex items-center justify-between gap-2">
-          <h2 className="text-base font-semibold text-[var(--text-primary)]">Fuel</h2>
+          <h2 className="font-[family-name:var(--font-rajdhani)] text-lg font-bold tracking-wide text-[var(--text-primary)]">
+            Fuel · OMAD
+          </h2>
           <div className="flex items-center gap-1.5">
             <button
               onClick={handleToggleDinnerOut}
@@ -1178,7 +1384,8 @@ export default function CommandDeckPage() {
         {today.foods.length > 0 && (
           <div className="pt-3 border-t border-[var(--border-subtle)] space-y-2">
             {today.foods.map((entry) => {
-              const v = evaluateFoodViability(entry.kcal, entry.proteinG);
+              const tags = FOOD_PRESETS.find((p) => p.id === entry.presetId)?.tags;
+              const v = evaluateFoodViability(entry.kcal, entry.proteinG, tags);
               return (
                 <div
                   key={entry.id}
@@ -1226,11 +1433,13 @@ export default function CommandDeckPage() {
       </section>
 
       {/* 5. READING CARD */}
-      <section className="rounded-2xl bg-[var(--surface-1)] border border-[var(--border-subtle)] p-5 space-y-3">
+      <section className="rounded-2xl monarch-card p-5 space-y-3">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <BookOpen size={15} className="text-[#60a5fa]" />
-            <h2 className="text-base font-semibold text-[var(--text-primary)]">Reading</h2>
+            <h2 className="font-[family-name:var(--font-rajdhani)] text-lg font-bold tracking-wide text-[var(--text-primary)]">
+              Reading
+            </h2>
             {readingStreak > 0 && (
               <span className="font-mono text-[11px] text-[var(--text-muted)]">
                 · {readingStreak}d
@@ -1343,7 +1552,8 @@ export default function CommandDeckPage() {
         )}
       </section>
 
-      {/* MODULAR BOTTOM SHEETS: PLATE BUILDER, WEEKLY MEAL PLAN & READING */}
+      {/* MODULAR BOTTOM SHEETS */}
+      <CombatSheet open={combatOpen} onClose={() => setCombatOpen(false)} />
       <FuelSheet
         open={fuelSheetOpen}
         onClose={() => setFuelSheetOpen(false)}
@@ -1358,16 +1568,55 @@ export default function CommandDeckPage() {
         initialMode={readingSheetMode}
       />
 
-      {/* BOTTOM SHEET: SCALE & BODY COMP */}
+      {/* BOTTOM SHEET: SCALE & BODY COMP (TREND-SHIELDED) */}
       <SheetModal
         open={weightEditorOpen}
         onClose={() => setWeightEditorOpen(false)}
-        title="Weight & body comp"
+        title="Weight & 14d Trend"
       >
+        <div className="p-3 rounded-xl bg-[var(--surface-0)] border border-[var(--border-subtle)] space-y-2">
+          <div className="flex items-center justify-between text-xs">
+            <span className="font-medium text-[var(--text-primary)]">
+              Trend: <span className="font-mono text-[#60a5fa]">{store.weightEma} kg</span>
+            </span>
+            <span className="font-mono text-[11px] text-[var(--text-muted)]">
+              Best {store.bestWeightEma} kg · Raw {store.rawWeight} kg
+            </span>
+          </div>
+          <WeightTrendChart series={weightTrend.series14d} height={110} compact />
+          <p className="text-[11px] text-[var(--text-secondary)] leading-snug">
+            {weightTrend.fluctuationNote}
+          </p>
+        </div>
+
+        {blePendingConfirmKg !== null && (
+          <div className="p-3 rounded-xl bg-[#f59e0b]/15 border border-[#f59e0b]/40 space-y-2">
+            <p className="text-xs font-semibold text-[#fbbf24]">
+              BLE Scale read {blePendingConfirmKg} kg (large delta from {store.rawWeight} kg)
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => handleSaveWeight(blePendingConfirmKg)}
+                className="flex-1 h-9 rounded-lg bg-[#f59e0b] text-[#0b0c10] text-xs font-semibold"
+              >
+                Confirm {blePendingConfirmKg} kg
+              </button>
+              <button
+                onClick={() => setBlePendingConfirmKg(null)}
+                className="h-9 px-3 rounded-lg bg-[var(--surface-2)] text-xs text-[var(--text-secondary)]"
+              >
+                Ignore
+              </button>
+            </div>
+          </div>
+        )}
+
         <div className="p-3.5 rounded-xl bg-[var(--surface-0)] flex items-center justify-between gap-2">
           <div>
             <p className="text-xs text-[var(--text-secondary)]">Raw weigh-in (kg)</p>
-            <p className="text-[11px] text-[var(--text-muted)]">7d EMA: {store.weightEma} kg</p>
+            <p className="text-[11px] text-[var(--text-muted)]">
+              Alpha 0.14 deterministic EMA
+            </p>
           </div>
           <div className="flex items-center gap-2 font-mono text-sm">
             <button
@@ -1409,7 +1658,7 @@ export default function CommandDeckPage() {
 
         <div className="flex gap-2">
           <button
-            onClick={handleSaveWeight}
+            onClick={() => handleSaveWeight()}
             className="flex-1 h-11 rounded-xl bg-[#3b6cf6] text-white text-sm font-semibold"
           >
             Save weight
@@ -1421,7 +1670,7 @@ export default function CommandDeckPage() {
               className="h-11 px-4 rounded-xl bg-[var(--surface-2)] text-[var(--text-primary)] text-xs font-medium inline-flex items-center gap-1.5 disabled:opacity-50"
             >
               <Bluetooth size={14} className="text-[#4ade80]" />
-              <span>{bleBusy ? "Scanning..." : "Scan BLE Scale"}</span>
+              <span>{bleBusy ? "Stabilizing..." : "Scan BLE Scale"}</span>
             </button>
           )}
         </div>
@@ -1451,7 +1700,7 @@ export default function CommandDeckPage() {
 
         <div>
           <p className="text-xs font-medium text-[var(--text-secondary)] mb-2">
-            Log activity (+Kilimanjaro vertical)
+            Log activity (+Kilimanjaro vertical &amp; Zone-2 min)
           </p>
           <div className="grid grid-cols-2 gap-2">
             {(Object.keys(MOVEMENT_PRESETS) as MovementKind[]).map((kind) => {
@@ -1558,13 +1807,17 @@ export default function CommandDeckPage() {
             className="w-full p-3 rounded-xl bg-[var(--surface-0)] flex items-center justify-between text-left"
           >
             <div>
-              <p className="text-xs font-medium text-[var(--text-primary)]">Low mana mode</p>
-              <p className="text-[11px] text-[var(--text-muted)]">Short sleep -&gt; switches to 2x Fail</p>
+              <p className="text-xs font-medium text-[var(--text-primary)]">
+                Low mana mode (Beru)
+              </p>
+              <p className="text-[11px] text-[var(--text-muted)]">
+                Short sleep -&gt; 2 sets @ RIR 2-3 (no failure)
+              </p>
             </div>
             <span
               className={`px-2.5 py-1 rounded-full text-xs font-medium ${
                 store.lowMana
-                  ? "bg-[#3b6cf6]/20 text-[#93c5fd]"
+                  ? "bg-[#8b5cf6]/25 text-[#c4b5fd]"
                   : "bg-[var(--surface-2)] text-[var(--text-muted)]"
               }`}
             >
@@ -1577,8 +1830,12 @@ export default function CommandDeckPage() {
             className="w-full p-3 rounded-xl bg-[var(--surface-0)] flex items-center justify-between text-left"
           >
             <div>
-              <p className="text-xs font-medium text-[var(--text-primary)]">36h de-bloat mode</p>
-              <p className="text-[11px] text-[var(--text-muted)]">Highlights hydration &amp; lean food guard</p>
+              <p className="text-xs font-medium text-[var(--text-primary)]">
+                36h de-bloat mode (Tusk)
+              </p>
+              <p className="text-[11px] text-[var(--text-muted)]">
+                Highlights hydration &amp; lean food guard
+              </p>
             </div>
             <span
               className={`px-2.5 py-1 rounded-full text-xs font-medium ${
@@ -1592,17 +1849,17 @@ export default function CommandDeckPage() {
           </button>
 
           <div className="w-full p-3 rounded-xl bg-[var(--surface-0)] flex items-center justify-between">
-            <div>
-              <p className="text-xs font-medium text-[var(--text-primary)]">Sound cues</p>
-              <p className="text-[11px] text-[var(--text-muted)]">Set timer chime & completion tones</p>
+            <div className="flex items-center gap-2">
+              <Sparkles size={14} className="text-[#60a5fa]" />
+              <div>
+                <p className="text-xs font-medium text-[var(--text-primary)]">Sound cues</p>
+                <p className="text-[11px] text-[var(--text-muted)]">Set timer chime &amp; completion tones</p>
+              </div>
             </div>
             <MuteToggle />
           </div>
         </div>
       </SheetModal>
-
-      {/* Live Workout Combat Sheet */}
-      <CombatSheet open={combatOpen} onClose={() => setCombatOpen(false)} />
     </div>
   );
 }

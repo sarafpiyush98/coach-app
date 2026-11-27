@@ -3,11 +3,14 @@
 import { create } from "zustand";
 import { createJSONStorage, persist, type StateStorage } from "zustand/middleware";
 import {
+  autoDetectContext,
   CONTEXTS,
   CORE_SPLIT_ORDER,
   DEFAULT_WEEKLY_MEAL_PLAN,
   FOOD_PRESETS,
   GATE_RANKS,
+  normalizeGateRankInput,
+  WEIGHT_RAID_BOSSES,
   type ArenaId,
   type ContextId,
   type DayMealPlan,
@@ -18,6 +21,12 @@ import {
 } from "./monarch-catalog";
 import { getHunterRank, type HunterRank } from "./ranks";
 import { calculateStats, type PlayerStats } from "./stats";
+import {
+  DEFAULT_EMA_ALPHA,
+  localDateKey,
+  recomputeWeightTrend,
+  shiftDateKey,
+} from "./weight-engine";
 
 // ============================================================
 // IndexedDB Storage with Graceful localStorage Fallback
@@ -107,6 +116,7 @@ const monarchIdbStorage: StateStorage = {
 
 export interface FoodLogEntry {
   id: string;
+  presetId?: string;
   timeIso: string;
   label: string;
   kcal: number;
@@ -147,6 +157,7 @@ export type MovementKind =
   | "steps_15k"
   | "zone2_jog"
   | "brisk_walk"
+  | "pack_incline"
   | "cg_swim"
   | "badminton_2h"
   | "sunrise_trek";
@@ -201,6 +212,16 @@ export interface DayRecord {
   scaleWeightKg: number | null;
   bodyFatPct: number | null;
   bodyWaterPct: number | null;
+  sleepHours?: number | null;
+  swimSportMin?: number;
+  waterDone?: boolean;
+  electrolytesDone?: boolean;
+  creatineDone?: boolean;
+  ritualXpAwarded?: {
+    water?: boolean;
+    electrolytes?: boolean;
+    creatine?: boolean;
+  };
   samsungSteps: number;
   hcStepsLive?: boolean;
   pendingStepReset?: boolean;
@@ -219,11 +240,18 @@ export interface ExerciseProgress {
   exerciseId: string;
   lastWeightKg: number;
   lastReps: number;
+  allSetsAtCap?: boolean;
   bestWeightKg: number;
   bestReps: number;
   bestE1rm: number;
   lastDate: string;
   sessionsCount: number;
+}
+
+export interface ActiveSetDraft {
+  weightKg: number;
+  reps: number;
+  done: boolean;
 }
 
 export interface ActiveWorkoutSession {
@@ -233,9 +261,12 @@ export interface ActiveWorkoutSession {
   gateRank: GateRankId;
   completedSets: Record<string, boolean[]>;
   draftLoads?: Record<string, { weightKg: number; reps: number }>;
+  setLogs?: Record<string, ActiveSetDraft[]>;
   benchWeight: number;
   benchReps: number;
   lastSetAtMs: number | null;
+  activeRestTargetSec?: number | null;
+  lastExerciseId?: string | null;
 }
 
 export interface MonarchPersistedState {
@@ -251,22 +282,34 @@ export interface MonarchPersistedState {
   totalPrs: number;
   weightEma: number;
   rawWeight: number;
+  bestWeightEma: number;
+  slainBossIds: string[];
   bodyFatPct: number | null;
   bodyWaterPct: number | null;
+  kcalTarget: number;
+  proteinTargetG: number;
   stepTarget: number;
   coachBanner: string;
   ledgerSheetId: string;
+  syncToken: string;
   lastSyncedAt: string | null;
+  lastAutoContextDate: string | null;
   pendingSyncDates: string[];
   benchBest: BenchBest;
   exerciseLogs: Record<string, ExerciseProgress>;
   kiliMeters: number;
+  kiliChecklist: Record<string, boolean>;
+  lastDeloadDate: string | null;
   lateNightsSaved: number;
+  bestActiveStreak: number;
+  bestFastingStreak: number;
+  bestCombo: number;
   webhookUrl: string;
   swappedExercises: Record<string, boolean>;
   activeSession: ActiveWorkoutSession | null;
   savedFoods: SavedFoodItem[];
   weeklyMealPlan: Record<WeekdayKey, DayMealPlan>;
+  weeklyMealPlanCustomized: boolean;
   mealPlanVersion?: number;
   books: BookItem[];
   activeBookId: string | null;
@@ -278,6 +321,7 @@ export interface MonarchActions {
   hasHydrated: boolean;
   setHasHydrated: (v: boolean) => void;
   setContext: (c: ContextId) => void;
+  maybeAutoDetectContext: () => void;
   setSplit: (s: SplitId) => void;
   setArena: (a: ArenaId) => void;
   setGateRank: (g: GateRankId) => void;
@@ -286,12 +330,31 @@ export interface MonarchActions {
   toggleExerciseSwap: (exerciseId: string) => void;
   syncActiveSession: (patch: Partial<ActiveWorkoutSession> & { reset?: boolean }) => void;
   setActiveDraftLoad: (exKey: string, weightKg: number, reps: number) => void;
-  toggleActiveSet: (
-    meta: { split: SplitId; arena: ArenaId; gateRank: GateRankId; exId: string; setIdx: number; totalSetsForEx: number }
-  ) => { turnedOn: boolean };
+  setActiveSetLog: (
+    exKey: string,
+    setIdx: number,
+    totalSetsForEx: number,
+    weightKg: number,
+    reps: number
+  ) => void;
+  toggleActiveSet: (meta: {
+    split: SplitId;
+    arena: ArenaId;
+    gateRank: GateRankId;
+    exId: string;
+    setIdx: number;
+    totalSetsForEx: number;
+    restSec?: number;
+  }) => { turnedOn: boolean };
   clearActiveRestTimer: () => void;
   discardActiveSession: () => void;
   toggleRestDay: () => { isRest: boolean };
+  toggleDailyRitual: (kind: "water" | "electrolytes" | "creatine") => {
+    done: boolean;
+    xpAwarded: number;
+  };
+  toggleKiliCheck: (id: string) => void;
+  markDeloadWeek: () => void;
   clearSurvivalFloor: () => { xpAwarded: number; alreadyCleared: boolean };
   completeGateWorkout: (input: {
     split: SplitId;
@@ -305,6 +368,7 @@ export interface MonarchActions {
       weightKg: number;
       reps: number;
       isBench?: boolean;
+      allSetsAtCap?: boolean;
     }>;
     verticalGainM?: number;
   }) => {
@@ -394,7 +458,17 @@ export interface MonarchActions {
   ) => { ema: number; raw: number };
   setSamsungSteps: (steps: number, allowLower?: boolean) => { xpAwarded: number; verticalGainM: number };
   setWebhookUrl: (url: string) => void;
+  setLedgerSheetId: (id: string) => void;
+  setSyncToken: (token: string) => void;
+  setTargets: (patch: {
+    kcalTarget?: number;
+    proteinTargetG?: number;
+    stepTarget?: number;
+    readingMinPages?: number;
+  }) => void;
   syncWithLedger: () => Promise<{ ok: boolean; message: string }>;
+  backupSnapshotToLedger: () => Promise<{ ok: boolean; message: string }>;
+  restoreSnapshotFromLedger: () => Promise<{ ok: boolean; message: string }>;
   exportJson: () => string;
   importJson: (raw: string) => { ok: boolean; error?: string };
 }
@@ -406,10 +480,7 @@ export type MonarchStore = MonarchPersistedState & MonarchActions;
 // ============================================================
 
 export function getTodayKey(date: Date = new Date()): string {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
+  return localDateKey(date);
 }
 
 export function createEmptyDay(date: string): DayRecord {
@@ -430,6 +501,11 @@ export function createEmptyDay(date: string): DayRecord {
     scaleWeightKg: null,
     bodyFatPct: null,
     bodyWaterPct: null,
+    sleepHours: null,
+    waterDone: false,
+    electrolytesDone: false,
+    creatineDone: false,
+    ritualXpAwarded: {},
     samsungSteps: 0,
     steps10kAwarded: false,
     steps15kAwarded: false,
@@ -439,6 +515,10 @@ export function createEmptyDay(date: string): DayRecord {
 export function epley1Rm(weightKg: number, reps: number): number {
   if (reps <= 1) return Math.round(weightKg * 10) / 10;
   return Math.round(weightKg * (1 + reps / 30) * 10) / 10;
+}
+
+export function isReliableBenchPrSet(reps: number): boolean {
+  return reps >= 1 && reps <= 10;
 }
 
 export function normalizeSplitId(raw: string | undefined): SplitId {
@@ -462,9 +542,17 @@ export function normalizeSplitId(raw: string | undefined): SplitId {
 }
 
 export function normalizeGateRankId(raw: string | undefined): GateRankId {
-  if (raw === "low_time_2x" || raw === "regular_3x15") return raw;
-  if (raw === "floor_5m" || raw === "express_25m") return "low_time_2x";
-  return "regular_3x15";
+  return normalizeGateRankInput(raw);
+}
+
+export function syncBossSlainIds(existingIds: string[], weightEma: number): string[] {
+  const set = new Set(existingIds);
+  for (const boss of WEIGHT_RAID_BOSSES) {
+    if (weightEma <= boss.targetKg) {
+      set.add(boss.id);
+    }
+  }
+  return Array.from(set);
 }
 
 export interface WeeklyTrainingSummary {
@@ -518,7 +606,6 @@ export function computeWeeklyTraining(
     (completedThisWeek.full_body_plus ?? 0) +
     (completedThisWeek.cardio_pool ?? 0);
 
-  // Determine next core split from most recent core workout in last 21 days
   let lastCore: SplitId | null = null;
   for (let i = 0; i < 21 && !lastCore; i++) {
     const d = new Date(localToday);
@@ -567,8 +654,7 @@ export function computeWeeklyTraining(
 
 /**
  * Calibrated v2 XP curve: 90 + (L - 1) * 22.
- * At legacyXp = 4850, Piyush starts awakened at Level 18 (B-Rank, 71% progress),
- * and each subsequent level takes ~2-4 active days (~460-950 XP).
+ * At legacyXp = 4850, Piyush starts awakened at Level 18 (B-Rank).
  */
 export function xpForLevelStep(level: number): number {
   return 90 + Math.max(level - 1, 0) * 22;
@@ -602,26 +688,43 @@ export function levelFromMonarchXp(totalXp: number): {
   }
 }
 
-export function isDayActive(day: DayRecord | undefined): boolean {
+export function getDailyReadingPages(day: DayRecord | undefined): number {
+  return Math.max(
+    0,
+    (day?.readingLogs ?? []).reduce((sum, e) => sum + e.pagesDelta, 0)
+  );
+}
+
+export function isRealActivityDay(day: DayRecord | undefined, readingMin = 5): boolean {
   if (!day) return false;
+  const kcalLogged = (day.foods ?? []).reduce((s, f) => s + (f.kcal || 0), 0);
   return (
     day.survivalFloorCleared ||
     day.workouts.length > 0 ||
     day.movements.length > 0 ||
-    Boolean(day.restDay) ||
-    day.foods.length > 0 ||
+    kcalLogged >= 400 ||
     day.dinnerSkipped ||
-    (day.samsungSteps ?? 0) >= 8000
+    (day.samsungSteps ?? 0) >= 8000 ||
+    getDailyReadingPages(day) >= readingMin
   );
 }
 
-export function getDailyTotals(day: DayRecord | undefined) {
+export function isDayActive(day: DayRecord | undefined, readingMin = 5): boolean {
+  if (!day) return false;
+  return isRealActivityDay(day, readingMin) || Boolean(day.restDay);
+}
+
+export function getDailyTotals(
+  day: DayRecord | undefined,
+  kcalTarget = 1800,
+  proteinTargetG = 165
+) {
   const foods = day?.foods ?? [];
   const kcal = foods.reduce((acc, f) => acc + f.kcal, 0);
   const proteinG = foods.reduce((acc, f) => acc + f.proteinG, 0);
   const activeFlexKcal = day?.activeFlexKcal ?? 0;
-  const targetKcal = 1800 + activeFlexKcal;
-  const targetProteinG = 165;
+  const targetKcal = Math.max(1450, kcalTarget) + activeFlexKcal;
+  const targetProteinG = Math.max(100, proteinTargetG);
   const hasSealOrAbs = foods.some((f) => f.isAbsRaid || f.isSeal);
   const needsProteinSeal =
     proteinG > 0 && proteinG < 50 && !day?.dinnerSkipped && !hasSealOrAbs;
@@ -634,13 +737,6 @@ export function getDailyTotals(day: DayRecord | undefined) {
     isActive: isDayActive(day),
     needsProteinSeal,
   };
-}
-
-export function getDailyReadingPages(day: DayRecord | undefined): number {
-  return Math.max(
-    0,
-    (day?.readingLogs ?? []).reduce((sum, e) => sum + e.pagesDelta, 0)
-  );
 }
 
 export function computeReadingStreak(
@@ -675,34 +771,53 @@ export function computeStreakAndCombo(
   igrisShieldedThisWeek: boolean;
 } {
   let activeStreak = 0;
-  let fastingStreak = 0;
   let shieldAvailable = true;
   let igrisShieldedThisWeek = false;
+  let consecutiveRestOnly = 0;
 
   const todayKey = getTodayKey(today);
   const todayDone = isDayActive(days[todayKey]);
-
-  // Count backward up to 90 days; allow 1 missed gap in recent 7d via Igris shield
   const startOffset = todayDone ? 0 : 1;
+
   for (let i = startOffset; i < 90; i++) {
-    const d = new Date(today);
-    d.setDate(d.getDate() - i);
-    const key = getTodayKey(d);
+    const key = shiftDateKey(todayKey, -i);
     const rec = days[key];
-    if (isDayActive(rec)) {
+    if (isRealActivityDay(rec)) {
       activeStreak++;
-      if (rec?.dinnerSkipped) {
-        fastingStreak++;
+      consecutiveRestOnly = 0;
+    } else if (rec?.restDay && consecutiveRestOnly < 2) {
+      activeStreak++;
+      consecutiveRestOnly++;
+    } else if (rec?.restDay) {
+      break;
+    } else if (i < 7 && shieldAvailable) {
+      // Peek ahead 1 day so Igris Shield works in the morning before today is logged
+      const nextBackKey = shiftDateKey(todayKey, -(i + 1));
+      const nextBackRec = days[nextBackKey];
+      if (activeStreak > 0 || isRealActivityDay(nextBackRec)) {
+        shieldAvailable = false;
+        igrisShieldedThisWeek = true;
+        consecutiveRestOnly = 0;
+      } else {
+        break;
       }
-    } else if (i < 7 && shieldAvailable && activeStreak > 0) {
-      shieldAvailable = false;
-      igrisShieldedThisWeek = true;
     } else {
       break;
     }
   }
 
-  // Awakening baseline ensures combo feels alive from Day 1
+  // True consecutive dinner-skipped / OMAD-sealed fasting streak
+  let fastingStreak = 0;
+  const fastStart = days[todayKey]?.dinnerSkipped ? 0 : 1;
+  for (let i = fastStart; i < 90; i++) {
+    const key = shiftDateKey(todayKey, -i);
+    if (days[key]?.dinnerSkipped) {
+      fastingStreak++;
+    } else {
+      break;
+    }
+  }
+
   const comboDay = Math.max(activeStreak, 1);
   const comboMultiplier = Math.min(2.5, Math.round((1 + (comboDay - 1) * 0.1) * 10) / 10);
 
@@ -712,6 +827,146 @@ export function computeStreakAndCombo(
     comboDay,
     comboMultiplier,
     igrisShieldedThisWeek,
+  };
+}
+
+export function isBellionUnlocked(state: Pick<MonarchPersistedState, "legacyXp" | "earnedXp" | "weightEma">): boolean {
+  const lvl = levelFromMonarchXp(state.legacyXp + state.earnedXp).level;
+  return lvl >= 40 || state.weightEma < 100;
+}
+
+export function applyMonarchXpBonus(
+  baseXp: number,
+  state: Pick<MonarchPersistedState, "days" | "legacyXp" | "earnedXp" | "weightEma">,
+  opts?: { isPr?: boolean }
+): number {
+  const streak = computeStreakAndCombo(state.days);
+  const bellionMult = opts?.isPr && isBellionUnlocked(state) ? 2 : 1;
+  return Math.round(baseXp * streak.comboMultiplier * bellionMult);
+}
+
+export function computeConsecutiveGoodWeeks(
+  days: Record<string, DayRecord>,
+  today: Date = new Date()
+): number {
+  const localToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const dow = localToday.getDay();
+  const offsetFromMon = dow === 0 ? 6 : dow - 1;
+  const currentMonday = new Date(localToday);
+  currentMonday.setDate(localToday.getDate() - offsetFromMon);
+
+  let streakWeeks = 0;
+  for (let w = 0; w < 12; w++) {
+    const mon = new Date(currentMonday);
+    mon.setDate(currentMonday.getDate() - w * 7);
+    let scoreDays = 0;
+    for (let d = 0; d < 7; d++) {
+      const cur = new Date(mon);
+      cur.setDate(mon.getDate() + d);
+      const rec = days[getTodayKey(cur)];
+      if (rec && (rec.workouts.length > 0 || rec.movements.length > 0 || rec.survivalFloorCleared)) {
+        scoreDays++;
+      }
+    }
+    if (scoreDays >= 3) {
+      streakWeeks++;
+    } else if (w > 0) {
+      break;
+    }
+  }
+  return streakWeeks;
+}
+
+export function computeWeeklyAvgKcal(
+  days: Record<string, DayRecord>,
+  today: Date = new Date()
+): number | null {
+  const todayKey = getTodayKey(today);
+  const logged: number[] = [];
+  for (let i = 0; i < 7; i++) {
+    const rec = days[shiftDateKey(todayKey, -i)];
+    const sum = (rec?.foods ?? []).reduce((a, f) => a + f.kcal, 0);
+    if (sum >= 800) logged.push(sum);
+  }
+  if (logged.length === 0) return null;
+  return Math.round(logged.reduce((a, b) => a + b, 0) / logged.length);
+}
+
+export function computeWeeklyKiliStats(
+  days: Record<string, DayRecord>,
+  today: Date = new Date()
+): {
+  zone2MinutesThisWeek: number;
+  zone2TargetMin: number;
+  packInclineCountThisWeek: number;
+} {
+  const localToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const dow = localToday.getDay();
+  const offsetFromMon = dow === 0 ? 6 : dow - 1;
+  const monday = new Date(localToday);
+  monday.setDate(localToday.getDate() - offsetFromMon);
+
+  let zone2MinutesThisWeek = 0;
+  let packInclineCountThisWeek = 0;
+
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(monday);
+    d.setDate(monday.getDate() + i);
+    const rec = days[getTodayKey(d)];
+    if (!rec) continue;
+    for (const mv of rec.movements ?? []) {
+      const preset = MOVEMENT_PRESETS[mv.kind];
+      zone2MinutesThisWeek += preset?.zone2Min ?? 0;
+      if (mv.kind === "pack_incline") {
+        packInclineCountThisWeek += 1;
+      }
+    }
+    for (const wo of rec.workouts ?? []) {
+      if (wo.split === "cardio_pool") {
+        zone2MinutesThisWeek += 30;
+      }
+    }
+    if ((rec.swimSportMin ?? 0) > 0 && !(rec.movements ?? []).some((m) => m.kind === "cg_swim")) {
+      zone2MinutesThisWeek += rec.swimSportMin ?? 0;
+    }
+  }
+
+  return {
+    zone2MinutesThisWeek,
+    zone2TargetMin: 150,
+    packInclineCountThisWeek,
+  };
+}
+
+export function computeDeloadAdvisory(
+  days: Record<string, DayRecord>,
+  lastDeloadDate: string | null,
+  today: Date = new Date()
+): { recommended: boolean; sessionsSinceDeload: number; reason: string | null } {
+  const todayKey = getTodayKey(today);
+  const cutoff = lastDeloadDate || shiftDateKey(todayKey, -42);
+  let sessionsSinceDeload = 0;
+
+  for (const [dt, rec] of Object.entries(days)) {
+    if (dt < cutoff || dt > todayKey) continue;
+    for (const wo of rec.workouts ?? []) {
+      if (wo.split !== "cardio_pool") {
+        sessionsSinceDeload += wo.split === "ul_combo_a" || wo.split === "ul_combo_b" ? 2 : 1;
+      }
+    }
+  }
+
+  if (sessionsSinceDeload >= 18) {
+    return {
+      recommended: true,
+      sessionsSinceDeload,
+      reason: `${sessionsSinceDeload} hard lift sessions since last deload - run 1 week at RIR 2-3 (Low Mana) to clear joint/CNS fatigue.`,
+    };
+  }
+  return {
+    recommended: false,
+    sessionsSinceDeload,
+    reason: null,
   };
 }
 
@@ -733,17 +988,18 @@ export function computeMonarchStats(state: MonarchPersistedState): PlayerStats {
     );
   const { activeStreak, fastingStreak, comboDay } = computeStreakAndCombo(state.days);
   const lvl = levelFromMonarchXp(state.legacyXp + state.earnedXp).level;
+  const goodWeeks = computeConsecutiveGoodWeeks(state.days);
 
   return calculateStats({
     totalWorkouts,
     totalPrs: state.totalPrs,
     totalCheckins,
     totalMealsLogged,
-    bestExerciseStreak: Math.max(14, activeStreak),
+    bestExerciseStreak: Math.max(state.bestActiveStreak || 14, activeStreak),
     bestLoggingStreak: Math.max(12, activeStreak),
-    bestNoLateEatingStreak: Math.max(6, state.lateNightsSaved + fastingStreak),
-    bestCombo: Math.max(14, comboDay),
-    consecutiveGoodWeeks: 4,
+    bestNoLateEatingStreak: Math.max(state.bestFastingStreak || 6, state.lateNightsSaved + fastingStreak),
+    bestCombo: Math.max(state.bestCombo || 14, comboDay),
+    consecutiveGoodWeeks: goodWeeks,
     level: lvl,
   });
 }
@@ -763,7 +1019,7 @@ export function getAmbientShadow(
 ): AmbientShadowDirective | null {
   const key = getTodayKey(now);
   const day = state.days[key];
-  const totals = getDailyTotals(day);
+  const totals = getDailyTotals(day, state.kcalTarget, state.proteinTargetG);
   const hour = now.getHours();
 
   if (state.lowMana && !(day?.workouts.length || day?.survivalFloorCleared)) {
@@ -771,7 +1027,7 @@ export function getAmbientShadow(
       soldier: "Beru",
       color: "#8b5cf6",
       title: "BERU · LOW-MANA OVERRIDE",
-      message: "Short sleep or fatigued? Clear only the 5m Survival Floor and protect the chain.",
+      message: "Short sleep or fatigued? Run 2 recovery sets @ RIR 2-3 (no failure) or clear the 5m Survival Floor.",
       actionLabel: "CLEAR 5m FLOOR",
       actionKind: "floor_5m",
     };
@@ -793,7 +1049,7 @@ export function getAmbientShadow(
       soldier: "Greed",
       color: "#f59e0b",
       title: "GREED · LOW-PROTEIN LUNCH GUARD",
-      message: `${totals.proteinG}g P logged so far. Add 5 PM 2x Whey+Skyr (+70g P) before skipping dinner or you will crash at 11:30 PM.`,
+      message: `${totals.proteinG}g P logged so far. Add 5 PM 2x Whey+Skyr (+70g P) before closing OMAD or you will crash at 11:30 PM.`,
       actionLabel: "LOG 5 PM WHEY+SKYR",
       actionKind: "seal_whey",
     };
@@ -803,9 +1059,9 @@ export function getAmbientShadow(
     return {
       soldier: "Greed",
       color: "#8b5cf6",
-      title: "GREED · FASTING WINDOW READY",
-      message: `${totals.proteinG}g P already locked. Seal Dinner Skip now (+30 XP) and pocket midnight Swiggy savings.`,
-      actionLabel: "LOCK DINNER SKIP",
+      title: "GREED · OMAD SEAL READY",
+      message: `${totals.proteinG}g P already locked. Close OMAD window now (+30 XP) and pocket midnight Swiggy savings.`,
+      actionLabel: "CLOSE OMAD",
       actionKind: "lock_skip",
     };
   }
@@ -816,7 +1072,7 @@ export function getAmbientShadow(
       soldier: "Igris",
       color: "#3b6cf6",
       title: `IGRIS · DAILY GATE (${streak.comboMultiplier}x COMBO)`,
-      message: `One 5m Floor, movement log, or lunch entry locks today green (${streak.igrisShieldedThisWeek ? "Weekly Igris Shield active" : "Igris Shield ready"}).`,
+      message: `One 5m Floor, movement log, or OMAD entry locks today green (${streak.igrisShieldedThisWeek ? "Weekly Igris Shield active" : "Igris Shield ready"}).`,
     };
   }
 
@@ -830,24 +1086,30 @@ function makeId(prefix: string): string {
   return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
 }
 
-export const DEFAULT_LEDGER_SHEET_ID = "17JNkD65FyxmWtl6iR1bvAYrXq4w8b0fWbq43VKwfR20";
+export const DEFAULT_LEDGER_SHEET_ID =
+  process.env.NEXT_PUBLIC_MONARCH_SHEET_ID ?? "";
 export const DEFAULT_WEBHOOK_URL =
-  "https://script.google.com/macros/s/AKfycbxC324Dza-ITDsejFUcPnPLtiQDMvMhpkMrlk48Rwb8a8JjZctF8d7PAU7NKSkkVEQt1g/exec";
+  process.env.NEXT_PUBLIC_MONARCH_WEBHOOK_URL ?? "";
 
 function enqueuePending(existing: string[], dateKey: string): string[] {
   return existing.includes(dateKey) ? existing : [...existing, dateKey];
 }
 
+let syncDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+let inFlightSync: Promise<{ ok: boolean; message: string }> | null = null;
+
 function fireWebhookIfConfigured(
   webhookUrl: string,
-  _event: string,
-  _payload: Record<string, unknown>,
   triggerSync?: () => Promise<unknown>
 ) {
   if (!webhookUrl.trim() || typeof window === "undefined" || !triggerSync) return;
-  queueMicrotask(() => {
+  if (syncDebounceTimer) {
+    clearTimeout(syncDebounceTimer);
+  }
+  syncDebounceTimer = setTimeout(() => {
+    syncDebounceTimer = null;
     triggerSync().catch(() => {});
-  });
+  }, 1200);
 }
 
 // ============================================================
@@ -856,15 +1118,16 @@ function fireWebhookIfConfigured(
 
 export const MOVEMENT_PRESETS: Record<
   MovementKind,
-  { label: string; verticalGainM: number; grantsFlex: boolean; xp: number }
+  { label: string; verticalGainM: number; grantsFlex: boolean; xp: number; zone2Min: number }
 > = {
-  steps_10k: { label: "10k Steps Walk", verticalGainM: 45, grantsFlex: false, xp: 30 },
-  steps_15k: { label: "15k Zone-2 Reset", verticalGainM: 80, grantsFlex: false, xp: 45 },
-  zone2_jog: { label: "20-30m Zone-2 Jog", verticalGainM: 70, grantsFlex: true, xp: 45 },
-  brisk_walk: { label: "20-30m Brisk Walk", verticalGainM: 35, grantsFlex: false, xp: 25 },
-  cg_swim: { label: "30m CG Pool (Post-Lift)", verticalGainM: 75, grantsFlex: true, xp: 45 },
-  badminton_2h: { label: "Sun 2h Badminton", verticalGainM: 120, grantsFlex: true, xp: 60 },
-  sunrise_trek: { label: "Sunrise Hill Trek", verticalGainM: 185, grantsFlex: true, xp: 75 },
+  steps_10k: { label: "10k Steps Walk", verticalGainM: 45, grantsFlex: false, xp: 30, zone2Min: 0 },
+  steps_15k: { label: "15k Zone-2 Reset", verticalGainM: 80, grantsFlex: false, xp: 45, zone2Min: 30 },
+  zone2_jog: { label: "20-30m Zone-2 Jog", verticalGainM: 70, grantsFlex: true, xp: 45, zone2Min: 25 },
+  brisk_walk: { label: "20-30m Brisk Walk", verticalGainM: 35, grantsFlex: false, xp: 25, zone2Min: 25 },
+  pack_incline: { label: "45m Loaded Pack Incline", verticalGainM: 110, grantsFlex: true, xp: 55, zone2Min: 45 },
+  cg_swim: { label: "30m CG Pool (Post-Lift)", verticalGainM: 75, grantsFlex: true, xp: 45, zone2Min: 30 },
+  badminton_2h: { label: "Sun 2h Badminton", verticalGainM: 120, grantsFlex: true, xp: 60, zone2Min: 90 },
+  sunrise_trek: { label: "Sunrise Hill Trek", verticalGainM: 185, grantsFlex: true, xp: 75, zone2Min: 90 },
 };
 
 // ============================================================
@@ -875,7 +1138,7 @@ const INITIAL_PERSISTED_STATE: MonarchPersistedState = {
   context: "cg_home",
   split: "upper_a",
   arena: "cg_gym",
-  gateRank: "regular_3x15",
+  gateRank: "regular",
   lowMana: false,
   debloatMode: false,
   legacyXp: 4850,
@@ -884,17 +1147,23 @@ const INITIAL_PERSISTED_STATE: MonarchPersistedState = {
   totalPrs: 3,
   weightEma: 112.4,
   rawWeight: 112.4,
+  bestWeightEma: 112.4,
+  slainBossIds: ["gatekeeper"],
   bodyFatPct: null,
   bodyWaterPct: null,
+  kcalTarget: 1800,
+  proteinTargetG: 165,
   stepTarget: 12000,
   coachBanner: "",
   ledgerSheetId: DEFAULT_LEDGER_SHEET_ID,
+  syncToken: "",
   lastSyncedAt: null,
+  lastAutoContextDate: null,
   pendingSyncDates: [],
   benchBest: { weightKg: 50, reps: 15, e1rm: 75, updatedAt: "2026-11-26" },
   exerciseLogs: {
-    cg_bench: {
-      exerciseId: "cg_bench",
+    cg_bench_heavy: {
+      exerciseId: "cg_bench_heavy",
       lastWeightKg: 50,
       lastReps: 15,
       bestWeightKg: 50,
@@ -905,18 +1174,48 @@ const INITIAL_PERSISTED_STATE: MonarchPersistedState = {
     },
   },
   kiliMeters: 1240,
+  kiliChecklist: {},
+  lastDeloadDate: null,
   lateNightsSaved: 6,
+  bestActiveStreak: 14,
+  bestFastingStreak: 6,
+  bestCombo: 14,
   webhookUrl: DEFAULT_WEBHOOK_URL,
   swappedExercises: {},
   activeSession: null,
   savedFoods: [],
   weeklyMealPlan: DEFAULT_WEEKLY_MEAL_PLAN,
-  mealPlanVersion: 2,
+  weeklyMealPlanCustomized: false,
+  mealPlanVersion: 3,
   books: [],
   activeBookId: null,
   readingMinPages: 5,
   days: {},
 };
+
+function reconcileWeightAndRecords(
+  state: Pick<MonarchPersistedState, "days" | "bestWeightEma" | "slainBossIds" | "bestActiveStreak" | "bestFastingStreak" | "bestCombo" | "rawWeight" | "weightEma">
+) {
+  const trend = recomputeWeightTrend(state.days, 112.4, state.rawWeight || 112.4, DEFAULT_EMA_ALPHA);
+  const hasAnyWeighIn = Object.values(state.days).some(
+    (d) => typeof d.scaleWeightKg === "number" && d.scaleWeightKg >= 40
+  );
+  const weightEma = hasAnyWeighIn ? trend.latestEmaKg : state.weightEma;
+  const rawWeight = hasAnyWeighIn ? trend.latestRawKg : state.rawWeight;
+  const bestWeightEma = Math.min(state.bestWeightEma || weightEma, trend.bestEmaKg, weightEma);
+  const slainBossIds = syncBossSlainIds(state.slainBossIds ?? ["gatekeeper"], weightEma);
+  const streak = computeStreakAndCombo(state.days);
+
+  return {
+    weightEma,
+    rawWeight,
+    bestWeightEma,
+    slainBossIds,
+    bestActiveStreak: Math.max(state.bestActiveStreak || 14, streak.activeStreak),
+    bestFastingStreak: Math.max(state.bestFastingStreak || 6, streak.fastingStreak),
+    bestCombo: Math.max(state.bestCombo || 14, streak.comboDay),
+  };
+}
 
 export const useMonarchStore = create<MonarchStore>()(
   persist(
@@ -937,17 +1236,41 @@ export const useMonarchStore = create<MonarchStore>()(
                 : s.arena,
         })),
 
+      maybeAutoDetectContext: () => {
+        const key = getTodayKey();
+        const s = get();
+        if (s.lastAutoContextDate === key) return;
+        const detected = autoDetectContext();
+        set({
+          context: detected,
+          lastAutoContextDate: key,
+          arena:
+            detected === "travel"
+              ? "nomad_hotel"
+              : s.arena === "nomad_hotel"
+                ? CONTEXTS[detected].defaultArena
+                : s.arena,
+        });
+      },
+
       setSplit: (split) => set({ split }),
 
       setArena: (arena) => set({ arena }),
 
-      setGateRank: (gateRank) => set({ gateRank }),
+      setGateRank: (gateRank) =>
+        set({
+          gateRank,
+          lowMana: gateRank === "low_mana_rir2",
+        }),
 
       toggleLowMana: () =>
-        set((s) => ({
-          lowMana: !s.lowMana,
-          gateRank: !s.lowMana ? "low_time_2x" : "regular_3x15",
-        })),
+        set((s) => {
+          const nextLow = !s.lowMana;
+          return {
+            lowMana: nextLow,
+            gateRank: nextLow ? "low_mana_rir2" : "regular",
+          };
+        }),
 
       toggleDebloat: () => set((s) => ({ debloatMode: !s.debloatMode })),
 
@@ -973,11 +1296,15 @@ export const useMonarchStore = create<MonarchStore>()(
                 gateRank: s.gateRank,
                 completedSets: {},
                 draftLoads: {},
+                setLogs: {},
                 benchWeight: s.benchBest.weightKg || 55,
-                benchReps: 10,
+                benchReps: 8,
                 lastSetAtMs: null,
+                activeRestTargetSec: null,
+                lastExerciseId: null,
               };
-        const { reset: _reset, ...rest } = patch;
+        const { reset, ...rest } = patch;
+        void reset;
         set({
           activeSession: {
             ...base,
@@ -1001,17 +1328,21 @@ export const useMonarchStore = create<MonarchStore>()(
                 gateRank: s.gateRank,
                 completedSets: {},
                 draftLoads: {},
+                setLogs: {},
                 benchWeight: s.benchBest.weightKg || 55,
-                benchReps: 10,
+                benchReps: 8,
                 lastSetAtMs: null,
+                activeRestTargetSec: null,
+                lastExerciseId: null,
               };
         const cleanWeight = Math.round(Math.max(0, weightKg) * 10) / 10;
         const cleanReps = Math.max(1, Math.round(reps));
+        const isBenchKey = exKey === "cg_bench_heavy" || exKey === "cg_bench";
         set({
           activeSession: {
             ...base,
-            benchWeight: exKey === "cg_bench" ? cleanWeight : base.benchWeight,
-            benchReps: exKey === "cg_bench" ? cleanReps : base.benchReps,
+            benchWeight: isBenchKey ? cleanWeight : base.benchWeight,
+            benchReps: isBenchKey ? cleanReps : base.benchReps,
             draftLoads: {
               ...(base.draftLoads ?? {}),
               [exKey]: { weightKg: cleanWeight, reps: cleanReps },
@@ -1020,7 +1351,67 @@ export const useMonarchStore = create<MonarchStore>()(
         });
       },
 
-      toggleActiveSet: ({ split, arena, gateRank, exId, setIdx, totalSetsForEx }) => {
+      setActiveSetLog: (exKey, setIdx, totalSetsForEx, weightKg, reps) => {
+        const key = getTodayKey();
+        const s = get();
+        const current = s.activeSession;
+        const base: ActiveWorkoutSession =
+          current && current.date === key
+            ? current
+            : {
+                date: key,
+                split: s.split,
+                arena: s.arena,
+                gateRank: s.gateRank,
+                completedSets: {},
+                draftLoads: {},
+                setLogs: {},
+                benchWeight: s.benchBest.weightKg || 55,
+                benchReps: 8,
+                lastSetAtMs: null,
+                activeRestTargetSec: null,
+                lastExerciseId: null,
+              };
+
+        const cleanWeight = Math.round(Math.max(0, weightKg) * 10) / 10;
+        const cleanReps = Math.max(1, Math.round(reps));
+        const existingLogs = base.setLogs?.[exKey] ?? [];
+        const fallbackLoad = base.draftLoads?.[exKey] ?? { weightKg: cleanWeight, reps: cleanReps };
+        const padded: ActiveSetDraft[] = Array.from({ length: totalSetsForEx }, (_, i) =>
+          existingLogs[i]
+            ? { ...existingLogs[i] }
+            : { weightKg: fallbackLoad.weightKg, reps: fallbackLoad.reps, done: false }
+        );
+        padded[setIdx] = { ...padded[setIdx], weightKg: cleanWeight, reps: cleanReps };
+
+        // Cascade Set 1 weight/reps to unedited uncompleted later sets so straight sets take 0 extra taps
+        if (setIdx === 0) {
+          for (let i = 1; i < padded.length; i++) {
+            if (!existingLogs[i] && !padded[i].done) {
+              padded[i] = { ...padded[i], weightKg: cleanWeight, reps: cleanReps };
+            }
+          }
+        }
+
+        const isBenchKey = exKey === "cg_bench_heavy" || exKey === "cg_bench";
+        set({
+          activeSession: {
+            ...base,
+            benchWeight: isBenchKey ? cleanWeight : base.benchWeight,
+            benchReps: isBenchKey ? cleanReps : base.benchReps,
+            draftLoads: {
+              ...(base.draftLoads ?? {}),
+              [exKey]: { weightKg: cleanWeight, reps: cleanReps },
+            },
+            setLogs: {
+              ...(base.setLogs ?? {}),
+              [exKey]: padded,
+            },
+          },
+        });
+      },
+
+      toggleActiveSet: ({ split, arena, gateRank, exId, setIdx, totalSetsForEx, restSec }) => {
         const key = getTodayKey();
         const s = get();
         const prev =
@@ -1037,9 +1428,12 @@ export const useMonarchStore = create<MonarchStore>()(
                 gateRank,
                 completedSets: {},
                 draftLoads: {},
+                setLogs: {},
                 benchWeight: s.benchBest.weightKg || 55,
-                benchReps: 10,
+                benchReps: 8,
                 lastSetAtMs: null,
+                activeRestTargetSec: null,
+                lastExerciseId: null,
               };
 
         const existingArr = prev.completedSets[exId] ?? [];
@@ -1057,6 +1451,8 @@ export const useMonarchStore = create<MonarchStore>()(
               [exId]: padded,
             },
             lastSetAtMs: turnedOn ? Date.now() : prev.lastSetAtMs,
+            activeRestTargetSec: turnedOn ? (restSec ?? 90) : prev.activeRestTargetSec,
+            lastExerciseId: turnedOn ? exId : prev.lastExerciseId,
           },
         });
         return { turnedOn };
@@ -1065,7 +1461,7 @@ export const useMonarchStore = create<MonarchStore>()(
       clearActiveRestTimer: () =>
         set((s) => ({
           activeSession: s.activeSession
-            ? { ...s.activeSession, lastSetAtMs: null }
+            ? { ...s.activeSession, lastSetAtMs: null, activeRestTargetSec: null }
             : null,
         })),
 
@@ -1086,28 +1482,75 @@ export const useMonarchStore = create<MonarchStore>()(
         return { isRest: nextRest };
       },
 
+      toggleDailyRitual: (kind) => {
+        const key = getTodayKey();
+        const state = get();
+        const existing = state.days[key] ?? createEmptyDay(key);
+        const field =
+          kind === "water"
+            ? "waterDone"
+            : kind === "electrolytes"
+              ? "electrolytesDone"
+              : "creatineDone";
+        const nextDone = !Boolean(existing[field]);
+        const prevRitualXp = existing.ritualXpAwarded ?? {};
+        const alreadyXp = Boolean(prevRitualXp[kind]);
+        const xpAwarded = nextDone && !alreadyXp ? 5 : 0;
+
+        set({
+          earnedXp: state.earnedXp + xpAwarded,
+          days: {
+            ...state.days,
+            [key]: {
+              ...existing,
+              [field]: nextDone,
+              ritualXpAwarded: {
+                ...prevRitualXp,
+                [kind]: alreadyXp || nextDone,
+              },
+            },
+          },
+        });
+        return { done: nextDone, xpAwarded };
+      },
+
+      toggleKiliCheck: (id) =>
+        set((s) => ({
+          kiliChecklist: {
+            ...(s.kiliChecklist ?? {}),
+            [id]: !s.kiliChecklist?.[id],
+          },
+        })),
+
+      markDeloadWeek: () =>
+        set({
+          lastDeloadDate: getTodayKey(),
+          lowMana: true,
+          gateRank: "low_mana_rir2",
+        }),
+
       clearSurvivalFloor: () => {
         const key = getTodayKey();
-        const existing = get().days[key] ?? createEmptyDay(key);
+        const state = get();
+        const existing = state.days[key] ?? createEmptyDay(key);
         if (existing.survivalFloorCleared || existing.workouts.length > 0) {
           return { xpAwarded: 0, alreadyCleared: true };
         }
-        const xpAwarded = 35;
-        set((s) => ({
-          earnedXp: s.earnedXp + xpAwarded,
-          kiliMeters: s.kiliMeters + 25,
-          pendingSyncDates: enqueuePending(s.pendingSyncDates, key),
-          days: {
-            ...s.days,
-            [key]: { ...existing, survivalFloorCleared: true, restDay: false },
-          },
-        }));
-        fireWebhookIfConfigured(
-          get().webhookUrl,
-          "clear_survival_floor",
-          { date: key, xpAwarded },
-          get().syncWithLedger
-        );
+        const xpAwarded = applyMonarchXpBonus(35, state);
+        const updatedDays = {
+          ...state.days,
+          [key]: { ...existing, survivalFloorCleared: true, restDay: false },
+        };
+        const streak = computeStreakAndCombo(updatedDays);
+        set({
+          earnedXp: state.earnedXp + xpAwarded,
+          kiliMeters: state.kiliMeters + 25,
+          bestActiveStreak: Math.max(state.bestActiveStreak || 14, streak.activeStreak),
+          bestCombo: Math.max(state.bestCombo || 14, streak.comboDay),
+          pendingSyncDates: enqueuePending(state.pendingSyncDates, key),
+          days: updatedDays,
+        });
+        fireWebhookIfConfigured(get().webhookUrl, get().syncWithLedger);
         return { xpAwarded, alreadyCleared: false };
       },
 
@@ -1124,9 +1567,10 @@ export const useMonarchStore = create<MonarchStore>()(
         const key = getTodayKey();
         const state = get();
         const existing = state.days[key] ?? createEmptyDay(key);
-        const rankDef = GATE_RANKS.find((g) => g.id === gateRank) ?? GATE_RANKS[1];
+        const normRank = normalizeGateRankId(gateRank as string);
+        const rankDef = GATE_RANKS.find((g) => g.id === normRank) ?? GATE_RANKS[0];
         const isCombo = split === "ul_combo_a" || split === "ul_combo_b";
-        let xpAwarded = isCombo ? Math.round(rankDef.baseXp * 1.5) : rankDef.baseXp;
+        let rawXp = isCombo ? Math.round(rankDef.baseXp * 1.5) : rankDef.baseXp;
         let isPr = false;
         let prsHit = 0;
         let newE1rm: number | undefined;
@@ -1140,26 +1584,28 @@ export const useMonarchStore = create<MonarchStore>()(
           loggedExercises && loggedExercises.length > 0
             ? loggedExercises
             : benchWeightKg && benchReps && benchWeightKg > 0 && benchReps > 0
-              ? [{ key: "cg_bench", weightKg: benchWeightKg, reps: benchReps, isBench: true }]
+              ? [{ key: "cg_bench_heavy", weightKg: benchWeightKg, reps: benchReps, isBench: true }]
               : [];
 
         let effBenchWeight = benchWeightKg;
         let effBenchReps = benchReps;
 
         for (const item of entries) {
-          if (!item.key || item.weightKg <= 0 || item.reps <= 0) continue;
+          if (!item.key || item.weightKg < 0 || item.reps <= 0) continue;
           const prev = nextExerciseLogs[item.key];
-          const itemE1rm = epley1Rm(item.weightKg, item.reps);
-          const isBenchItem = Boolean(item.isBench || item.key === "cg_bench");
+          const itemE1rm =
+            item.weightKg > 0 ? epley1Rm(item.weightKg, item.reps) : item.reps;
+          const isHeavyBenchItem =
+            item.key === "cg_bench_heavy" || (Boolean(item.isBench) && item.key !== "cg_bench_vol");
 
-          if (isBenchItem) {
+          if (isHeavyBenchItem && item.weightKg > 0) {
             effBenchWeight = item.weightKg;
             effBenchReps = item.reps;
             newE1rm = itemE1rm;
-            if (itemE1rm > nextBench.e1rm) {
+            if (isReliableBenchPrSet(item.reps) && itemE1rm > nextBench.e1rm) {
               isPr = true;
               prsHit += 1;
-              xpAwarded += 75;
+              rawXp += 75;
               nextTotalPrs += 1;
               nextBench = {
                 weightKg: item.weightKg,
@@ -1170,7 +1616,7 @@ export const useMonarchStore = create<MonarchStore>()(
             }
           } else if (prev && itemE1rm > prev.bestE1rm) {
             prsHit += 1;
-            xpAwarded += 25;
+            rawXp += 25;
             nextTotalPrs += 1;
           }
 
@@ -1179,6 +1625,7 @@ export const useMonarchStore = create<MonarchStore>()(
             exerciseId: item.key,
             lastWeightKg: item.weightKg,
             lastReps: item.reps,
+            allSetsAtCap: item.allSetsAtCap,
             bestWeightKg: beatBest ? item.weightKg : prev.bestWeightKg,
             bestReps: beatBest ? item.reps : prev.bestReps,
             bestE1rm: prev ? Math.max(prev.bestE1rm, itemE1rm) : itemE1rm,
@@ -1193,16 +1640,18 @@ export const useMonarchStore = create<MonarchStore>()(
             ? 75
             : split === "cardio_pool"
               ? 65
-              : gateRank === "regular_3x15"
+              : normRank === "regular"
                 ? 45
                 : 30);
+
+        const xpAwarded = applyMonarchXpBonus(rawXp, state, { isPr: isPr || prsHit > 0 });
 
         const summary: WorkoutLogSummary = {
           id: makeId("wo"),
           timeIso: new Date().toISOString(),
           split,
           arena,
-          gateRank,
+          gateRank: normRank,
           setsCompleted,
           benchWeightKg: effBenchWeight,
           benchReps: effBenchReps,
@@ -1222,6 +1671,7 @@ export const useMonarchStore = create<MonarchStore>()(
         };
         const weeklyAfter = computeWeeklyTraining(updatedDays);
         const nextSplit = weeklyAfter.nextCoreSplit;
+        const streak = computeStreakAndCombo(updatedDays);
 
         set({
           split: nextSplit,
@@ -1230,17 +1680,14 @@ export const useMonarchStore = create<MonarchStore>()(
           benchBest: nextBench,
           exerciseLogs: nextExerciseLogs,
           kiliMeters: state.kiliMeters + gainM,
+          bestActiveStreak: Math.max(state.bestActiveStreak || 14, streak.activeStreak),
+          bestCombo: Math.max(state.bestCombo || 14, streak.comboDay),
           activeSession: null,
           pendingSyncDates: enqueuePending(state.pendingSyncDates, key),
           days: updatedDays,
         });
 
-        fireWebhookIfConfigured(
-          state.webhookUrl,
-          "complete_workout",
-          { date: key, ...summary },
-          get().syncWithLedger
-        );
+        fireWebhookIfConfigured(state.webhookUrl, get().syncWithLedger);
 
         return { xpAwarded, isPr, prsHit, newE1rm, nextSplit };
       },
@@ -1250,6 +1697,7 @@ export const useMonarchStore = create<MonarchStore>()(
         const state = get();
         const existing = state.days[key] ?? createEmptyDay(key);
         const spec = MOVEMENT_PRESETS[kind];
+        const xpAwarded = applyMonarchXpBonus(spec.xp, state);
 
         const entry: MovementLogEntry = {
           id: makeId("mv"),
@@ -1258,7 +1706,7 @@ export const useMonarchStore = create<MonarchStore>()(
           label: spec.label,
           verticalGainM: spec.verticalGainM,
           grantsFlex: spec.grantsFlex,
-          xpAwarded: spec.xp,
+          xpAwarded,
         };
 
         const nextFlex = spec.grantsFlex
@@ -1278,37 +1726,38 @@ export const useMonarchStore = create<MonarchStore>()(
           steps15kAwarded = true;
         }
 
-        set({
-          earnedXp: state.earnedXp + spec.xp,
-          kiliMeters: state.kiliMeters + spec.verticalGainM,
-          pendingSyncDates: enqueuePending(state.pendingSyncDates, key),
-          days: {
-            ...state.days,
-            [key]: {
-              ...existing,
-              activeFlexKcal: nextFlex,
-              samsungSteps: nextSteps,
-              steps10kAwarded,
-              steps15kAwarded,
-              movements: [...existing.movements, entry],
-            },
+        const updatedDays = {
+          ...state.days,
+          [key]: {
+            ...existing,
+            activeFlexKcal: nextFlex,
+            samsungSteps: nextSteps,
+            steps10kAwarded,
+            steps15kAwarded,
+            movements: [...existing.movements, entry],
           },
+        };
+        const streak = computeStreakAndCombo(updatedDays);
+
+        set({
+          earnedXp: state.earnedXp + xpAwarded,
+          kiliMeters: state.kiliMeters + spec.verticalGainM,
+          bestActiveStreak: Math.max(state.bestActiveStreak || 14, streak.activeStreak),
+          bestCombo: Math.max(state.bestCombo || 14, streak.comboDay),
+          pendingSyncDates: enqueuePending(state.pendingSyncDates, key),
+          days: updatedDays,
         });
 
-        fireWebhookIfConfigured(
-          state.webhookUrl,
-          "log_movement",
-          { date: key, ...entry },
-          get().syncWithLedger
-        );
+        fireWebhookIfConfigured(state.webhookUrl, get().syncWithLedger);
 
-        return { xpAwarded: spec.xp, verticalGainM: spec.verticalGainM };
+        return { xpAwarded, verticalGainM: spec.verticalGainM };
       },
 
       logFoodPreset: (presetId, multiplier = 1, slot) => {
         const state = get();
-        const preset = FOOD_PRESETS.find((f) => f.id === presetId);
-        const saved = !preset ? (state.savedFoods ?? []).find((f) => f.id === presetId) : undefined;
+        const resolvedId = presetId === "am_eggs_whey" ? "eggs_4_whole" : presetId;
+        const preset = FOOD_PRESETS.find((f) => f.id === resolvedId);
+        const saved = !preset ? (state.savedFoods ?? []).find((f) => f.id === resolvedId) : undefined;
         if (!preset && !saved) {
           return { xpAwarded: 0, isAbsRaid: false, label: "Unknown" };
         }
@@ -1324,6 +1773,7 @@ export const useMonarchStore = create<MonarchStore>()(
 
         const entry: FoodLogEntry = {
           id: makeId("fd"),
+          presetId: preset ? preset.id : saved!.id,
           timeIso: new Date().toISOString(),
           label: multiplier === 1 ? baseLabel : `${baseLabel} (${multiplier}x)`,
           kcal: Math.round(baseKcal * multiplier),
@@ -1335,7 +1785,7 @@ export const useMonarchStore = create<MonarchStore>()(
           spot,
         };
 
-        let xpAwarded = 20;
+        let rawXp = 20;
         let dinnerSkipped = existing.dinnerSkipped;
         let dinnerOutMode = existing.dinnerOutMode ?? false;
         let gluttonyRaidAwarded = existing.gluttonyRaidAwarded;
@@ -1349,32 +1799,34 @@ export const useMonarchStore = create<MonarchStore>()(
           }
           if (!gluttonyRaidAwarded) {
             gluttonyRaidAwarded = true;
-            xpAwarded += 75;
+            rawXp += 75;
           }
         }
+
+        const xpAwarded = applyMonarchXpBonus(rawXp, state);
+        const updatedDays = {
+          ...state.days,
+          [key]: {
+            ...existing,
+            dinnerSkipped,
+            dinnerOutMode,
+            gluttonyRaidAwarded,
+            foods: [...existing.foods, entry],
+          },
+        };
+        const streak = computeStreakAndCombo(updatedDays);
 
         set({
           earnedXp: state.earnedXp + xpAwarded,
           lateNightsSaved,
+          bestActiveStreak: Math.max(state.bestActiveStreak || 14, streak.activeStreak),
+          bestFastingStreak: Math.max(state.bestFastingStreak || 6, streak.fastingStreak),
+          bestCombo: Math.max(state.bestCombo || 14, streak.comboDay),
           pendingSyncDates: enqueuePending(state.pendingSyncDates, key),
-          days: {
-            ...state.days,
-            [key]: {
-              ...existing,
-              dinnerSkipped,
-              dinnerOutMode,
-              gluttonyRaidAwarded,
-              foods: [...existing.foods, entry],
-            },
-          },
+          days: updatedDays,
         });
 
-        fireWebhookIfConfigured(
-          state.webhookUrl,
-          "log_food",
-          { date: key, ...entry },
-          get().syncWithLedger
-        );
+        fireWebhookIfConfigured(state.webhookUrl, get().syncWithLedger);
 
         return { xpAwarded, isAbsRaid, label: entry.label };
       },
@@ -1383,7 +1835,7 @@ export const useMonarchStore = create<MonarchStore>()(
         const key = getTodayKey();
         const state = get();
         const existing = state.days[key] ?? createEmptyDay(key);
-        const xpAwarded = 15;
+        const xpAwarded = applyMonarchXpBonus(15, state);
         const entry: FoodLogEntry = {
           id: makeId("fd"),
           timeIso: new Date().toISOString(),
@@ -1404,12 +1856,7 @@ export const useMonarchStore = create<MonarchStore>()(
             },
           },
         });
-        fireWebhookIfConfigured(
-          state.webhookUrl,
-          "log_custom_food",
-          { date: key, ...entry },
-          get().syncWithLedger
-        );
+        fireWebhookIfConfigured(state.webhookUrl, get().syncWithLedger);
         return { xpAwarded };
       },
 
@@ -1427,6 +1874,7 @@ export const useMonarchStore = create<MonarchStore>()(
           const cleanLabel = mult === 1 ? item.label : `${item.label} (${mult}x)`;
           return {
             id: makeId("fd"),
+            presetId: item.presetId ?? item.savedFoodId,
             timeIso: nowIso,
             label: cleanLabel,
             kcal: Math.max(0, Math.round(item.kcal * mult)),
@@ -1443,7 +1891,7 @@ export const useMonarchStore = create<MonarchStore>()(
         const totalProteinG = entries.reduce((acc, e) => acc + e.proteinG, 0);
         const hasAbsRaid = entries.some((e) => e.isAbsRaid);
 
-        let xpAwarded = items.length >= 2 ? 25 : 20;
+        let rawXp = items.length >= 2 ? 25 : 20;
         let dinnerSkipped = existing.dinnerSkipped;
         let dinnerOutMode = existing.dinnerOutMode ?? false;
         let gluttonyRaidAwarded = existing.gluttonyRaidAwarded;
@@ -1457,40 +1905,34 @@ export const useMonarchStore = create<MonarchStore>()(
           }
           if (!gluttonyRaidAwarded) {
             gluttonyRaidAwarded = true;
-            xpAwarded += 75;
+            rawXp += 75;
           }
         }
+
+        const xpAwarded = applyMonarchXpBonus(rawXp, state);
+        const updatedDays = {
+          ...state.days,
+          [key]: {
+            ...existing,
+            dinnerSkipped,
+            dinnerOutMode,
+            gluttonyRaidAwarded,
+            foods: [...existing.foods, ...entries],
+          },
+        };
+        const streak = computeStreakAndCombo(updatedDays);
 
         set({
           earnedXp: state.earnedXp + xpAwarded,
           lateNightsSaved,
+          bestActiveStreak: Math.max(state.bestActiveStreak || 14, streak.activeStreak),
+          bestFastingStreak: Math.max(state.bestFastingStreak || 6, streak.fastingStreak),
+          bestCombo: Math.max(state.bestCombo || 14, streak.comboDay),
           pendingSyncDates: enqueuePending(state.pendingSyncDates, key),
-          days: {
-            ...state.days,
-            [key]: {
-              ...existing,
-              dinnerSkipped,
-              dinnerOutMode,
-              gluttonyRaidAwarded,
-              foods: [...existing.foods, ...entries],
-            },
-          },
+          days: updatedDays,
         });
 
-        fireWebhookIfConfigured(
-          state.webhookUrl,
-          "log_food",
-          {
-            date: key,
-            label:
-              entries.length === 1
-                ? entries[0].label
-                : `${entries.length} dishes (${entries.map((e) => e.label).join(", ").slice(0, 80)})`,
-            kcal: totalKcal,
-            proteinG: totalProteinG,
-          },
-          get().syncWithLedger
-        );
+        fireWebhookIfConfigured(state.webhookUrl, get().syncWithLedger);
 
         return {
           xpAwarded,
@@ -1540,6 +1982,7 @@ export const useMonarchStore = create<MonarchStore>()(
             },
           },
         });
+        fireWebhookIfConfigured(state.webhookUrl, get().syncWithLedger);
       },
 
       updateWeeklyPlanDay: (day, patch) => {
@@ -1547,7 +1990,8 @@ export const useMonarchStore = create<MonarchStore>()(
         const basePlan = state.weeklyMealPlan ?? DEFAULT_WEEKLY_MEAL_PLAN;
         const currentDay = basePlan[day] ?? DEFAULT_WEEKLY_MEAL_PLAN[day];
         set({
-          mealPlanVersion: 2,
+          mealPlanVersion: 3,
+          weeklyMealPlanCustomized: true,
           weeklyMealPlan: {
             ...DEFAULT_WEEKLY_MEAL_PLAN,
             ...basePlan,
@@ -1562,7 +2006,8 @@ export const useMonarchStore = create<MonarchStore>()(
       resetWeeklyMealPlan: () => {
         set({
           weeklyMealPlan: DEFAULT_WEEKLY_MEAL_PLAN,
-          mealPlanVersion: 2,
+          weeklyMealPlanCustomized: false,
+          mealPlanVersion: 3,
         });
       },
 
@@ -1706,7 +2151,7 @@ export const useMonarchStore = create<MonarchStore>()(
         let floorJustCleared = false;
         let readingFloorXpAwarded = Boolean(existing.readingFloorXpAwarded);
         if (todayPages >= minPages && !readingFloorXpAwarded) {
-          xpAwarded = 25;
+          xpAwarded = applyMonarchXpBonus(25, state);
           floorJustCleared = true;
           readingFloorXpAwarded = true;
         }
@@ -1773,10 +2218,11 @@ export const useMonarchStore = create<MonarchStore>()(
         const nextLogs = day.readingLogs.filter((r) => r.id !== entryId);
         const books = state.books ?? [];
         const updatedBooks = books.map((b) => {
-          if (b.id !== target.bookId || b.currentPage !== target.toPage) {
-            return b;
-          }
-          const revertedPage = Math.max(0, target.fromPage);
+          if (b.id !== target.bookId) return b;
+          const revertedPage =
+            b.currentPage === target.toPage
+              ? Math.max(0, target.fromPage)
+              : Math.max(0, b.currentPage - target.pagesDelta);
           const nextStatus: BookStatus =
             b.status === "finished" && b.totalPages && revertedPage < b.totalPages
               ? "reading"
@@ -1816,12 +2262,7 @@ export const useMonarchStore = create<MonarchStore>()(
             },
           },
         });
-        fireWebhookIfConfigured(
-          state.webhookUrl,
-          "remove_food",
-          { date: dateKey, entryId },
-          get().syncWithLedger
-        );
+        fireWebhookIfConfigured(state.webhookUrl, get().syncWithLedger);
       },
 
       lockDinnerSkip: () => {
@@ -1831,28 +2272,28 @@ export const useMonarchStore = create<MonarchStore>()(
         if (existing.dinnerSkipped && !existing.dinnerOutMode) {
           return { xpAwarded: 0, alreadyLocked: true };
         }
-        const xpAwarded = existing.earlySealXpAwarded ? 0 : 30;
+        const xpAwarded = existing.earlySealXpAwarded ? 0 : applyMonarchXpBonus(30, state);
         const lateNightsDelta = existing.earlySealXpAwarded ? 0 : 1;
+        const updatedDays = {
+          ...state.days,
+          [key]: {
+            ...existing,
+            dinnerSkipped: true,
+            dinnerOutMode: false,
+            earlySealXpAwarded: true,
+          },
+        };
+        const streak = computeStreakAndCombo(updatedDays);
         set({
           earnedXp: state.earnedXp + xpAwarded,
           lateNightsSaved: state.lateNightsSaved + lateNightsDelta,
+          bestActiveStreak: Math.max(state.bestActiveStreak || 14, streak.activeStreak),
+          bestFastingStreak: Math.max(state.bestFastingStreak || 6, streak.fastingStreak),
+          bestCombo: Math.max(state.bestCombo || 14, streak.comboDay),
           pendingSyncDates: enqueuePending(state.pendingSyncDates, key),
-          days: {
-            ...state.days,
-            [key]: {
-              ...existing,
-              dinnerSkipped: true,
-              dinnerOutMode: false,
-              earlySealXpAwarded: true,
-            },
-          },
+          days: updatedDays,
         });
-        fireWebhookIfConfigured(
-          state.webhookUrl,
-          "lock_dinner_skip",
-          { date: key, xpAwarded },
-          get().syncWithLedger
-        );
+        fireWebhookIfConfigured(state.webhookUrl, get().syncWithLedger);
         return { xpAwarded, alreadyLocked: false };
       },
 
@@ -1861,7 +2302,6 @@ export const useMonarchStore = create<MonarchStore>()(
         const key = getTodayKey();
         const state = get();
         const existing = state.days[key] ?? createEmptyDay(key);
-        const ema = Math.round((state.weightEma * 0.75 + clamped * 0.25) * 10) / 10;
 
         const cleanBf =
           bodyFatPct !== null && bodyFatPct !== undefined && bodyFatPct > 0
@@ -1872,32 +2312,34 @@ export const useMonarchStore = create<MonarchStore>()(
             ? Math.round(bodyWaterPct * 10) / 10
             : existing.bodyWaterPct ?? state.bodyWaterPct;
 
-        set({
+        const nextDays: Record<string, DayRecord> = {
+          ...state.days,
+          [key]: {
+            ...existing,
+            scaleWeightKg: clamped,
+            bodyFatPct: cleanBf,
+            bodyWaterPct: cleanBw,
+          },
+        };
+
+        const reconciled = reconcileWeightAndRecords({
+          ...state,
+          days: nextDays,
           rawWeight: clamped,
-          weightEma: ema,
+        });
+
+        set({
+          ...reconciled,
           bodyFatPct: cleanBf,
           bodyWaterPct: cleanBw,
           earnedXp: state.earnedXp + (existing.scaleWeightKg === null ? 15 : 0),
           pendingSyncDates: enqueuePending(state.pendingSyncDates, key),
-          days: {
-            ...state.days,
-            [key]: {
-              ...existing,
-              scaleWeightKg: clamped,
-              bodyFatPct: cleanBf,
-              bodyWaterPct: cleanBw,
-            },
-          },
+          days: nextDays,
         });
 
-        fireWebhookIfConfigured(
-          state.webhookUrl,
-          "log_weight",
-          { date: key, raw: clamped, ema },
-          get().syncWithLedger
-        );
+        fireWebhookIfConfigured(state.webhookUrl, get().syncWithLedger);
 
-        return { ema, raw: clamped };
+        return { ema: reconciled.weightEma, raw: clamped };
       },
 
       setSamsungSteps: (steps, allowLower = false) => {
@@ -1908,22 +2350,23 @@ export const useMonarchStore = create<MonarchStore>()(
           ? Math.max(0, Math.round(steps))
           : Math.max(existing.samsungSteps ?? 0, Math.round(steps));
 
-        let xpAwarded = 0;
+        let rawXp = 0;
         let verticalGainM = 0;
         let steps10kAwarded = existing.steps10kAwarded ?? false;
         let steps15kAwarded = existing.steps15kAwarded ?? false;
 
         if (nextSteps >= 10000 && !steps10kAwarded) {
           steps10kAwarded = true;
-          xpAwarded += 30;
+          rawXp += 30;
           verticalGainM += 45;
         }
         if (nextSteps >= 15000 && !steps15kAwarded) {
           steps15kAwarded = true;
-          xpAwarded += 15;
+          rawXp += 15;
           verticalGainM += 35;
         }
 
+        const xpAwarded = rawXp > 0 ? applyMonarchXpBonus(rawXp, state) : 0;
         set({
           earnedXp: state.earnedXp + xpAwarded,
           kiliMeters: state.kiliMeters + verticalGainM,
@@ -1940,184 +2383,303 @@ export const useMonarchStore = create<MonarchStore>()(
           },
         });
 
-        fireWebhookIfConfigured(
-          state.webhookUrl,
-          "set_samsung_steps",
-          { date: key, samsungSteps: nextSteps },
-          get().syncWithLedger
-        );
+        fireWebhookIfConfigured(state.webhookUrl, get().syncWithLedger);
 
         return { xpAwarded, verticalGainM };
       },
 
       setWebhookUrl: (webhookUrl) => set({ webhookUrl }),
 
+      setLedgerSheetId: (ledgerSheetId) => set({ ledgerSheetId }),
+
+      setSyncToken: (syncToken) => set({ syncToken }),
+
+      setTargets: (patch) =>
+        set((s) => ({
+          kcalTarget:
+            patch.kcalTarget !== undefined
+              ? Math.max(1450, Math.min(3500, Math.round(patch.kcalTarget)))
+              : s.kcalTarget,
+          proteinTargetG:
+            patch.proteinTargetG !== undefined
+              ? Math.max(100, Math.min(260, Math.round(patch.proteinTargetG)))
+              : s.proteinTargetG,
+          stepTarget:
+            patch.stepTarget !== undefined
+              ? Math.max(4000, Math.min(30000, Math.round(patch.stepTarget)))
+              : s.stepTarget,
+          readingMinPages:
+            patch.readingMinPages !== undefined
+              ? Math.max(1, Math.min(100, Math.round(patch.readingMinPages)))
+              : s.readingMinPages,
+        })),
+
       syncWithLedger: async () => {
+        if (inFlightSync) return inFlightSync;
+
+        const runSync = async (): Promise<{ ok: boolean; message: string }> => {
+          const state = get();
+          const url = state.webhookUrl.trim();
+          if (!url) {
+            return { ok: false, message: "Paste your MONARCH_LEDGER Apps Script Web App URL in Profile first." };
+          }
+          if (typeof window === "undefined") {
+            return { ok: false, message: "Sync runs in browser only." };
+          }
+
+          const todayKey = getTodayKey();
+          const datesToPush = Array.from(new Set([...state.pendingSyncDates, todayKey]));
+          const pushDays = datesToPush.map((dt) => {
+            const day = state.days[dt] ?? createEmptyDay(dt);
+            const totals = getDailyTotals(day, state.kcalTarget, state.proteinTargetG);
+            return {
+              date: dt,
+              rawWeightKg: day.scaleWeightKg,
+              weightEmaKg: state.weightEma,
+              bodyFatPct: day.bodyFatPct,
+              bodyWaterPct: day.bodyWaterPct,
+              samsungSteps: day.samsungSteps ?? 0,
+              resetSteps: Boolean(day.pendingStepReset),
+              kcalTotal: totals.kcal,
+              proteinG: totals.proteinG,
+              dinnerSkipped: day.dinnerSkipped,
+              workoutsCount: day.workouts.length + (day.survivalFloorCleared ? 1 : 0),
+              benchBestE1rmKg: state.benchBest.e1rm,
+              kiliTotalM: state.kiliMeters,
+              readingPages: getDailyReadingPages(day),
+            };
+          });
+
+          try {
+            const res = await fetch(url, {
+              method: "POST",
+              headers: { "Content-Type": "text/plain;charset=utf-8" },
+              body: JSON.stringify({
+                source: "monarch_pwa",
+                reason: "two_way_sync",
+                token: state.syncToken?.trim() || undefined,
+                days: pushDays,
+              }),
+              redirect: "follow",
+            });
+            if (!res.ok) {
+              return { ok: false, message: `HTTP ${res.status} from Apps Script.` };
+            }
+            const json = (await res.json()) as {
+              ok?: boolean;
+              error?: string;
+              syncedAt?: string;
+              todayMetrics?: {
+                date: string;
+                rawWeightKg?: number | null;
+                weightEmaKg?: number | null;
+                bodyFatPct?: number | null;
+                bodyWaterPct?: number | null;
+                samsungSteps?: number;
+                hcStepsLive?: boolean;
+                swimSportMin?: number;
+                sleepHours?: number | null;
+              } | null;
+              recentMetrics?: Array<{
+                date: string;
+                rawWeightKg?: number | null;
+                weightEmaKg?: number | null;
+                bodyFatPct?: number | null;
+                bodyWaterPct?: number | null;
+                samsungSteps?: number;
+                hcStepsLive?: boolean;
+                swimSportMin?: number;
+                sleepHours?: number | null;
+              }>;
+              coachOverrides?: {
+                coach_banner?: string;
+                step_target?: number;
+                protein_floor_g?: number;
+                kcal_target?: number;
+              };
+            };
+
+            if (!json?.ok) {
+              return { ok: false, message: json?.error || "Apps Script returned error response." };
+            }
+
+            const latest = get();
+            const mergedDays = { ...latest.days };
+            let bonusXp = 0;
+            let bonusKili = 0;
+            let nextBf = latest.bodyFatPct;
+            let nextBw = latest.bodyWaterPct;
+
+            const incoming = [
+              ...(json.recentMetrics ?? []),
+              ...(json.todayMetrics ? [json.todayMetrics] : []),
+            ];
+
+            for (const m of incoming) {
+              if (!m || !m.date) continue;
+              const cur = mergedDays[m.date] ?? createEmptyDay(m.date);
+              const isLive = Boolean(m.hcStepsLive);
+              const steps =
+                isLive || cur.pendingStepReset
+                  ? Math.max(0, m.samsungSteps ?? 0)
+                  : Math.max(cur.samsungSteps ?? 0, m.samsungSteps ?? 0);
+              let s10 = cur.steps10kAwarded ?? false;
+              let s15 = cur.steps15kAwarded ?? false;
+              if (steps >= 10000 && !s10) {
+                s10 = true;
+                bonusXp += 30;
+                bonusKili += 45;
+              }
+              if (steps >= 15000 && !s15) {
+                s15 = true;
+                bonusXp += 15;
+                bonusKili += 35;
+              }
+
+              const rawKg = m.rawWeightKg ?? cur.scaleWeightKg ?? null;
+              const bf = m.bodyFatPct ?? cur.bodyFatPct ?? null;
+              const bw = m.bodyWaterPct ?? cur.bodyWaterPct ?? null;
+              const sleepHrs = m.sleepHours ?? cur.sleepHours ?? null;
+
+              mergedDays[m.date] = {
+                ...cur,
+                samsungSteps: steps,
+                hcStepsLive: isLive,
+                pendingStepReset: false,
+                steps10kAwarded: s10,
+                steps15kAwarded: s15,
+                scaleWeightKg: rawKg,
+                bodyFatPct: bf,
+                bodyWaterPct: bw,
+                swimSportMin: m.swimSportMin ?? cur.swimSportMin,
+                sleepHours: sleepHrs,
+              };
+
+              if (m.date === todayKey || (rawKg !== null && m.date >= (json.todayMetrics?.date || todayKey))) {
+                if (bf !== null) nextBf = bf;
+                if (bw !== null) nextBw = bw;
+              }
+            }
+
+            const reconciled = reconcileWeightAndRecords({
+              ...latest,
+              days: mergedDays,
+            });
+
+            const coachBanner = String(json.coachOverrides?.coach_banner || "");
+            const stepTarget =
+              Number(json.coachOverrides?.step_target) > 0
+                ? Number(json.coachOverrides?.step_target)
+                : latest.stepTarget;
+            const proteinTargetG =
+              Number(json.coachOverrides?.protein_floor_g) >= 100
+                ? Math.round(Number(json.coachOverrides?.protein_floor_g))
+                : latest.proteinTargetG;
+            const kcalTarget =
+              Number(json.coachOverrides?.kcal_target) >= 1450
+                ? Math.round(Number(json.coachOverrides?.kcal_target))
+                : latest.kcalTarget;
+
+            set({
+              days: mergedDays,
+              ...reconciled,
+              earnedXp: latest.earnedXp + bonusXp,
+              kiliMeters: latest.kiliMeters + bonusKili,
+              bodyFatPct: nextBf,
+              bodyWaterPct: nextBw,
+              coachBanner,
+              stepTarget,
+              proteinTargetG,
+              kcalTarget,
+              pendingSyncDates: [],
+              lastSyncedAt: json.syncedAt || new Date().toISOString(),
+            });
+
+            return { ok: true, message: "2-Way Sync complete." };
+          } catch (err) {
+            return {
+              ok: false,
+              message: err instanceof Error ? err.message : "Network sync failed (queued offline).",
+            };
+          }
+        };
+
+        inFlightSync = runSync().finally(() => {
+          inFlightSync = null;
+        });
+        return inFlightSync;
+      },
+
+      backupSnapshotToLedger: async () => {
         const state = get();
         const url = state.webhookUrl.trim();
         if (!url) {
-          return { ok: false, message: "Paste your MONARCH_LEDGER Apps Script Web App URL first." };
+          return { ok: false, message: "Configure Apps Script Web App URL first." };
         }
-        if (typeof window === "undefined") {
-          return { ok: false, message: "Sync runs in browser only." };
-        }
-
-        const todayKey = getTodayKey();
-        const datesToPush = Array.from(new Set([...state.pendingSyncDates, todayKey]));
-        const pushDays = datesToPush.map((dt) => {
-          const day = state.days[dt] ?? createEmptyDay(dt);
-          const totals = getDailyTotals(day);
-          return {
-            date: dt,
-            rawWeightKg: day.scaleWeightKg,
-            weightEmaKg: state.weightEma,
-            bodyFatPct: day.bodyFatPct,
-            bodyWaterPct: day.bodyWaterPct,
-            samsungSteps: day.samsungSteps ?? 0,
-            resetSteps: Boolean(day.pendingStepReset),
-            kcalTotal: totals.kcal,
-            proteinG: totals.proteinG,
-            dinnerSkipped: day.dinnerSkipped,
-            workoutsCount:
-              day.workouts.length + (day.survivalFloorCleared ? 1 : 0),
-            benchBestE1rmKg: state.benchBest.e1rm,
-            kiliTotalM: state.kiliMeters,
-          };
-        });
-
         try {
-          // text/plain avoids CORS OPTIONS preflight against Google Apps Script Web Apps
           const res = await fetch(url, {
             method: "POST",
             headers: { "Content-Type": "text/plain;charset=utf-8" },
             body: JSON.stringify({
-              source: "monarch_pwa",
-              reason: "two_way_sync",
-              days: pushDays,
+              action: "backup_snapshot",
+              token: state.syncToken?.trim() || undefined,
+              snapshotJson: state.exportJson(),
             }),
             redirect: "follow",
           });
-          if (!res.ok) {
-            return { ok: false, message: `HTTP ${res.status} from Apps Script.` };
-          }
-          const json = (await res.json()) as {
-            ok?: boolean;
-            syncedAt?: string;
-            todayMetrics?: {
-              date: string;
-              rawWeightKg?: number | null;
-              weightEmaKg?: number | null;
-              bodyFatPct?: number | null;
-              bodyWaterPct?: number | null;
-              samsungSteps?: number;
-              hcStepsLive?: boolean;
-            } | null;
-            recentMetrics?: Array<{
-              date: string;
-              rawWeightKg?: number | null;
-              weightEmaKg?: number | null;
-              bodyFatPct?: number | null;
-              bodyWaterPct?: number | null;
-              samsungSteps?: number;
-              hcStepsLive?: boolean;
-            }>;
-            coachOverrides?: {
-              coach_banner?: string;
-              step_target?: number;
-            };
+          if (!res.ok) return { ok: false, message: `HTTP ${res.status}` };
+          const json = (await res.json()) as { ok?: boolean; error?: string; chunks?: number };
+          if (!json.ok) return { ok: false, message: json.error || "Cloud backup failed." };
+          return {
+            ok: true,
+            message: `Full state backed up to MONARCH_LEDGER (${json.chunks || 1} chunk).`,
           };
-
-          if (!json?.ok) {
-            return { ok: false, message: "Apps Script returned error response." };
-          }
-
-          const latest = get();
-          const mergedDays = { ...latest.days };
-          let bonusXp = 0;
-          let bonusKili = 0;
-          let nextRawWeight = latest.rawWeight;
-          let nextEmaWeight = latest.weightEma;
-          let nextBf = latest.bodyFatPct;
-          let nextBw = latest.bodyWaterPct;
-
-          const incoming = [
-            ...(json.recentMetrics ?? []),
-            ...(json.todayMetrics ? [json.todayMetrics] : []),
-          ];
-
-          for (const m of incoming) {
-            if (!m || !m.date) continue;
-            const cur = mergedDays[m.date] ?? createEmptyDay(m.date);
-            const isLive = Boolean(m.hcStepsLive);
-            const steps = isLive || cur.pendingStepReset
-              ? Math.max(0, m.samsungSteps ?? 0)
-              : Math.max(cur.samsungSteps ?? 0, m.samsungSteps ?? 0);
-            let s10 = cur.steps10kAwarded ?? false;
-            let s15 = cur.steps15kAwarded ?? false;
-            if (steps >= 10000 && !s10) {
-              s10 = true;
-              bonusXp += 30;
-              bonusKili += 45;
-            }
-            if (steps >= 15000 && !s15) {
-              s15 = true;
-              bonusXp += 15;
-              bonusKili += 35;
-            }
-
-            const rawKg = m.rawWeightKg ?? cur.scaleWeightKg ?? null;
-            const bf = m.bodyFatPct ?? cur.bodyFatPct ?? null;
-            const bw = m.bodyWaterPct ?? cur.bodyWaterPct ?? null;
-
-            mergedDays[m.date] = {
-              ...cur,
-              samsungSteps: steps,
-              hcStepsLive: isLive,
-              pendingStepReset: false,
-              steps10kAwarded: s10,
-              steps15kAwarded: s15,
-              scaleWeightKg: rawKg,
-              bodyFatPct: bf,
-              bodyWaterPct: bw,
-            };
-
-            if (m.date === todayKey || (rawKg !== null && m.date >= (json.todayMetrics?.date || todayKey))) {
-              if (rawKg !== null) {
-                nextRawWeight = rawKg;
-                if (m.weightEmaKg && m.weightEmaKg > 20) {
-                  nextEmaWeight = m.weightEmaKg;
-                }
-              }
-              if (bf !== null) nextBf = bf;
-              if (bw !== null) nextBw = bw;
-            }
-          }
-
-          const coachBanner = String(json.coachOverrides?.coach_banner || "");
-          const stepTarget =
-            Number(json.coachOverrides?.step_target) > 0
-              ? Number(json.coachOverrides?.step_target)
-              : latest.stepTarget;
-
-          set({
-            days: mergedDays,
-            earnedXp: latest.earnedXp + bonusXp,
-            kiliMeters: latest.kiliMeters + bonusKili,
-            rawWeight: nextRawWeight,
-            weightEma: nextEmaWeight,
-            bodyFatPct: nextBf,
-            bodyWaterPct: nextBw,
-            coachBanner,
-            stepTarget,
-            pendingSyncDates: [],
-            lastSyncedAt: json.syncedAt || new Date().toISOString(),
-          });
-
-          return { ok: true, message: "2-Way Sync complete." };
         } catch (err) {
           return {
             ok: false,
-            message: err instanceof Error ? err.message : "Network sync failed (queued offline).",
+            message: err instanceof Error ? err.message : "Cloud backup failed.",
+          };
+        }
+      },
+
+      restoreSnapshotFromLedger: async () => {
+        const state = get();
+        const url = state.webhookUrl.trim();
+        if (!url) {
+          return { ok: false, message: "Configure Apps Script Web App URL first." };
+        }
+        try {
+          const res = await fetch(url, {
+            method: "POST",
+            headers: { "Content-Type": "text/plain;charset=utf-8" },
+            body: JSON.stringify({
+              action: "restore_snapshot",
+              token: state.syncToken?.trim() || undefined,
+            }),
+            redirect: "follow",
+          });
+          if (!res.ok) return { ok: false, message: `HTTP ${res.status}` };
+          const json = (await res.json()) as {
+            ok?: boolean;
+            error?: string;
+            snapshotJson?: string;
+            backedUpAt?: string;
+          };
+          if (!json.ok || !json.snapshotJson) {
+            return { ok: false, message: json.error || "No cloud backup found." };
+          }
+          const imported = get().importJson(json.snapshotJson);
+          if (!imported.ok) {
+            return { ok: false, message: imported.error || "Invalid cloud snapshot." };
+          }
+          return {
+            ok: true,
+            message: `Restored full state from ${json.backedUpAt?.slice(0, 16) || "MONARCH_LEDGER"}.`,
+          };
+        } catch (err) {
+          return {
+            ok: false,
+            message: err instanceof Error ? err.message : "Cloud restore failed.",
           };
         }
       },
@@ -2137,23 +2699,35 @@ export const useMonarchStore = create<MonarchStore>()(
           totalPrs: s.totalPrs,
           weightEma: s.weightEma,
           rawWeight: s.rawWeight,
+          bestWeightEma: s.bestWeightEma,
+          slainBossIds: s.slainBossIds,
           bodyFatPct: s.bodyFatPct,
           bodyWaterPct: s.bodyWaterPct,
+          kcalTarget: s.kcalTarget,
+          proteinTargetG: s.proteinTargetG,
           stepTarget: s.stepTarget,
           coachBanner: s.coachBanner,
           ledgerSheetId: s.ledgerSheetId,
+          syncToken: s.syncToken,
           lastSyncedAt: s.lastSyncedAt,
+          lastAutoContextDate: s.lastAutoContextDate,
           pendingSyncDates: s.pendingSyncDates,
           benchBest: s.benchBest,
           exerciseLogs: s.exerciseLogs,
           kiliMeters: s.kiliMeters,
+          kiliChecklist: s.kiliChecklist ?? {},
+          lastDeloadDate: s.lastDeloadDate ?? null,
           lateNightsSaved: s.lateNightsSaved,
+          bestActiveStreak: s.bestActiveStreak,
+          bestFastingStreak: s.bestFastingStreak,
+          bestCombo: s.bestCombo,
           webhookUrl: s.webhookUrl,
           swappedExercises: s.swappedExercises,
           activeSession: s.activeSession,
           savedFoods: s.savedFoods ?? [],
           weeklyMealPlan: s.weeklyMealPlan ?? DEFAULT_WEEKLY_MEAL_PLAN,
-          mealPlanVersion: s.mealPlanVersion ?? 2,
+          weeklyMealPlanCustomized: Boolean(s.weeklyMealPlanCustomized),
+          mealPlanVersion: s.mealPlanVersion ?? 3,
           books: s.books ?? [],
           activeBookId: s.activeBookId ?? null,
           readingMinPages: s.readingMinPages || 5,
@@ -2168,9 +2742,21 @@ export const useMonarchStore = create<MonarchStore>()(
           if (!parsed || typeof parsed !== "object" || !parsed.days) {
             return { ok: false, error: "Invalid Monarch JSON payload." };
           }
+          const mergedDays = parsed.days;
+          const reconciled = reconcileWeightAndRecords({
+            days: mergedDays,
+            rawWeight: parsed.rawWeight ?? INITIAL_PERSISTED_STATE.rawWeight,
+            weightEma: parsed.weightEma ?? INITIAL_PERSISTED_STATE.weightEma,
+            bestWeightEma: parsed.bestWeightEma ?? INITIAL_PERSISTED_STATE.bestWeightEma,
+            slainBossIds: parsed.slainBossIds ?? INITIAL_PERSISTED_STATE.slainBossIds,
+            bestActiveStreak: parsed.bestActiveStreak ?? INITIAL_PERSISTED_STATE.bestActiveStreak,
+            bestFastingStreak: parsed.bestFastingStreak ?? INITIAL_PERSISTED_STATE.bestFastingStreak,
+            bestCombo: parsed.bestCombo ?? INITIAL_PERSISTED_STATE.bestCombo,
+          });
           set({
             ...INITIAL_PERSISTED_STATE,
             ...parsed,
+            ...reconciled,
             split: normalizeSplitId(parsed.split as unknown as string),
             gateRank: normalizeGateRankId(parsed.gateRank as unknown as string),
             exerciseLogs: parsed.exerciseLogs ?? INITIAL_PERSISTED_STATE.exerciseLogs,
@@ -2180,8 +2766,9 @@ export const useMonarchStore = create<MonarchStore>()(
             weeklyMealPlan: parsed.weeklyMealPlan
               ? { ...DEFAULT_WEEKLY_MEAL_PLAN, ...parsed.weeklyMealPlan }
               : INITIAL_PERSISTED_STATE.weeklyMealPlan,
+            weeklyMealPlanCustomized: Boolean(parsed.weeklyMealPlanCustomized),
             mealPlanVersion:
-              typeof parsed.mealPlanVersion === "number" ? parsed.mealPlanVersion : 2,
+              typeof parsed.mealPlanVersion === "number" ? parsed.mealPlanVersion : 3,
             books: Array.isArray(parsed.books)
               ? parsed.books
               : INITIAL_PERSISTED_STATE.books,
@@ -2193,6 +2780,14 @@ export const useMonarchStore = create<MonarchStore>()(
               typeof parsed.readingMinPages === "number" && parsed.readingMinPages > 0
                 ? parsed.readingMinPages
                 : 5,
+            kcalTarget:
+              typeof parsed.kcalTarget === "number" && parsed.kcalTarget >= 1450
+                ? parsed.kcalTarget
+                : 1800,
+            proteinTargetG:
+              typeof parsed.proteinTargetG === "number" && parsed.proteinTargetG >= 100
+                ? parsed.proteinTargetG
+                : 165,
           });
           return { ok: true };
         } catch (err) {
@@ -2206,29 +2801,20 @@ export const useMonarchStore = create<MonarchStore>()(
     {
       name: "monarch-v2-state",
       storage: createJSONStorage(() => monarchIdbStorage),
-      merge: (persistedState, currentState) => {
-        const persisted =
-          (persistedState as Partial<MonarchPersistedState> | undefined) ?? {};
-        const isLegacyMealPlan =
-          Boolean(persistedState) && (persisted.mealPlanVersion ?? 1) < 2;
-        return {
-          ...currentState,
-          ...persisted,
-          weeklyMealPlan: isLegacyMealPlan
-            ? DEFAULT_WEEKLY_MEAL_PLAN
-            : persisted.weeklyMealPlan ?? DEFAULT_WEEKLY_MEAL_PLAN,
-          mealPlanVersion: 2,
-        };
-      },
       onRehydrateStorage: () => (state) => {
         if (state) {
-          if (!state.webhookUrl?.trim()) {
-            state.setWebhookUrl(DEFAULT_WEBHOOK_URL);
+          // Never wipe an existing user-configured webhookUrl or sheetId
+          if (!state.webhookUrl?.trim() && DEFAULT_WEBHOOK_URL.trim()) {
+            state.setWebhookUrl(DEFAULT_WEBHOOK_URL.trim());
           }
+          if (!state.ledgerSheetId?.trim() && DEFAULT_LEDGER_SHEET_ID.trim()) {
+            state.setLedgerSheetId(DEFAULT_LEDGER_SHEET_ID.trim());
+          }
+          // Only upgrade default weekly meal plan if user has NOT customized it
           if (
             !state.weeklyMealPlan ||
             !state.weeklyMealPlan.mon ||
-            (state.mealPlanVersion ?? 1) < 2
+            (!state.weeklyMealPlanCustomized && (state.mealPlanVersion ?? 1) < 3)
           ) {
             state.resetWeeklyMealPlan();
           }
@@ -2266,23 +2852,35 @@ export const useMonarchStore = create<MonarchStore>()(
         totalPrs: state.totalPrs,
         weightEma: state.weightEma,
         rawWeight: state.rawWeight,
+        bestWeightEma: state.bestWeightEma,
+        slainBossIds: state.slainBossIds ?? ["gatekeeper"],
         bodyFatPct: state.bodyFatPct,
         bodyWaterPct: state.bodyWaterPct,
-        stepTarget: state.stepTarget,
+        kcalTarget: state.kcalTarget || 1800,
+        proteinTargetG: state.proteinTargetG || 165,
+        stepTarget: state.stepTarget || 12000,
         coachBanner: state.coachBanner,
         ledgerSheetId: state.ledgerSheetId,
+        syncToken: state.syncToken ?? "",
         lastSyncedAt: state.lastSyncedAt,
+        lastAutoContextDate: state.lastAutoContextDate ?? null,
         pendingSyncDates: state.pendingSyncDates,
         benchBest: state.benchBest,
         exerciseLogs: state.exerciseLogs,
         kiliMeters: state.kiliMeters,
+        kiliChecklist: state.kiliChecklist ?? {},
+        lastDeloadDate: state.lastDeloadDate ?? null,
         lateNightsSaved: state.lateNightsSaved,
+        bestActiveStreak: state.bestActiveStreak ?? 14,
+        bestFastingStreak: state.bestFastingStreak ?? 6,
+        bestCombo: state.bestCombo ?? 14,
         webhookUrl: state.webhookUrl,
         swappedExercises: state.swappedExercises,
         activeSession: state.activeSession,
         savedFoods: state.savedFoods ?? [],
         weeklyMealPlan: state.weeklyMealPlan ?? DEFAULT_WEEKLY_MEAL_PLAN,
-        mealPlanVersion: state.mealPlanVersion ?? 2,
+        weeklyMealPlanCustomized: Boolean(state.weeklyMealPlanCustomized),
+        mealPlanVersion: state.mealPlanVersion ?? 3,
         books: state.books ?? [],
         activeBookId: state.activeBookId ?? null,
         readingMinPages: state.readingMinPages || 5,

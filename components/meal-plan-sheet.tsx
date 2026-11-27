@@ -9,16 +9,14 @@ import {
   evaluateFoodViability,
   FOOD_PRESETS,
   getTodayWeekdayKey,
+  isPlannedMealLogged,
   WEEKDAY_ORDER,
   type MealSlot,
   type PlannedMealItem,
   type WeekdayKey,
 } from "@/lib/monarch-catalog";
-import {
-  createEmptyDay,
-  getTodayKey,
-  useMonarchStore,
-} from "@/lib/monarch-store";
+import { createEmptyDay, useMonarchStore } from "@/lib/monarch-store";
+import { useTodayKey } from "@/lib/use-today-key";
 import { playQuestComplete, playShadowArise, playSystemPing } from "@/lib/sounds";
 
 const SLOT_ORDER: Record<MealSlot, number> = {
@@ -34,6 +32,13 @@ const SLOT_LABELS: Record<MealSlot, string> = {
   dinner: "Dinner Out",
   primer: "Extra / AM",
 };
+
+function makePlannedMealId(dayKey: WeekdayKey): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return `${dayKey}_${crypto.randomUUID().slice(0, 8)}`;
+  }
+  return `${dayKey}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+}
 
 export function MealPlanSheet({
   open,
@@ -57,12 +62,8 @@ export function MealPlanSheet({
   const weeklyPlan = store.weeklyMealPlan ?? DEFAULT_WEEKLY_MEAL_PLAN;
   const dayPlan = weeklyPlan[selectedDay] ?? DEFAULT_WEEKLY_MEAL_PLAN[selectedDay];
 
-  const todayKey = getTodayKey();
+  const todayKey = useTodayKey();
   const today = store.days[todayKey] ?? createEmptyDay(todayKey);
-  const loggedLabelsLower = useMemo(
-    () => today.foods.map((f) => f.label.toLowerCase()),
-    [today.foods]
-  );
 
   const sortedMeals = useMemo(
     () =>
@@ -119,12 +120,7 @@ export function MealPlanSheet({
       dinnerSkipped: !isOut,
     });
     if (selectedDay === todayWeekday) {
-      if (isOut) {
-        store.setTodayDinnerOutMode(true);
-      } else {
-        store.setTodayDinnerOutMode(false);
-        store.lockDinnerSkip();
-      }
+      store.setTodayDinnerOutMode(isOut);
     }
   }
 
@@ -141,7 +137,7 @@ export function MealPlanSheet({
     proteinG: number;
   }) {
     const newItem: PlannedMealItem = {
-      id: `${selectedDay}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      id: makePlannedMealId(selectedDay),
       slot: pickSlot,
       presetId: item.id,
       label: item.label,
@@ -192,11 +188,13 @@ export function MealPlanSheet({
     playSystemPing();
     addToast({
       title: "WEEKLY PLAN RESET",
-      message: "Restored Mon-Sun OMAD cut plan.",
+      message: "Restored Mon-Sun OMAD balanced cut plan.",
       variant: "info",
       duration: 2200,
     });
   }
+
+  const belowFloor = planTotals.kcal > 0 && planTotals.kcal < 1500;
 
   return (
     <div
@@ -215,7 +213,7 @@ export function MealPlanSheet({
                 Weekly meal plan
               </h3>
               <p className="text-[11px] text-[var(--text-muted)]">
-                Everyday OMAD structure - swap any dish or flip Dinner Out anytime
+                Balanced OMAD structure (~1,650-1,930 kcal · greens + fats + &gt;=160g P)
               </p>
             </div>
             <div className="flex items-center gap-2">
@@ -290,6 +288,12 @@ export function MealPlanSheet({
               </span>
             </div>
 
+            {belowFloor && (
+              <p className="text-[11px] text-[#fbbf24]">
+                Under 1,500 kcal planned - add eggs, nuts, fruit, or rice to protect muscle &amp; prevent midnight cravings.
+              </p>
+            )}
+
             <div className="grid grid-cols-2 gap-1.5 bg-[var(--surface-1)] p-1 rounded-xl">
               <button
                 onClick={() => setDayMode("skip_dinner")}
@@ -317,12 +321,15 @@ export function MealPlanSheet({
           {/* Planned Meals List */}
           <div className="space-y-2">
             {sortedMeals.map((meal) => {
-              const viability = evaluateFoodViability(meal.kcal, meal.proteinG);
+              const presetTags = FOOD_PRESETS.find((p) => p.id === meal.presetId)?.tags;
+              const viability = evaluateFoodViability(
+                meal.kcal,
+                meal.proteinG,
+                presetTags
+              );
               const isLoggedToday =
                 selectedDay === todayWeekday &&
-                loggedLabelsLower.some((lbl) =>
-                  lbl.includes(meal.label.toLowerCase().slice(0, 14))
-                );
+                isPlannedMealLogged(meal, today.foods);
 
               return (
                 <div

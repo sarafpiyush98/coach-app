@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import {
   BookOpen,
   Check,
@@ -14,9 +14,10 @@ import {
   computeReadingStreak,
   createEmptyDay,
   getDailyReadingPages,
-  getTodayKey,
   useMonarchStore,
+  type BookItem,
 } from "@/lib/monarch-store";
+import { useTodayKey } from "@/lib/use-today-key";
 import { playQuestComplete, playShadowArise, playSystemPing } from "@/lib/sounds";
 
 export function ReadingSheet({
@@ -28,6 +29,23 @@ export function ReadingSheet({
   onClose: () => void;
   initialMode?: "update" | "add";
 }) {
+  if (!open) return null;
+  return (
+    <ReadingSheetBody
+      key={initialMode}
+      onClose={onClose}
+      initialMode={initialMode}
+    />
+  );
+}
+
+function ReadingSheetBody({
+  onClose,
+  initialMode,
+}: {
+  onClose: () => void;
+  initialMode: "update" | "add";
+}) {
   const store = useMonarchStore();
   const addToast = useToastStore((s) => s.add);
 
@@ -38,7 +56,7 @@ export function ReadingSheet({
     books[0] ??
     null;
 
-  const todayKey = getTodayKey();
+  const todayKey = useTodayKey();
   const today = store.days[todayKey] ?? createEmptyDay(todayKey);
   const readingLogs = today.readingLogs ?? [];
   const readingMin = store.readingMinPages || 5;
@@ -48,81 +66,15 @@ export function ReadingSheet({
     [store.days, readingMin]
   );
 
-  const [showAddForm, setShowAddForm] = useState(false);
-  const [draftPageInput, setDraftPageInput] = useState("0");
-  const [editingMeta, setEditingMeta] = useState(false);
-  const [metaTitle, setMetaTitle] = useState("");
-  const [metaAuthor, setMetaAuthor] = useState("");
-  const [metaTotalPages, setMetaTotalPages] = useState("");
+  const [showAddForm, setShowAddForm] = useState(
+    () => initialMode === "add" || !activeBook
+  );
 
   // Add book form state
   const [newTitle, setNewTitle] = useState("");
   const [newAuthor, setNewAuthor] = useState("");
   const [newStartPage, setNewStartPage] = useState("0");
   const [newTotalPages, setNewTotalPages] = useState("");
-
-  useEffect(() => {
-    if (!open) return;
-    setShowAddForm(initialMode === "add" || !activeBook);
-    setEditingMeta(false);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, initialMode]);
-
-  useEffect(() => {
-    if (!activeBook) return;
-    setDraftPageInput(String(activeBook.currentPage));
-    setMetaTitle(activeBook.title);
-    setMetaAuthor(activeBook.author ?? "");
-    setMetaTotalPages(activeBook.totalPages ? String(activeBook.totalPages) : "");
-  }, [
-    activeBook?.id,
-    activeBook?.currentPage,
-    activeBook?.title,
-    activeBook?.author,
-    activeBook?.totalPages,
-  ]);
-
-  if (!open) return null;
-
-  const draftPageNum = Math.max(0, Math.round(Number(draftPageInput) || 0));
-  const draftDelta = activeBook ? draftPageNum - activeBook.currentPage : 0;
-
-  function stepDraftPage(delta: number) {
-    const next = Math.max(0, draftPageNum + delta);
-    setDraftPageInput(String(next));
-  }
-
-  function handleUpdatePage() {
-    if (!activeBook || draftDelta === 0) return;
-    const prevPage = activeBook.currentPage;
-    const res = store.logBookPage(activeBook.id, draftPageNum);
-    if (res.floorJustCleared) {
-      playShadowArise();
-      addToast({
-        title: "DAILY READING FLOOR CLEARED (+25 XP)",
-        message: `${activeBook.title} · p. ${prevPage} -> ${draftPageNum} (${res.todayPages}/${readingMin}p today)`,
-        variant: "quest",
-        duration: 2600,
-      });
-    } else if (res.finishedBook) {
-      playShadowArise();
-      addToast({
-        title: `FINISHED: ${activeBook.title.toUpperCase()}`,
-        message: `Reached p. ${draftPageNum} · ${res.todayPages}p logged today`,
-        variant: "success",
-        duration: 2800,
-      });
-    } else {
-      playQuestComplete();
-      const sign = res.pagesDelta > 0 ? `+${res.pagesDelta}` : `${res.pagesDelta}`;
-      addToast({
-        title: `PAGE UPDATED (${sign}P)`,
-        message: `${activeBook.title} · now on p. ${draftPageNum} (${res.todayPages}/${readingMin}p today)`,
-        variant: "success",
-        duration: 2200,
-      });
-    }
-  }
 
   function handleAddBook(e: React.FormEvent) {
     e.preventDefault();
@@ -147,41 +99,6 @@ export function ReadingSheet({
     setNewTotalPages("");
     setShowAddForm(false);
   }
-
-  function handleSaveMeta(e: React.FormEvent) {
-    e.preventDefault();
-    if (!activeBook || !metaTitle.trim()) return;
-    store.updateBookMeta(activeBook.id, {
-      title: metaTitle.trim(),
-      author: metaAuthor.trim(),
-      totalPages: Number(metaTotalPages) > 0 ? Math.round(Number(metaTotalPages)) : 0,
-    });
-    playSystemPing();
-    setEditingMeta(false);
-    addToast({
-      title: "BOOK DETAILS UPDATED",
-      variant: "info",
-      duration: 1800,
-    });
-  }
-
-  function handleToggleFinished() {
-    if (!activeBook) return;
-    const nextStatus = activeBook.status === "finished" ? "reading" : "finished";
-    store.updateBookMeta(activeBook.id, { status: nextStatus });
-    playSystemPing();
-    addToast({
-      title: nextStatus === "finished" ? "BOOK MARKED FINISHED" : "BOOK REOPENED",
-      message: activeBook.title,
-      variant: "info",
-      duration: 2000,
-    });
-  }
-
-  const pct =
-    activeBook?.totalPages && activeBook.totalPages > 0
-      ? Math.min(100, Math.round((activeBook.currentPage / activeBook.totalPages) * 100))
-      : null;
 
   return (
     <div
@@ -301,172 +218,11 @@ export function ReadingSheet({
 
           {/* Active Book & Multi-Update Page Panel */}
           {activeBook ? (
-            <div className="p-4 rounded-2xl bg-[var(--surface-0)] border border-[var(--border-subtle)] space-y-3.5">
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0">
-                  <div className="flex items-center gap-1.5">
-                    <BookOpen size={14} className="text-[#60a5fa] shrink-0" />
-                    <h4 className="text-sm font-semibold text-[var(--text-primary)] truncate">
-                      {activeBook.title}
-                    </h4>
-                  </div>
-                  <p className="text-xs text-[var(--text-muted)] mt-0.5 truncate">
-                    {activeBook.author ? `${activeBook.author} · ` : ""}
-                    Currently at{" "}
-                    <span className="font-mono text-[var(--text-primary)]">
-                      p. {activeBook.currentPage}
-                    </span>
-                    {activeBook.totalPages ? ` / ${activeBook.totalPages}` : ""}
-                    {pct !== null ? ` (${pct}%)` : ""}
-                  </p>
-                </div>
-
-                <div className="flex items-center gap-1.5 shrink-0">
-                  <button
-                    onClick={() => setEditingMeta((v) => !v)}
-                    className="h-7 px-2 rounded-lg bg-[var(--surface-2)] text-[11px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] inline-flex items-center gap-1"
-                  >
-                    <Edit3 size={11} />
-                    <span>Edit</span>
-                  </button>
-                  <button
-                    onClick={handleToggleFinished}
-                    className={`h-7 px-2 rounded-lg text-[11px] font-medium inline-flex items-center gap-1 ${
-                      activeBook.status === "finished"
-                        ? "bg-[#22c55e]/15 text-[#4ade80] border border-[#22c55e]/35"
-                        : "bg-[var(--surface-2)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-                    }`}
-                  >
-                    <Check size={11} />
-                    <span>{activeBook.status === "finished" ? "Finished" : "Finish"}</span>
-                  </button>
-                </div>
-              </div>
-
-              {pct !== null && (
-                <div className="h-1.5 rounded-full bg-[var(--surface-2)] overflow-hidden">
-                  <div
-                    className="h-full progress-blue transition-all duration-300"
-                    style={{ width: `${pct}%` }}
-                  />
-                </div>
-              )}
-
-              {editingMeta && (
-                <form
-                  onSubmit={handleSaveMeta}
-                  className="p-3 rounded-xl bg-[var(--surface-1)] border border-[var(--border-subtle)] space-y-2"
-                >
-                  <input
-                    type="text"
-                    value={metaTitle}
-                    onChange={(e) => setMetaTitle(e.target.value)}
-                    placeholder="Title"
-                    className="w-full px-2.5 py-1.5 rounded-lg bg-[var(--surface-0)] border border-[var(--border-subtle)] text-xs"
-                  />
-                  <div className="grid grid-cols-2 gap-2">
-                    <input
-                      type="text"
-                      value={metaAuthor}
-                      onChange={(e) => setMetaAuthor(e.target.value)}
-                      placeholder="Author"
-                      className="px-2.5 py-1.5 rounded-lg bg-[var(--surface-0)] border border-[var(--border-subtle)] text-xs"
-                    />
-                    <input
-                      type="number"
-                      min={0}
-                      value={metaTotalPages}
-                      onChange={(e) => setMetaTotalPages(e.target.value)}
-                      placeholder="Total pages"
-                      className="px-2.5 py-1.5 rounded-lg bg-[var(--surface-0)] border border-[var(--border-subtle)] text-xs font-mono"
-                    />
-                  </div>
-                  <button
-                    type="submit"
-                    className="w-full h-8 rounded-lg bg-[#3b6cf6] text-white text-xs font-semibold"
-                  >
-                    Save changes
-                  </button>
-                </form>
-              )}
-
-              {/* Set New Page Controls */}
-              <div className="space-y-2.5 pt-1 border-t border-[var(--border-subtle)]">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="text-[var(--text-secondary)]">Now on page</span>
-                  <span
-                    className={`font-mono text-[11px] ${
-                      draftDelta > 0
-                        ? "text-[#4ade80]"
-                        : draftDelta < 0
-                          ? "text-[#fbbf24]"
-                          : "text-[var(--text-muted)]"
-                    }`}
-                  >
-                    {draftDelta === 0
-                      ? "No change yet"
-                      : draftDelta > 0
-                        ? `p. ${activeBook.currentPage} -> p. ${draftPageNum} (+${draftDelta}p)`
-                        : `Correction: p. ${activeBook.currentPage} -> p. ${draftPageNum} (${draftDelta}p)`}
-                  </span>
-                </div>
-
-                <div className="flex items-center gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => stepDraftPage(-5)}
-                    className="h-9 px-2 rounded-lg bg-[var(--surface-2)] font-mono text-xs text-[var(--text-secondary)] hover:text-white"
-                  >
-                    -5
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => stepDraftPage(-1)}
-                    className="h-9 px-2 rounded-lg bg-[var(--surface-2)] font-mono text-xs text-[var(--text-secondary)] hover:text-white"
-                  >
-                    -1
-                  </button>
-                  <input
-                    type="number"
-                    min={0}
-                    aria-label="Current page number"
-                    value={draftPageInput}
-                    onChange={(e) => setDraftPageInput(e.target.value)}
-                    className="flex-1 min-w-0 h-9 px-3 rounded-lg bg-[var(--surface-1)] border border-[var(--border-subtle)] text-center font-mono text-sm font-semibold text-[var(--text-primary)] focus:outline-none focus:border-[#3b6cf6]"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => stepDraftPage(1)}
-                    className="h-9 px-2 rounded-lg bg-[var(--surface-2)] font-mono text-xs text-[var(--text-secondary)] hover:text-white"
-                  >
-                    +1
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => stepDraftPage(5)}
-                    className="h-9 px-2 rounded-lg bg-[var(--surface-2)] font-mono text-xs text-[var(--text-secondary)] hover:text-white"
-                  >
-                    +5
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => stepDraftPage(10)}
-                    className="h-9 px-2 rounded-lg bg-[var(--surface-2)] font-mono text-xs text-[var(--text-secondary)] hover:text-white"
-                  >
-                    +10
-                  </button>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={handleUpdatePage}
-                  disabled={draftDelta === 0}
-                  className="w-full h-10 rounded-xl bg-[#3b6cf6] hover:bg-[#2f5ee5] disabled:opacity-40 text-white text-xs font-semibold transition-colors"
-                >
-                  Update page
-                </button>
-              </div>
-            </div>
+            <ActiveBookPanel
+              key={`${activeBook.id}:${activeBook.currentPage}:${activeBook.status}:${activeBook.title}:${activeBook.author ?? ""}:${activeBook.totalPages ?? ""}`}
+              activeBook={activeBook}
+              readingMin={readingMin}
+            />
           ) : !showAddForm ? (
             <div className="p-6 rounded-2xl bg-[var(--surface-0)] border border-[var(--border-subtle)] text-center space-y-2.5">
               <p className="text-sm font-medium text-[var(--text-primary)]">
@@ -564,6 +320,270 @@ export function ReadingSheet({
             </div>
           )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+function ActiveBookPanel({
+  activeBook,
+  readingMin,
+}: {
+  activeBook: BookItem;
+  readingMin: number;
+}) {
+  const store = useMonarchStore();
+  const addToast = useToastStore((s) => s.add);
+
+  const [draftPageInput, setDraftPageInput] = useState(() =>
+    String(activeBook.currentPage)
+  );
+  const [editingMeta, setEditingMeta] = useState(false);
+  const [metaTitle, setMetaTitle] = useState(() => activeBook.title);
+  const [metaAuthor, setMetaAuthor] = useState(() => activeBook.author ?? "");
+  const [metaTotalPages, setMetaTotalPages] = useState(() =>
+    activeBook.totalPages ? String(activeBook.totalPages) : ""
+  );
+
+  const draftPageNum = Math.max(0, Math.round(Number(draftPageInput) || 0));
+  const draftDelta = draftPageNum - activeBook.currentPage;
+
+  function stepDraftPage(delta: number) {
+    const next = Math.max(0, draftPageNum + delta);
+    setDraftPageInput(String(next));
+  }
+
+  function handleUpdatePage() {
+    if (draftDelta === 0) return;
+    const prevPage = activeBook.currentPage;
+    const res = store.logBookPage(activeBook.id, draftPageNum);
+    if (res.floorJustCleared) {
+      playShadowArise();
+      addToast({
+        title: "DAILY READING FLOOR CLEARED (+25 XP)",
+        message: `${activeBook.title} · p. ${prevPage} -> ${draftPageNum} (${res.todayPages}/${readingMin}p today)`,
+        variant: "quest",
+        duration: 2600,
+      });
+    } else if (res.finishedBook) {
+      playShadowArise();
+      addToast({
+        title: `FINISHED: ${activeBook.title.toUpperCase()}`,
+        message: `Reached p. ${draftPageNum} · ${res.todayPages}p logged today`,
+        variant: "success",
+        duration: 2800,
+      });
+    } else {
+      playQuestComplete();
+      const sign = res.pagesDelta > 0 ? `+${res.pagesDelta}` : `${res.pagesDelta}`;
+      addToast({
+        title: `PAGE UPDATED (${sign}P)`,
+        message: `${activeBook.title} · now on p. ${draftPageNum} (${res.todayPages}/${readingMin}p today)`,
+        variant: "success",
+        duration: 2200,
+      });
+    }
+  }
+
+  function handleSaveMeta(e: React.FormEvent) {
+    e.preventDefault();
+    if (!metaTitle.trim()) return;
+    store.updateBookMeta(activeBook.id, {
+      title: metaTitle.trim(),
+      author: metaAuthor.trim(),
+      totalPages: Number(metaTotalPages) > 0 ? Math.round(Number(metaTotalPages)) : 0,
+    });
+    playSystemPing();
+    setEditingMeta(false);
+    addToast({
+      title: "BOOK DETAILS UPDATED",
+      variant: "info",
+      duration: 1800,
+    });
+  }
+
+  function handleToggleFinished() {
+    const nextStatus = activeBook.status === "finished" ? "reading" : "finished";
+    store.updateBookMeta(activeBook.id, { status: nextStatus });
+    playSystemPing();
+    addToast({
+      title: nextStatus === "finished" ? "BOOK MARKED FINISHED" : "BOOK REOPENED",
+      message: activeBook.title,
+      variant: "info",
+      duration: 2000,
+    });
+  }
+
+  const pct =
+    activeBook.totalPages && activeBook.totalPages > 0
+      ? Math.min(100, Math.round((activeBook.currentPage / activeBook.totalPages) * 100))
+      : null;
+
+  return (
+    <div className="p-4 rounded-2xl bg-[var(--surface-0)] border border-[var(--border-subtle)] space-y-3.5">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="flex items-center gap-1.5">
+            <BookOpen size={14} className="text-[#60a5fa] shrink-0" />
+            <h4 className="text-sm font-semibold text-[var(--text-primary)] truncate">
+              {activeBook.title}
+            </h4>
+          </div>
+          <p className="text-xs text-[var(--text-muted)] mt-0.5 truncate">
+            {activeBook.author ? `${activeBook.author} · ` : ""}
+            Currently at{" "}
+            <span className="font-mono text-[var(--text-primary)]">
+              p. {activeBook.currentPage}
+            </span>
+            {activeBook.totalPages ? ` / ${activeBook.totalPages}` : ""}
+            {pct !== null ? ` (${pct}%)` : ""}
+          </p>
+        </div>
+
+        <div className="flex items-center gap-1.5 shrink-0">
+          <button
+            onClick={() => setEditingMeta((v) => !v)}
+            className="h-7 px-2 rounded-lg bg-[var(--surface-2)] text-[11px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] inline-flex items-center gap-1"
+          >
+            <Edit3 size={11} />
+            <span>Edit</span>
+          </button>
+          <button
+            onClick={handleToggleFinished}
+            className={`h-7 px-2 rounded-lg text-[11px] font-medium inline-flex items-center gap-1 ${
+              activeBook.status === "finished"
+                ? "bg-[#22c55e]/15 text-[#4ade80] border border-[#22c55e]/35"
+                : "bg-[var(--surface-2)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+            }`}
+          >
+            <Check size={11} />
+            <span>{activeBook.status === "finished" ? "Finished" : "Finish"}</span>
+          </button>
+        </div>
+      </div>
+
+      {pct !== null && (
+        <div className="h-1.5 rounded-full bg-[var(--surface-2)] overflow-hidden">
+          <div
+            className="h-full progress-blue transition-all duration-300"
+            style={{ width: `${pct}%` }}
+          />
+        </div>
+      )}
+
+      {editingMeta && (
+        <form
+          onSubmit={handleSaveMeta}
+          className="p-3 rounded-xl bg-[var(--surface-1)] border border-[var(--border-subtle)] space-y-2"
+        >
+          <input
+            type="text"
+            value={metaTitle}
+            onChange={(e) => setMetaTitle(e.target.value)}
+            placeholder="Title"
+            className="w-full px-2.5 py-1.5 rounded-lg bg-[var(--surface-0)] border border-[var(--border-subtle)] text-xs"
+          />
+          <div className="grid grid-cols-2 gap-2">
+            <input
+              type="text"
+              value={metaAuthor}
+              onChange={(e) => setMetaAuthor(e.target.value)}
+              placeholder="Author"
+              className="px-2.5 py-1.5 rounded-lg bg-[var(--surface-0)] border border-[var(--border-subtle)] text-xs"
+            />
+            <input
+              type="number"
+              min={0}
+              value={metaTotalPages}
+              onChange={(e) => setMetaTotalPages(e.target.value)}
+              placeholder="Total pages"
+              className="px-2.5 py-1.5 rounded-lg bg-[var(--surface-0)] border border-[var(--border-subtle)] text-xs font-mono"
+            />
+          </div>
+          <button
+            type="submit"
+            className="w-full h-8 rounded-lg bg-[#3b6cf6] text-white text-xs font-semibold"
+          >
+            Save changes
+          </button>
+        </form>
+      )}
+
+      {/* Set New Page Controls */}
+      <div className="space-y-2.5 pt-1 border-t border-[var(--border-subtle)]">
+        <div className="flex items-center justify-between text-xs">
+          <span className="text-[var(--text-secondary)]">Now on page</span>
+          <span
+            className={`font-mono text-[11px] ${
+              draftDelta > 0
+                ? "text-[#4ade80]"
+                : draftDelta < 0
+                  ? "text-[#fbbf24]"
+                  : "text-[var(--text-muted)]"
+            }`}
+          >
+            {draftDelta === 0
+              ? "No change yet"
+              : draftDelta > 0
+                ? `p. ${activeBook.currentPage} -> p. ${draftPageNum} (+${draftDelta}p)`
+                : `Correction: p. ${activeBook.currentPage} -> p. ${draftPageNum} (${draftDelta}p)`}
+          </span>
+        </div>
+
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => stepDraftPage(-5)}
+            className="h-9 px-2 rounded-lg bg-[var(--surface-2)] font-mono text-xs text-[var(--text-secondary)] hover:text-white"
+          >
+            -5
+          </button>
+          <button
+            type="button"
+            onClick={() => stepDraftPage(-1)}
+            className="h-9 px-2 rounded-lg bg-[var(--surface-2)] font-mono text-xs text-[var(--text-secondary)] hover:text-white"
+          >
+            -1
+          </button>
+          <input
+            type="number"
+            min={0}
+            aria-label="Current page number"
+            value={draftPageInput}
+            onChange={(e) => setDraftPageInput(e.target.value)}
+            className="flex-1 min-w-0 h-9 px-3 rounded-lg bg-[var(--surface-1)] border border-[var(--border-subtle)] text-center font-mono text-sm font-semibold text-[var(--text-primary)] focus:outline-none focus:border-[#3b6cf6]"
+          />
+          <button
+            type="button"
+            onClick={() => stepDraftPage(1)}
+            className="h-9 px-2 rounded-lg bg-[var(--surface-2)] font-mono text-xs text-[var(--text-secondary)] hover:text-white"
+          >
+            +1
+          </button>
+          <button
+            type="button"
+            onClick={() => stepDraftPage(5)}
+            className="h-9 px-2 rounded-lg bg-[var(--surface-2)] font-mono text-xs text-[var(--text-secondary)] hover:text-white"
+          >
+            +5
+          </button>
+          <button
+            type="button"
+            onClick={() => stepDraftPage(10)}
+            className="h-9 px-2 rounded-lg bg-[var(--surface-2)] font-mono text-xs text-[var(--text-secondary)] hover:text-white"
+          >
+            +10
+          </button>
+        </div>
+
+        <button
+          type="button"
+          onClick={handleUpdatePage}
+          disabled={draftDelta === 0}
+          className="w-full h-10 rounded-xl bg-[#3b6cf6] hover:bg-[#2f5ee5] disabled:opacity-40 text-white text-xs font-semibold transition-colors"
+        >
+          Update page
+        </button>
       </div>
     </div>
   );

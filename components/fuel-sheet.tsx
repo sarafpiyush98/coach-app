@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import {
   BookmarkPlus,
   Check,
@@ -16,14 +16,16 @@ import {
   evaluateFoodViability,
   FOOD_PRESETS,
   getPresetsForContext,
+  type FoodTier,
   type MealSlot,
 } from "@/lib/monarch-catalog";
 import {
+  computeWeeklyAvgKcal,
   createEmptyDay,
   getDailyTotals,
-  getTodayKey,
   useMonarchStore,
 } from "@/lib/monarch-store";
+import { useTodayKey } from "@/lib/use-today-key";
 import { playQuestComplete, playShadowArise, playSystemPing } from "@/lib/sounds";
 
 type FuelTab = "for_you" | "all" | "saved" | "new";
@@ -48,7 +50,7 @@ const SLOT_OPTIONS: { id: MealSlot; label: string }[] = [
   { id: "primer", label: "Extra / AM" },
 ];
 
-export function tierBadgeStyle(tier: "S" | "A" | "B" | "C"): string {
+export function tierBadgeStyle(tier: FoodTier): string {
   if (tier === "S") {
     return "bg-[#22c55e]/15 text-[#4ade80] border border-[#22c55e]/35";
   }
@@ -58,7 +60,19 @@ export function tierBadgeStyle(tier: "S" | "A" | "B" | "C"): string {
   if (tier === "B") {
     return "bg-[#f59e0b]/15 text-[#fbbf24] border border-[#f59e0b]/35";
   }
-  return "bg-[#ef4444]/15 text-[#f87171] border border-[#ef4444]/35";
+  if (tier === "M") {
+    return "bg-[#10b981]/15 text-[#34d399] border border-[#10b981]/35";
+  }
+  if (tier === "F") {
+    return "bg-[#06b6d4]/15 text-[#22d3ee] border border-[#06b6d4]/35";
+  }
+  if (tier === "X") {
+    return "bg-[#ef4444]/15 text-[#f87171] border border-[#ef4444]/35";
+  }
+  if (tier === "0") {
+    return "bg-[var(--surface-0)] text-[var(--text-muted)] border border-[var(--border-subtle)]";
+  }
+  return "bg-[var(--surface-3)] text-[var(--text-secondary)] border border-[var(--border-subtle)]";
 }
 
 function defaultSlotForClock(dinnerOutMode?: boolean): MealSlot {
@@ -76,12 +90,24 @@ export function FuelSheet({
   onClose: () => void;
   initialTab?: FuelTab;
 }) {
+  if (!open) return null;
+  return <FuelSheetBody key={initialTab} onClose={onClose} initialTab={initialTab} />;
+}
+
+function FuelSheetBody({
+  onClose,
+  initialTab,
+}: {
+  onClose: () => void;
+  initialTab: FuelTab;
+}) {
   const store = useMonarchStore();
   const addToast = useToastStore((s) => s.add);
 
-  const todayKey = getTodayKey();
+  const todayKey = useTodayKey();
   const today = store.days[todayKey] ?? createEmptyDay(todayKey);
-  const totals = getDailyTotals(today);
+  const totals = getDailyTotals(today, store.kcalTarget, store.proteinTargetG);
+  const weeklyAvgKcal = useMemo(() => computeWeeklyAvgKcal(store.days), [store.days]);
 
   const [tab, setTab] = useState<FuelTab>(initialTab);
   const [slot, setSlot] = useState<MealSlot>(() =>
@@ -96,19 +122,12 @@ export function FuelSheet({
   const [customKcal, setCustomKcal] = useState("");
   const [customProtein, setCustomProtein] = useState("");
 
-  useEffect(() => {
-    if (open) {
-      setTab(initialTab);
-      setSlot(defaultSlotForClock(today.dinnerOutMode));
-    }
-  }, [open, initialTab, today.dinnerOutMode]);
-
   const contextPresets = useMemo(
     () => getPresetsForContext(store.context),
     [store.context]
   );
 
-  const savedFoods = store.savedFoods ?? [];
+  const savedFoods = useMemo(() => store.savedFoods ?? [], [store.savedFoods]);
 
   const allSortedPresets = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -180,8 +199,6 @@ export function FuelSheet({
     [customKcalNum, customProteinNum]
   );
 
-  if (!open) return null;
-
   function addOrBumpPlate(item: Omit<PlateItem, "multiplier">) {
     playSystemPing();
     setPlate((prev) => {
@@ -246,7 +263,7 @@ export function FuelSheet({
       playShadowArise();
       addToast({
         title: "AB's LUNCH RAID LOGGED (+75 XP RAID)",
-        message: "Dinner Skip auto-sealed cleanly.",
+        message: "OMAD window auto-sealed cleanly.",
         variant: "warning",
       });
     } else {
@@ -323,6 +340,7 @@ export function FuelSheet({
               </h3>
               <p className="text-[11px] font-mono tabular-nums text-[var(--text-muted)]">
                 Left today: {remainingProtein}g P · {remainingKcal} kcal
+                {weeklyAvgKcal !== null ? ` · 7d avg ${weeklyAvgKcal}` : ""}
               </p>
             </div>
             <button
@@ -388,7 +406,7 @@ export function FuelSheet({
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder={
                   tab === "all"
-                    ? "Search tandoori, tikka, prawns, dosa, beer, whey..."
+                    ? "Search tandoori, eggs, salad, nuts, fruit, whey..."
                     : "Filter dishes or spots..."
                 }
                 className="w-full h-9 pl-8 pr-8 rounded-xl bg-[var(--surface-0)] border border-[var(--border-subtle)] text-xs text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--border-accent)]"
@@ -412,7 +430,11 @@ export function FuelSheet({
             (tab === "for_you" ? filteredForYou : allSortedPresets).map((preset) => {
               const key = `preset:${preset.id}`;
               const qty = getPlateQty(key);
-              const viability = evaluateFoodViability(preset.kcal, preset.proteinG);
+              const viability = evaluateFoodViability(
+                preset.kcal,
+                preset.proteinG,
+                preset.tags
+              );
               return (
                 <div
                   key={preset.id}
@@ -437,7 +459,7 @@ export function FuelSheet({
                         </p>
                       </div>
                       <p className="text-[11px] text-[var(--text-muted)] mt-0.5 truncate">
-                        {preset.spot} · {viability.proteinPer100Kcal}g P/100 kcal
+                        {preset.spot} · {viability.label}
                       </p>
                     </div>
 

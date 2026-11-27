@@ -1,24 +1,25 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useSyncExternalStore } from "react";
 import { Volume2, VolumeX } from "lucide-react";
 import { toggleMute, isMuted } from "@/lib/sounds";
 
-export function MuteToggle() {
-  const [mute, setMute] = useState(false);
-
-  useEffect(() => {
-    setMute(isMuted());
-  }, []);
-
-  const handleToggle = () => {
-    const newState = toggleMute();
-    setMute(newState);
+function subscribeMute(callback: () => void) {
+  if (typeof window === "undefined") return () => {};
+  window.addEventListener("monarch-mute-change", callback);
+  window.addEventListener("storage", callback);
+  return () => {
+    window.removeEventListener("monarch-mute-change", callback);
+    window.removeEventListener("storage", callback);
   };
+}
+
+export function MuteToggle() {
+  const mute = useSyncExternalStore(subscribeMute, isMuted, () => false);
 
   return (
     <button
-      onClick={handleToggle}
+      onClick={() => toggleMute()}
       className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--surface-1)] border border-[var(--border-subtle)] transition-opacity hover:opacity-80 active:scale-95"
       aria-label={mute ? "Unmute sounds" : "Mute sounds"}
     >

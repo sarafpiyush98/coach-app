@@ -4,7 +4,6 @@ import { useEffect } from "react";
 import { create } from "zustand";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
-import { playSystemPing } from "@/lib/sounds";
 
 /* ── Toast Store ────────────────────────────────────── */
 
@@ -25,7 +24,10 @@ interface ToastState {
 export const useToastStore = create<ToastState>((set) => ({
   toasts: [],
   add: (toast) => {
-    const id = crypto.randomUUID();
+    const id =
+      typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+        ? crypto.randomUUID()
+        : `${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
     set((s) => ({ toasts: [...s.toasts, { ...toast, id }] }));
   },
   remove: (id) =>
@@ -35,11 +37,11 @@ export const useToastStore = create<ToastState>((set) => ({
 /* ── Variant Styles ─────────────────────────────────── */
 
 const accentColor = {
-  info: "bg-[#1B45D7]",
-  warning: "bg-[#FFC107]",
-  danger: "bg-[#D50000]",
-  success: "bg-[#059669]",
-  quest: "bg-[#463671]",
+  info: "bg-[#3b6cf6]",
+  warning: "bg-[#f59e0b]",
+  danger: "bg-[#ef4444]",
+  success: "bg-[#22c55e]",
+  quest: "bg-[#8b5cf6]",
 } as const;
 
 /* ── Single Toast ───────────────────────────────────── */
@@ -49,7 +51,6 @@ function ToastItem({ toast }: { toast: Toast }) {
   const duration = toast.duration ?? 3000;
 
   useEffect(() => {
-    playSystemPing();
     const timer = setTimeout(() => remove(toast.id), duration);
     return () => clearTimeout(timer);
   }, [toast.id, duration, remove]);
@@ -62,20 +63,19 @@ function ToastItem({ toast }: { toast: Toast }) {
       exit={{ y: -60, opacity: 0 }}
       transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
       className={cn(
-        "relative flex overflow-hidden rounded-lg",
-        "bg-[rgba(10,20,60,0.92)] backdrop-blur-[16px]",
-        "border border-[#1B45D7]/20"
+        "relative flex overflow-hidden rounded-xl shadow-xl",
+        "bg-[#13161f]/95 backdrop-blur-[16px]",
+        "border border-[#3b6cf6]/30"
       )}
     >
-      {/* Left accent bar */}
       <div className={cn("w-1 shrink-0", accentColor[toast.variant])} />
 
       <div className="px-4 py-3">
-        <p className="font-[family-name:var(--font-rajdhani)] text-sm font-bold uppercase tracking-wider text-[#FBEFFA]">
+        <p className="font-[family-name:var(--font-rajdhani)] text-sm font-bold uppercase tracking-wider text-[var(--text-primary)]">
           {toast.title}
         </p>
         {toast.message && (
-          <p className="mt-0.5 text-xs text-[#4A5568]">{toast.message}</p>
+          <p className="mt-0.5 text-xs text-[var(--text-secondary)]">{toast.message}</p>
         )}
       </div>
     </motion.div>

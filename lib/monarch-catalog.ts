@@ -9,7 +9,7 @@ export type SplitId =
   | "ul_combo_b"
   | "full_body_plus"
   | "cardio_pool";
-export type GateRankId = "low_time_2x" | "regular_3x15";
+export type GateRankId = "regular" | "express_2x" | "low_mana_rir2";
 
 export const CORE_SPLIT_ORDER: SplitId[] = [
   "upper_a",
@@ -34,7 +34,7 @@ export const CONTEXTS: Record<ContextId, ContextSpec> = {
     shortLabel: "CG / HOME",
     sub: "Basapura · E-City · 25kg DB Cap",
     defaultArena: "cg_gym",
-    avoidNote: "Avoid late-night 22:00-04:00 Swiggy stacks; hit 5 PM Whey+Skyr before skipping dinner.",
+    avoidNote: "Avoid late-night 22:00-04:00 Swiggy stacks; hit 5 PM Whey+Skyr before closing OMAD.",
   },
   hsr_office: {
     id: "hsr_office",
@@ -87,6 +87,11 @@ export interface ExerciseSwap {
   reps: string;
   load: string;
   cue?: string;
+  trackLoad?: boolean;
+  defaultWeightKg?: number;
+  stepKg?: number;
+  bodyweightOnly?: boolean;
+  isBarbellCompound?: boolean;
 }
 
 export interface ExerciseSpec {
@@ -102,6 +107,8 @@ export interface ExerciseSpec {
   pairHint?: string;
   trackBench?: boolean;
   trackLoad?: boolean;
+  bodyweightOnly?: boolean;
+  isBarbellCompound?: boolean;
   defaultWeightKg?: number;
   stepKg?: number;
   maxRepsRegular?: number;
@@ -146,12 +153,12 @@ export const SPLITS: {
   tier: "core" | "combo" | "bonus";
   focus: string;
 }[] = [
-  { id: "upper_a", label: "UPPER A", shortLabel: "U-A", tier: "core", focus: "Bench · Back · Side Delts · Biceps · Triceps" },
+  { id: "upper_a", label: "UPPER A", shortLabel: "U-A", tier: "core", focus: "Heavy Bench · Back · Side Delts · Arms" },
   { id: "lower_a", label: "LOWER A", shortLabel: "L-A", tier: "core", focus: "Quads · Barbell RDL · Calves · Core" },
-  { id: "upper_b", label: "UPPER B", shortLabel: "U-B", tier: "core", focus: "OHP · Lats · Chest · Rear Delts · Arms" },
-  { id: "lower_b", label: "LOWER B", shortLabel: "L-B", tier: "core", focus: "RDL · Box Squat · Glutes · Kili Knees" },
-  { id: "ul_combo_a", label: "WEEKEND U+L A", shortLabel: "U+L A", tier: "combo", focus: "Upper A + Lower A (2-in-1 · 3-4h)" },
-  { id: "ul_combo_b", label: "WEEKEND U+L B", shortLabel: "U+L B", tier: "combo", focus: "Upper B + Lower B (2-in-1 · 3-4h)" },
+  { id: "upper_b", label: "UPPER B", shortLabel: "U-B", tier: "core", focus: "OHP · Lats · Chest · Side/Rear Delts · Arms" },
+  { id: "lower_b", label: "LOWER B", shortLabel: "L-B", tier: "core", focus: "Ham Curl · SL Press · Glutes · Kili Knees" },
+  { id: "ul_combo_a", label: "WEEKEND U+L A", shortLabel: "U+L A", tier: "combo", focus: "Curated 7-Lift Heavy (Upper A + Quads · 75-90m)" },
+  { id: "ul_combo_b", label: "WEEKEND U+L B", shortLabel: "U+L B", tier: "combo", focus: "Curated 7-Lift Heavy (Upper B + Hinge · 75-90m)" },
   { id: "full_body_plus", label: "DAY 5 · FB+", shortLabel: "FB+", tier: "bonus", focus: "Bench Vol · Arms · Delts · Carries" },
   { id: "cardio_pool", label: "DAY 6 · JOG/POOL", shortLabel: "CARDIO", tier: "bonus", focus: "Zone-2 Jog · Incline · CG Pool" },
 ];
@@ -164,48 +171,60 @@ export const GATE_RANKS: {
   baseXp: number;
 }[] = [
   {
-    id: "low_time_2x",
-    tag: "LOW TIME",
-    label: "2x Failure",
-    duration: "All lifts · <=19 reps max",
-    baseXp: 70,
+    id: "regular",
+    tag: "REGULAR",
+    label: "3 Sets · 8-12 / 12-15",
+    duration: "Compounds 8-12 · Iso 12-15",
+    baseXp: 100,
   },
   {
-    id: "regular_3x15",
-    tag: "REGULAR",
-    label: "3 x 15",
-    duration: "All lifts · double progression",
-    baseXp: 100,
+    id: "express_2x",
+    tag: "LOW TIME",
+    label: "2 Sets · High Effort",
+    duration: "BB RIR 1-2 · Iso 0-1 RIR",
+    baseXp: 75,
+  },
+  {
+    id: "low_mana_rir2",
+    tag: "LOW MANA",
+    label: "2 Sets · RIR 2-3",
+    duration: "Recovery guard · ~85-90% load · 0 failure",
+    baseXp: 65,
   },
 ];
 
 const WORKOUT_MATRIX: Record<
   ArenaId,
-  Record<Exclude<SplitId, "ul_combo_a" | "ul_combo_b">, ExerciseSpec[]>
+  Record<SplitId, ExerciseSpec[]>
 > = {
   cg_gym: {
     upper_a: [
       {
         id: "cg_bench",
-        name: "Flat Barbell Bench Press",
+        progressKey: "cg_bench_heavy",
+        name: "Flat Barbell Bench Press (Strength)",
         muscleGroup: "Chest",
         sets: 3,
-        reps: "6-10",
-        load: "55-67.5 kg",
-        restSec: 150,
+        reps: "5-8",
+        load: "57.5-77.5 kg",
+        restSec: 180,
         trackBench: true,
         trackLoad: true,
-        defaultWeightKg: 55,
+        isBarbellCompound: true,
+        defaultWeightKg: 57.5,
         stepKg: 2.5,
-        maxRepsRegular: 10,
-        maxRepsLowTime: 12,
-        cue: "Baseline 50x15 -> lock scapula + leg drive; warm up w/ empty bar (NO push-ups)",
+        maxRepsRegular: 8,
+        maxRepsLowTime: 10,
+        cue: "100 kg wave: 57.5-65kg x 8 -> 70-77.5kg x 5 -> 80-90kg x 3 -> 100kg x 1 (mandatory spotter). Empty bar warm-up only.",
         swap: {
           name: "Flat DB Press",
           sets: 3,
-          reps: "10-12",
+          reps: "8-12",
           load: "20-25 kg",
-          cue: "Use when Flat Bench is busy; return for bench after",
+          trackLoad: true,
+          defaultWeightKg: 22.5,
+          stepKg: 2.5,
+          cue: "Use when Flat Bench is busy; slow 3s eccentric",
         },
       },
       {
@@ -213,19 +232,23 @@ const WORKOUT_MATRIX: Record<
         name: "Seated Cable Row (Neutral, Straps)",
         muscleGroup: "Mid-Back",
         sets: 3,
-        reps: "12-15",
+        reps: "8-12",
         load: "42-54 kg stack",
         restSec: 90,
         trackLoad: true,
         defaultWeightKg: 42,
         stepKg: 6,
+        maxRepsRegular: 12,
         cue: "Chest tall, straps on; skips chest-pad diaphragm crush",
         pairHint: "Long-rest pair: optional between Bench breaks",
         swap: {
           name: "Bench-Braced 1-Arm DB Row",
           sets: 3,
-          reps: "12-15/arm",
+          reps: "8-12/arm",
           load: "17.5-25 kg",
+          trackLoad: true,
+          defaultWeightKg: 20,
+          stepKg: 2.5,
           cue: "Straps on; wide rear-foot stance",
         },
       },
@@ -234,18 +257,22 @@ const WORKOUT_MATRIX: Record<
         name: "Incline DB Press (30 deg)",
         muscleGroup: "Upper Chest",
         sets: 3,
-        reps: "12-15",
+        reps: "8-12",
         load: "17.5-25 kg",
         restSec: 90,
         trackLoad: true,
-        defaultWeightKg: 17.5,
+        defaultWeightKg: 20,
         stepKg: 2.5,
+        maxRepsRegular: 12,
         cue: "Full pec stretch; climbing toward CG 25 kg DB cap",
         swap: {
           name: "Flat DB Press",
           sets: 3,
-          reps: "12-15",
+          reps: "8-12",
           load: "20-25 kg",
+          trackLoad: true,
+          defaultWeightKg: 22.5,
+          stepKg: 2.5,
           cue: "Slow 3s eccentric past 25 kg DB cap",
         },
       },
@@ -254,19 +281,23 @@ const WORKOUT_MATRIX: Record<
         name: "Lat Pulldown (Wide/Med, Straps)",
         muscleGroup: "Lats",
         sets: 3,
-        reps: "12-15",
+        reps: "8-12",
         load: "42-54 kg stack",
         restSec: 90,
         trackLoad: true,
-        defaultWeightKg: 42,
+        defaultWeightKg: 48,
         stepKg: 6,
+        maxRepsRegular: 12,
         cue: "Thumbless grip + straps; drive elbows down toward pockets",
         pairHint: "Long-rest pair: optional between Incline DB breaks",
         swap: {
           name: "1-Arm Cable Lat Pulldown",
           sets: 3,
-          reps: "12-15/arm",
+          reps: "10-12/arm",
           load: "24 kg stack (12 eff)",
+          trackLoad: true,
+          defaultWeightKg: 24,
+          stepKg: 6,
           cue: "Free range if main stack busy",
         },
       },
@@ -281,12 +312,16 @@ const WORKOUT_MATRIX: Record<
         trackLoad: true,
         defaultWeightKg: 12,
         stepKg: 3,
+        maxRepsRegular: 15,
         cue: "Constant bottom tension; smooth wrist",
         swap: {
           name: "DB Lateral Raise",
           sets: 3,
           reps: "12-15",
           load: "7.5-10 kg",
+          trackLoad: true,
+          defaultWeightKg: 7.5,
+          stepKg: 2.5,
           cue: "Control 2s descent",
         },
       },
@@ -301,13 +336,17 @@ const WORKOUT_MATRIX: Record<
         trackLoad: true,
         defaultWeightKg: 7.5,
         stepKg: 2.5,
+        maxRepsRegular: 15,
         cue: "Bench at 45-60 deg (NEVER 30 deg) to guard front shoulder tendon",
-        pairHint: "Long-rest pair: alternate curls during Lateral breaks",
+        pairHint: "Antagonist pair: alternate with Cable Rope Pushdown",
         swap: {
           name: "Preacher EZ-Bar Curl",
           sets: 3,
           reps: "12-15",
           load: "Small EZ + plates",
+          trackLoad: true,
+          defaultWeightKg: 20,
+          stepKg: 2.5,
           cue: "Strict bottom stretch, zero shoulder swing",
         },
       },
@@ -323,6 +362,7 @@ const WORKOUT_MATRIX: Record<
         trackLoad: true,
         defaultWeightKg: 24,
         stepKg: 6,
+        maxRepsRegular: 15,
         cue: "Full stretch past 90 deg; zero dips or kickbacks",
         pairHint: "Antagonist pair: alternate with Incline DB Curl",
         swap: {
@@ -330,6 +370,9 @@ const WORKOUT_MATRIX: Record<
           sets: 3,
           reps: "12-15",
           load: "17.5-25 kg",
+          trackLoad: true,
+          defaultWeightKg: 20,
+          stepKg: 2.5,
           cue: "Elbows slightly back",
         },
       },
@@ -346,12 +389,14 @@ const WORKOUT_MATRIX: Record<
         trackLoad: true,
         defaultWeightKg: 40,
         stepKg: 5,
+        maxRepsRegular: 15,
         cue: "ALWAYS before Leg Press - warms patellar tendon safely",
         swap: {
           name: "Wall Sit Occlusion",
           sets: 3,
           reps: "45s",
           load: "Bodyweight",
+          bodyweightOnly: true,
           cue: "Hands near knees OK at 112-115 kg",
         },
       },
@@ -360,18 +405,22 @@ const WORKOUT_MATRIX: Record<
         name: "Controlled Leg Press",
         muscleGroup: "Quads + Glutes",
         sets: 3,
-        reps: "12-15",
+        reps: "8-12",
         load: "90-140 kg",
         restSec: 120,
         trackLoad: true,
         defaultWeightKg: 100,
         stepKg: 10,
+        maxRepsRegular: 12,
         cue: "Shoulder-width feet (NO ultra-wide Sumo catch; NEVER max first)",
         swap: {
           name: "Goblet Box Squat",
           sets: 3,
-          reps: "12-15",
+          reps: "10-12",
           load: "17.5-25 kg",
+          trackLoad: true,
+          defaultWeightKg: 20,
+          stepKg: 2.5,
           cue: "Touch bench lightly, stay upright",
         },
       },
@@ -384,16 +433,20 @@ const WORKOUT_MATRIX: Record<
         load: "50-75 kg",
         restSec: 120,
         trackLoad: true,
+        isBarbellCompound: true,
         defaultWeightKg: 55,
         stepKg: 5,
         maxRepsRegular: 12,
-        maxRepsLowTime: 15,
+        maxRepsLowTime: 14,
         cue: "Primary hamstring builder past 25 kg DB cap; bar shaves thighs",
         swap: {
           name: "Lying DB Hamstring Curl",
           sets: 3,
           reps: "12-15",
           load: "12.5-17.5 kg DB",
+          trackLoad: true,
+          defaultWeightKg: 12.5,
+          stepKg: 2.5,
           cue: "Clamp DB cleanly between feet on bench; slow 3s lower",
         },
       },
@@ -408,12 +461,14 @@ const WORKOUT_MATRIX: Record<
         trackLoad: true,
         defaultWeightKg: 40,
         stepKg: 5,
+        maxRepsRegular: 15,
         cue: "2s pause in deep bottom stretch for Kilimanjaro ankles",
         swap: {
           name: "Single-Leg BW Calf Raise",
           sets: 3,
           reps: "15/leg",
           load: "Bodyweight",
+          bodyweightOnly: true,
           cue: "Full heel drop off step edge",
         },
       },
@@ -428,6 +483,7 @@ const WORKOUT_MATRIX: Record<
         trackLoad: true,
         defaultWeightKg: 30,
         stepKg: 6,
+        maxRepsRegular: 15,
         cue: "Flex ribs to pelvis (zero hip swinging); skip twists if cramping",
         pairHint: "Long-rest pair: optional between Calf breaks",
         swap: {
@@ -435,6 +491,7 @@ const WORKOUT_MATRIX: Record<
           sets: 3,
           reps: "12-15",
           load: "Bodyweight",
+          bodyweightOnly: true,
           cue: "Press lower back flat into pad",
         },
       },
@@ -445,18 +502,22 @@ const WORKOUT_MATRIX: Record<
         name: "Seated DB OHP (75-80 deg)",
         muscleGroup: "Shoulders",
         sets: 3,
-        reps: "10-15",
+        reps: "8-12",
         load: "15-22.5 kg",
         restSec: 120,
         trackLoad: true,
         defaultWeightKg: 15,
         stepKg: 2.5,
+        maxRepsRegular: 12,
         cue: "Seated stops lower-back wobble; always BEFORE free-weight rows",
         swap: {
           name: "Half-Kneeling Cable Press",
           sets: 3,
-          reps: "12-15/arm",
+          reps: "10-12/arm",
           load: "18 kg stack (9 kg eff)",
+          trackLoad: true,
+          defaultWeightKg: 18,
+          stepKg: 3,
           cue: "Smooth ribcage stack",
         },
       },
@@ -465,19 +526,23 @@ const WORKOUT_MATRIX: Record<
         name: "Close-Grip Neutral Lat Pulldown (Straps)",
         muscleGroup: "Lats + Biceps",
         sets: 3,
-        reps: "12-15",
+        reps: "8-12",
         load: "42-54 kg stack",
         restSec: 90,
         trackLoad: true,
         defaultWeightKg: 42,
         stepKg: 6,
+        maxRepsRegular: 12,
         cue: "V-bar + straps; stretch lats full at top without swinging torso",
         pairHint: "Long-rest pair: optional between OHP breaks",
         swap: {
           name: "1-Arm Cable Lat Pulldown",
           sets: 3,
-          reps: "12-15/arm",
+          reps: "10-12/arm",
           load: "24 kg stack",
+          trackLoad: true,
+          defaultWeightKg: 24,
+          stepKg: 6,
           cue: "Controlled squeeze",
         },
       },
@@ -492,12 +557,16 @@ const WORKOUT_MATRIX: Record<
         trackLoad: true,
         defaultWeightKg: 24,
         stepKg: 6,
+        maxRepsRegular: 15,
         cue: "Standing cable fly on 2:1 pulley - full pec stretch, controlled constant tension",
         swap: {
           name: "Incline DB Press (30 deg)",
           sets: 3,
-          reps: "12-15",
+          reps: "8-12",
           load: "17.5-22.5 kg",
+          trackLoad: true,
+          defaultWeightKg: 20,
+          stepKg: 2.5,
           cue: "Use if cable column is occupied",
         },
       },
@@ -506,20 +575,51 @@ const WORKOUT_MATRIX: Record<
         name: "Bench-Braced 1-Arm DB Row (Straps)",
         muscleGroup: "Mid/Upper Back",
         sets: 3,
-        reps: "12-15/arm",
+        reps: "8-12/arm",
         load: "17.5-25 kg",
         restSec: 90,
         trackLoad: true,
         defaultWeightKg: 20,
         stepKg: 2.5,
+        maxRepsRegular: 12,
         cue: "CG max DB = 25 kg; progress w/ 2s squeeze or Barbell Row swap",
         pairHint: "Long-rest pair: optional between Cable Fly breaks",
         swap: {
           name: "Barbell Bent-Over Row",
           sets: 3,
-          reps: "10-15",
+          reps: "8-12",
           load: "45-65 kg",
+          trackLoad: true,
+          isBarbellCompound: true,
+          defaultWeightKg: 50,
+          stepKg: 5,
           cue: "Breaks 25 kg DB ceiling cleanly",
+        },
+      },
+      {
+        id: "cg_lat_cable_b",
+        progressKey: "cg_lat_cable",
+        name: "Cable Lateral Raise (2:1)",
+        muscleGroup: "Side Delts",
+        sets: 3,
+        reps: "12-15/arm",
+        load: "12 kg stack (~6 kg eff)",
+        restSec: 60,
+        trackLoad: true,
+        defaultWeightKg: 12,
+        stepKg: 3,
+        maxRepsRegular: 15,
+        cue: "2nd weekly side-delt touch in the 4-core split; zero shoulder shrug",
+        pairHint: "Superset w/ Rope Face Pull on same cable column",
+        swap: {
+          name: "DB Lateral Raise",
+          sets: 3,
+          reps: "12-15",
+          load: "7.5-10 kg",
+          trackLoad: true,
+          defaultWeightKg: 7.5,
+          stepKg: 2.5,
+          cue: "Control 2s descent",
         },
       },
       {
@@ -533,12 +633,16 @@ const WORKOUT_MATRIX: Record<
         trackLoad: true,
         defaultWeightKg: 18,
         stepKg: 6,
+        maxRepsRegular: 15,
         cue: "Pull rope to forehead, elbows high; shoulder-health anchor",
         swap: {
           name: "Bent-Over DB Rear Delt Fly",
           sets: 3,
           reps: "12-15",
           load: "5-7.5 kg DBs",
+          trackLoad: true,
+          defaultWeightKg: 7.5,
+          stepKg: 2.5,
           cue: "Hinge torso, soft elbows, crisp rear-delt squeeze",
         },
       },
@@ -553,13 +657,17 @@ const WORKOUT_MATRIX: Record<
         trackLoad: true,
         defaultWeightKg: 24,
         stepKg: 6,
+        maxRepsRegular: 15,
         cue: "Overhead stretch hits long head ~40% better than pushdowns alone; zero bench dips",
-        pairHint: "Long-rest pair: optional between Face Pull breaks",
+        pairHint: "Antagonist pair: alternate with Cable Rope Hammer Curl",
         swap: {
           name: "Cable Rope Pushdown (2:1)",
           sets: 3,
           reps: "12-15",
           load: "24-36 kg stack",
+          trackLoad: true,
+          defaultWeightKg: 24,
+          stepKg: 6,
           cue: "Full elbow flex past 90 deg",
         },
       },
@@ -575,6 +683,7 @@ const WORKOUT_MATRIX: Record<
         trackLoad: true,
         defaultWeightKg: 24,
         stepKg: 6,
+        maxRepsRegular: 15,
         cue: "Neutral grip hits brachialis & forearms; 2nd weekly bicep angle",
         pairHint: "Antagonist pair: alternate with Overhead Cable Extension",
         swap: {
@@ -582,6 +691,9 @@ const WORKOUT_MATRIX: Record<
           sets: 3,
           reps: "12-15",
           load: "17.5-22.5 kg",
+          trackLoad: true,
+          defaultWeightKg: 20,
+          stepKg: 2.5,
           cue: "Strict bottom stretch, zero torso swing",
         },
       },
@@ -598,12 +710,17 @@ const WORKOUT_MATRIX: Record<
         trackLoad: true,
         defaultWeightKg: 12.5,
         stepKg: 2.5,
-        cue: "Clamp DB cleanly between feet on bench; trains short head that RDL misses",
+        maxRepsRegular: 15,
+        cue: "Warm knees w/ 2 light Leg Ext sets first. Clamp DB cleanly (or use ankle cuff on low 2:1 cable); trains short head RDL misses",
         swap: {
           name: "Barbell RDL (Straps On)",
           sets: 3,
           reps: "8-12",
           load: "50-75 kg",
+          trackLoad: true,
+          isBarbellCompound: true,
+          defaultWeightKg: 55,
+          stepKg: 5,
           cue: "Hip-hinge fallback if bench curl feels awkward",
         },
       },
@@ -612,18 +729,22 @@ const WORKOUT_MATRIX: Record<
         name: "Single-Leg Controlled Leg Press",
         muscleGroup: "Quads (Unilateral)",
         sets: 3,
-        reps: "12-15/leg",
+        reps: "8-12/leg",
         load: "45-70 kg",
         restSec: 90,
         trackLoad: true,
         defaultWeightKg: 50,
         stepKg: 5,
+        maxRepsRegular: 12,
         cue: "Beats CG 25 kg DB ceiling cleanly with zero lumbar fatigue; foot aligned w/ hip",
         swap: {
           name: "Goblet Box Squat (Heels Elevated)",
           sets: 3,
-          reps: "12-15",
+          reps: "10-12",
           load: "20-25 kg",
+          trackLoad: true,
+          defaultWeightKg: 20,
+          stepKg: 2.5,
           cue: "Tap bench lightly, upright torso",
         },
       },
@@ -638,12 +759,14 @@ const WORKOUT_MATRIX: Record<
         trackLoad: true,
         defaultWeightKg: 25,
         stepKg: 2.5,
+        maxRepsRegular: 15,
         cue: "DB in hip crease (NO Bench Hip Thrust); 2s pause at top",
         swap: {
           name: "Single-Leg Floor Glute Bridge",
           sets: 3,
           reps: "12-15/leg",
           load: "BW / 10 kg DB",
+          bodyweightOnly: true,
           cue: "Matches heavier bilateral load with 0 belly pinch",
         },
       },
@@ -658,12 +781,16 @@ const WORKOUT_MATRIX: Record<
         trackLoad: true,
         defaultWeightKg: 10,
         stepKg: 2.5,
+        maxRepsRegular: 15,
         cue: "NO Reverse Lunges - slow 3s step-down bulletproofs knees for Kilimanjaro descents",
         swap: {
           name: "Single-Leg Extension",
           sets: 3,
           reps: "12-15/leg",
           load: "20-30 kg",
+          trackLoad: true,
+          defaultWeightKg: 25,
+          stepKg: 5,
           cue: "Smooth patellar tracking",
         },
       },
@@ -679,12 +806,16 @@ const WORKOUT_MATRIX: Record<
         trackLoad: true,
         defaultWeightKg: 40,
         stepKg: 5,
+        maxRepsRegular: 15,
         cue: "Tracks unified Calf progression; pause 2s at bottom stretch",
         swap: {
           name: "Farmer Walk (Straps, 45s)",
           sets: 3,
           reps: "45s",
           load: "25 kg/hand",
+          trackLoad: true,
+          defaultWeightKg: 25,
+          stepKg: 2.5,
           cue: "Tall posture, protects palm calluses",
         },
       },
@@ -699,6 +830,7 @@ const WORKOUT_MATRIX: Record<
         trackLoad: true,
         defaultWeightKg: 18,
         stepKg: 6,
+        maxRepsRegular: 15,
         cue: "Press straight out & hold 2s/rep; builds trunk stability for Badminton & Kili pack",
         pairHint: "Long-rest pair: optional between Calf breaks",
         swap: {
@@ -706,30 +838,274 @@ const WORKOUT_MATRIX: Record<
           sets: 3,
           reps: "45s",
           load: "25 kg / hand",
+          trackLoad: true,
+          defaultWeightKg: 25,
+          stepKg: 2.5,
           cue: "Tall ribs, straps on",
         },
+      },
+    ],
+    ul_combo_a: [
+      {
+        id: "cg_bench",
+        progressKey: "cg_bench_heavy",
+        blockSection: "upper",
+        name: "Flat Barbell Bench Press (Strength)",
+        muscleGroup: "Chest",
+        sets: 3,
+        reps: "5-8",
+        load: "57.5-77.5 kg",
+        restSec: 180,
+        trackBench: true,
+        trackLoad: true,
+        isBarbellCompound: true,
+        defaultWeightKg: 57.5,
+        stepKg: 2.5,
+        maxRepsRegular: 8,
+        maxRepsLowTime: 10,
+        cue: "Weekend heavy anchor; mandatory spotter on heavy waves",
+        swap: { name: "Flat DB Press", sets: 3, reps: "8-12", load: "20-25 kg", trackLoad: true, defaultWeightKg: 22.5, stepKg: 2.5 },
+      },
+      {
+        id: "cg_cable_row",
+        blockSection: "upper",
+        name: "Seated Cable Row (Neutral, Straps)",
+        muscleGroup: "Mid-Back",
+        sets: 3,
+        reps: "8-12",
+        load: "42-54 kg stack",
+        restSec: 90,
+        trackLoad: true,
+        defaultWeightKg: 42,
+        stepKg: 6,
+        maxRepsRegular: 12,
+        cue: "Chest tall, straps on; zero diaphragm pad crush",
+        swap: { name: "Bench-Braced 1-Arm DB Row", sets: 3, reps: "8-12/arm", load: "20-25 kg", trackLoad: true, defaultWeightKg: 20, stepKg: 2.5 },
+      },
+      {
+        id: "cg_lat_pd_wide",
+        blockSection: "upper",
+        name: "Lat Pulldown (Wide/Med, Straps)",
+        muscleGroup: "Lats",
+        sets: 3,
+        reps: "8-12",
+        load: "42-54 kg stack",
+        restSec: 90,
+        trackLoad: true,
+        defaultWeightKg: 48,
+        stepKg: 6,
+        maxRepsRegular: 12,
+        cue: "Thumbless grip + straps; elbows to pockets",
+        swap: { name: "1-Arm Cable Lat Pulldown", sets: 3, reps: "10-12/arm", load: "24 kg stack", trackLoad: true, defaultWeightKg: 24, stepKg: 6 },
+      },
+      {
+        id: "cg_lat_cable",
+        blockSection: "upper",
+        name: "Cable Lateral Raise (2:1)",
+        muscleGroup: "Side Delts",
+        sets: 3,
+        reps: "12-15/arm",
+        load: "12 kg stack (~6 kg eff)",
+        restSec: 60,
+        trackLoad: true,
+        defaultWeightKg: 12,
+        stepKg: 3,
+        maxRepsRegular: 15,
+        cue: "Smooth bottom tension; pair w/ arms to save clock time",
+        swap: { name: "DB Lateral Raise", sets: 3, reps: "12-15", load: "7.5-10 kg", trackLoad: true, defaultWeightKg: 7.5, stepKg: 2.5 },
+      },
+      {
+        id: "cg_rope_tri_a",
+        progressKey: "cg_rope_tri",
+        blockSection: "upper",
+        name: "Cable Rope Pushdown (2:1)",
+        muscleGroup: "Triceps",
+        sets: 3,
+        reps: "12-15",
+        load: "24-36 kg stack",
+        restSec: 60,
+        trackLoad: true,
+        defaultWeightKg: 24,
+        stepKg: 6,
+        maxRepsRegular: 15,
+        cue: "Full elbow flex past 90 deg; superset w/ curls if short on time",
+        swap: { name: "EZ-Bar Lying Skullcrusher", sets: 3, reps: "12-15", load: "17.5-25 kg", trackLoad: true, defaultWeightKg: 20, stepKg: 2.5 },
+      },
+      {
+        id: "cg_leg_ext",
+        blockSection: "lower",
+        name: "Leg Extension (Knee Prime)",
+        muscleGroup: "Quads",
+        sets: 3,
+        reps: "12-15",
+        load: "35-55 kg stack",
+        restSec: 75,
+        trackLoad: true,
+        defaultWeightKg: 40,
+        stepKg: 5,
+        maxRepsRegular: 15,
+        cue: "Primes knees cleanly before Leg Press",
+        swap: { name: "Wall Sit Occlusion", sets: 3, reps: "45s", load: "Bodyweight", bodyweightOnly: true },
+      },
+      {
+        id: "cg_leg_press",
+        blockSection: "lower",
+        name: "Controlled Leg Press",
+        muscleGroup: "Quads + Glutes",
+        sets: 3,
+        reps: "8-12",
+        load: "90-140 kg",
+        restSec: 120,
+        trackLoad: true,
+        defaultWeightKg: 100,
+        stepKg: 10,
+        maxRepsRegular: 12,
+        cue: "Curated 21-set weekend heavy finisher (replaces 39-set junk volume)",
+        swap: { name: "Goblet Box Squat", sets: 3, reps: "10-12", load: "20-25 kg", trackLoad: true, defaultWeightKg: 20, stepKg: 2.5 },
+      },
+    ],
+    ul_combo_b: [
+      {
+        id: "cg_ohp",
+        blockSection: "upper",
+        name: "Seated DB OHP (75-80 deg)",
+        muscleGroup: "Shoulders",
+        sets: 3,
+        reps: "8-12",
+        load: "15-22.5 kg",
+        restSec: 120,
+        trackLoad: true,
+        defaultWeightKg: 15,
+        stepKg: 2.5,
+        maxRepsRegular: 12,
+        cue: "Always BEFORE heavy pulls",
+        swap: { name: "Half-Kneeling Cable Press", sets: 3, reps: "10-12/arm", load: "18 kg stack", trackLoad: true, defaultWeightKg: 18, stepKg: 3 },
+      },
+      {
+        id: "cg_lat_pd_close",
+        blockSection: "upper",
+        name: "Close-Grip Neutral Lat Pulldown (Straps)",
+        muscleGroup: "Lats + Biceps",
+        sets: 3,
+        reps: "8-12",
+        load: "42-54 kg stack",
+        restSec: 90,
+        trackLoad: true,
+        defaultWeightKg: 42,
+        stepKg: 6,
+        maxRepsRegular: 12,
+        cue: "V-bar + straps; full top stretch",
+        swap: { name: "Bench-Braced 1-Arm DB Row", sets: 3, reps: "8-12/arm", load: "20-25 kg", trackLoad: true, defaultWeightKg: 20, stepKg: 2.5 },
+      },
+      {
+        id: "cg_cable_fly",
+        blockSection: "upper",
+        name: "Cable Chest Fly (2:1 Pulley)",
+        muscleGroup: "Chest Iso",
+        sets: 3,
+        reps: "12-15",
+        load: "24-36 kg stack",
+        restSec: 75,
+        trackLoad: true,
+        defaultWeightKg: 24,
+        stepKg: 6,
+        maxRepsRegular: 15,
+        cue: "Constant tension pec stretch on 2:1 pulley",
+        swap: { name: "Incline DB Press (30 deg)", sets: 3, reps: "8-12", load: "17.5-22.5 kg", trackLoad: true, defaultWeightKg: 20, stepKg: 2.5 },
+      },
+      {
+        id: "cg_face_pull",
+        blockSection: "upper",
+        name: "Rope Face Pull (Posture)",
+        muscleGroup: "Rear Delts",
+        sets: 3,
+        reps: "12-15",
+        load: "18-30 kg stack",
+        restSec: 60,
+        trackLoad: true,
+        defaultWeightKg: 18,
+        stepKg: 6,
+        maxRepsRegular: 15,
+        cue: "Shoulder-health anchor",
+        swap: { name: "Bent-Over DB Rear Delt Fly", sets: 3, reps: "12-15", load: "5-7.5 kg DBs", trackLoad: true, defaultWeightKg: 7.5, stepKg: 2.5 },
+      },
+      {
+        id: "cg_oh_cable_tri",
+        blockSection: "upper",
+        name: "Overhead Cable Rope Extension (2:1)",
+        muscleGroup: "Triceps Long Head",
+        sets: 3,
+        reps: "12-15",
+        load: "24-36 kg stack",
+        restSec: 60,
+        trackLoad: true,
+        defaultWeightKg: 24,
+        stepKg: 6,
+        maxRepsRegular: 15,
+        cue: "Long-head stretch; pair w/ Hammer Curl if desired",
+        swap: { name: "Cable Rope Hammer Curl (2:1)", sets: 3, reps: "12-15", load: "24-30 kg stack", trackLoad: true, defaultWeightKg: 24, stepKg: 6 },
+      },
+      {
+        id: "cg_bb_rdl",
+        blockSection: "lower",
+        name: "Barbell RDL (Straps On)",
+        muscleGroup: "Hamstrings + Glutes",
+        sets: 3,
+        reps: "8-12",
+        load: "50-75 kg",
+        restSec: 120,
+        trackLoad: true,
+        isBarbellCompound: true,
+        defaultWeightKg: 55,
+        stepKg: 5,
+        maxRepsRegular: 12,
+        maxRepsLowTime: 14,
+        cue: "Fresh hinge after 5-min electrolyte reset; beats 25 kg DB cap",
+        swap: { name: "Floor DB Glute Bridge (1.5-Rep)", sets: 3, reps: "12-15", load: "25 kg DB", trackLoad: true, defaultWeightKg: 25, stepKg: 2.5 },
+      },
+      {
+        id: "cg_stepup",
+        blockSection: "lower",
+        name: "Controlled Step-Up (3s Step-Down)",
+        muscleGroup: "Kili Knees + Quads",
+        sets: 3,
+        reps: "10-15/leg",
+        load: "10-15 kg DBs",
+        restSec: 60,
+        trackLoad: true,
+        defaultWeightKg: 10,
+        stepKg: 2.5,
+        maxRepsRegular: 15,
+        cue: "Slow 3s step-down for Kilimanjaro descent knees (NO reverse lunges)",
+        swap: { name: "Single-Leg Controlled Leg Press", sets: 3, reps: "8-12/leg", load: "45-70 kg", trackLoad: true, defaultWeightKg: 50, stepKg: 5 },
       },
     ],
     full_body_plus: [
       {
         id: "cg_bench_vol",
-        progressKey: "cg_bench",
+        progressKey: "cg_bench_vol",
         name: "Flat Barbell Bench (Clean Volume)",
         muscleGroup: "Chest",
         sets: 3,
-        reps: "10-15",
+        reps: "10-12",
         load: "50-62.5 kg",
         restSec: 120,
         trackBench: true,
         trackLoad: true,
-        defaultWeightKg: 55,
+        isBarbellCompound: true,
+        defaultWeightKg: 52.5,
         stepKg: 2.5,
-        cue: "3rd weekly bench touch accelerates 100 kg ladder without beating up joints",
+        maxRepsRegular: 12,
+        maxRepsLowTime: 14,
+        cue: "Separate Day 5 volume touch (never corrupts Heavy Bench progression)",
         swap: {
           name: "Cable Chest Fly (2:1 Pulley)",
           sets: 3,
           reps: "12-15",
           load: "24-36 kg stack",
+          trackLoad: true,
+          defaultWeightKg: 24,
+          stepKg: 6,
           cue: "Use if Bench busy or shoulders feel tight",
         },
       },
@@ -745,12 +1121,16 @@ const WORKOUT_MATRIX: Record<
         trackLoad: true,
         defaultWeightKg: 12,
         stepKg: 3,
+        maxRepsRegular: 15,
         cue: "Extra side-delt width volume (3rd weekly touch)",
         swap: {
           name: "DB Lateral Raise",
           sets: 3,
           reps: "12-15",
           load: "7.5-10 kg",
+          trackLoad: true,
+          defaultWeightKg: 7.5,
+          stepKg: 2.5,
           cue: "Soft elbows",
         },
       },
@@ -765,12 +1145,16 @@ const WORKOUT_MATRIX: Record<
         trackLoad: true,
         defaultWeightKg: 24,
         stepKg: 6,
+        maxRepsRegular: 15,
         cue: "Balances Upper B overhead long-head stretch; full elbow flex past 90 deg",
         swap: {
           name: "EZ-Bar Lying Skullcrusher",
           sets: 3,
           reps: "12-15",
           load: "17.5-25 kg",
+          trackLoad: true,
+          defaultWeightKg: 20,
+          stepKg: 2.5,
           cue: "Elbows slightly back",
         },
       },
@@ -785,6 +1169,7 @@ const WORKOUT_MATRIX: Record<
         trackLoad: true,
         defaultWeightKg: 20,
         stepKg: 2.5,
+        maxRepsRegular: 15,
         cue: "3rd weekly bicep variation; strict elbow-on-pad stretch",
         pairHint: "Long-rest pair: optional between Pushdown breaks",
         swap: {
@@ -792,6 +1177,9 @@ const WORKOUT_MATRIX: Record<
           sets: 3,
           reps: "12-15",
           load: "24-30 kg stack",
+          trackLoad: true,
+          defaultWeightKg: 24,
+          stepKg: 6,
           cue: "Neutral brachialis swap",
         },
       },
@@ -813,6 +1201,9 @@ const WORKOUT_MATRIX: Record<
           sets: 3,
           reps: "12-15",
           load: "30 kg stack",
+          trackLoad: true,
+          defaultWeightKg: 30,
+          stepKg: 6,
           cue: "Controlled rib-to-pelvis curl",
         },
       },
@@ -882,17 +1273,20 @@ const WORKOUT_MATRIX: Record<
         muscleGroup: "Chest",
         sets: 3,
         reps: "12-15",
-        load: "BW / Loaded Backpack",
+        load: "Bodyweight / 3s Eccentric",
         restSec: 90,
         trackLoad: true,
-        defaultWeightKg: 10,
-        stepKg: 2.5,
+        bodyweightOnly: true,
+        defaultWeightKg: 0,
+        maxRepsRegular: 15,
         cue: "3s controlled descent + 1s deep chest stretch pause",
         swap: {
           name: "Close-Grip Countertop Push-Up",
           sets: 3,
           reps: "12-15",
           load: "Bodyweight",
+          trackLoad: true,
+          bodyweightOnly: true,
           cue: "Elbows tucked cleanly",
         },
       },
@@ -905,8 +1299,9 @@ const WORKOUT_MATRIX: Record<
         load: "BW Angle",
         restSec: 90,
         trackLoad: true,
-        defaultWeightKg: 45,
-        stepKg: 5,
+        bodyweightOnly: true,
+        defaultWeightKg: 0,
+        maxRepsRegular: 15,
         cue: "Anchor sheet OVER closed door (pull away from hinges); walk feet forward for load",
         swap: {
           name: "Door-Towel Isometric Row Pull",
@@ -925,14 +1320,17 @@ const WORKOUT_MATRIX: Record<
         load: "Bodyweight",
         restSec: 75,
         trackLoad: true,
-        defaultWeightKg: 5,
-        stepKg: 2.5,
+        bodyweightOnly: true,
+        defaultWeightKg: 0,
+        maxRepsRegular: 15,
         cue: "Hands wider on edge; slow bottom stretch",
         swap: {
           name: "Feet-Elevated Bed Pike Push-Up",
           sets: 3,
-          reps: "10-15",
+          reps: "10-12",
           load: "Bodyweight",
+          trackLoad: true,
+          bodyweightOnly: true,
           cue: "Shifts load to clavicular pecs & delts",
         },
       },
@@ -941,18 +1339,21 @@ const WORKOUT_MATRIX: Record<
         name: "Chair-Braced Backpack 1-Arm Row",
         muscleGroup: "Mid-Back",
         sets: 3,
-        reps: "12-15/arm",
+        reps: "8-12/arm",
         load: "15-20 kg bag",
         restSec: 75,
         trackLoad: true,
         defaultWeightKg: 15,
         stepKg: 2.5,
+        maxRepsRegular: 12,
         cue: "Wide rear-foot stance; zero diaphragm crush",
         swap: {
           name: "Prone Floor Y-T-W Raises",
           sets: 3,
           reps: "15",
           load: "1-2.5 kg",
+          trackLoad: true,
+          bodyweightOnly: true,
           cue: "Scapular posture control",
         },
       },
@@ -961,12 +1362,13 @@ const WORKOUT_MATRIX: Record<
         name: "2.5-3 kg Slow 3s Lateral Raise",
         muscleGroup: "Side Delts",
         sets: 3,
-        reps: "15",
+        reps: "12-15",
         load: "2.5-3 kg DBs",
         restSec: 60,
         trackLoad: true,
         defaultWeightKg: 3,
         stepKg: 0.5,
+        maxRepsRegular: 15,
         cue: "Zero swing; 3s lowering matches CG 12 kg cable stimulus",
         swap: {
           name: "Mechanical Delt Giant Set",
@@ -987,13 +1389,41 @@ const WORKOUT_MATRIX: Record<
         trackLoad: true,
         defaultWeightKg: 12.5,
         stepKg: 2.5,
+        maxRepsRegular: 15,
         cue: "Keep torso 45-60 deg; squeeze pinky up at top",
         swap: {
           name: "Towel-Under-Foot Drag Curl",
           sets: 3,
           reps: "12-15",
           load: "Self-Resistance",
+          trackLoad: true,
+          bodyweightOnly: true,
           cue: "Smooth peak tension",
+        },
+      },
+      {
+        id: "hm_tri_push_a",
+        progressKey: "hm_push_close",
+        name: "Close-Grip Countertop Tricep Push-Up",
+        muscleGroup: "Triceps",
+        sets: 3,
+        reps: "12-15",
+        load: "Bodyweight",
+        restSec: 60,
+        trackLoad: true,
+        bodyweightOnly: true,
+        defaultWeightKg: 0,
+        maxRepsRegular: 15,
+        cue: "Elbows tucked tightly to ribs; zero bench/chair dips",
+        swap: {
+          name: "Overhead Backpack Tricep Ext",
+          sets: 3,
+          reps: "12-15",
+          load: "10-15 kg bag",
+          trackLoad: true,
+          defaultWeightKg: 12.5,
+          stepKg: 2.5,
+          cue: "Deep long-head stretch behind head",
         },
       },
     ],
@@ -1013,6 +1443,9 @@ const WORKOUT_MATRIX: Record<
           sets: 3,
           reps: "12-15",
           load: "Loaded Backpack",
+          trackLoad: true,
+          defaultWeightKg: 15,
+          stepKg: 2.5,
           cue: "Heels on thin book for clean knee track",
         },
       },
@@ -1022,18 +1455,21 @@ const WORKOUT_MATRIX: Record<
         name: "Kickstand Backpack RDL",
         muscleGroup: "Hamstrings",
         sets: 3,
-        reps: "12-15/leg",
+        reps: "8-12/leg",
         load: "15-20 kg bag",
         restSec: 90,
         trackLoad: true,
         defaultWeightKg: 17.5,
         stepKg: 2.5,
+        maxRepsRegular: 12,
         cue: "80% weight on front heel; hinges hips cleanly for hamstring stretch",
         swap: {
           name: "Towel Floor Hamstring Slide",
           sets: 3,
           reps: "12-15",
           load: "Socks on smooth tile",
+          trackLoad: true,
+          bodyweightOnly: true,
           cue: "Eccentric hamstring scorcher",
         },
       },
@@ -1046,14 +1482,18 @@ const WORKOUT_MATRIX: Record<
         load: "BW (~50 kg eq/leg)",
         restSec: 75,
         trackLoad: true,
-        defaultWeightKg: 10,
-        stepKg: 2.5,
+        bodyweightOnly: true,
+        defaultWeightKg: 0,
+        maxRepsRegular: 15,
         cue: "Zero belly pinch; beats 25 kg bilateral cap",
         swap: {
           name: "Floor Backpack Glute Bridge",
           sets: 3,
           reps: "15",
           load: "20 kg bag",
+          trackLoad: true,
+          defaultWeightKg: 20,
+          stepKg: 2.5,
           cue: "2s pause at top",
         },
       },
@@ -1066,14 +1506,17 @@ const WORKOUT_MATRIX: Record<
         load: "BW / 3 kg DBs",
         restSec: 60,
         trackLoad: true,
-        defaultWeightKg: 5,
-        stepKg: 2.5,
+        bodyweightOnly: true,
+        defaultWeightKg: 0,
+        maxRepsRegular: 15,
         cue: "Slow 3s step-down builds Kili descent knees (NO reverse lunges)",
         swap: {
           name: "Spanish Squat (Towel/Band)",
           sets: 3,
           reps: "15",
           load: "Bodyweight",
+          trackLoad: true,
+          bodyweightOnly: true,
           cue: "Knee-friendly quad tension",
         },
       },
@@ -1085,6 +1528,9 @@ const WORKOUT_MATRIX: Record<
         reps: "15 + 12",
         load: "Bodyweight",
         restSec: 60,
+        trackLoad: true,
+        bodyweightOnly: true,
+        maxRepsRegular: 15,
         cue: "Full heel stretch off stair edge -> slow controlled deadbugs",
         swap: {
           name: "Side Plank",
@@ -1101,18 +1547,22 @@ const WORKOUT_MATRIX: Record<
         name: "Bed-Feet Pike Overhead Push-Up",
         muscleGroup: "Shoulders",
         sets: 3,
-        reps: "10-15",
+        reps: "8-12",
         load: "Bodyweight",
         restSec: 90,
         trackLoad: true,
-        defaultWeightKg: 5,
-        stepKg: 2.5,
+        bodyweightOnly: true,
+        defaultWeightKg: 0,
+        maxRepsRegular: 12,
         cue: "Smooth vertical press; always run BEFORE backpack rows",
         swap: {
           name: "Backpack Overhead Press",
           sets: 3,
-          reps: "12-15",
+          reps: "8-12",
           load: "12-16 kg bag",
+          trackLoad: true,
+          defaultWeightKg: 12.5,
+          stepKg: 2.5,
           cue: "Glutes tight, ribs down",
         },
       },
@@ -1126,8 +1576,9 @@ const WORKOUT_MATRIX: Record<
         load: "BW Angle",
         restSec: 90,
         trackLoad: true,
-        defaultWeightKg: 45,
-        stepKg: 5,
+        bodyweightOnly: true,
+        defaultWeightKg: 0,
+        maxRepsRegular: 15,
         cue: "Narrow neutral hand grip -> strong lat + bicep stretch",
         swap: {
           name: "Door-Towel Isometric Hold",
@@ -1147,14 +1598,18 @@ const WORKOUT_MATRIX: Record<
         load: "Bodyweight",
         restSec: 75,
         trackLoad: true,
-        defaultWeightKg: 10,
-        stepKg: 2.5,
+        bodyweightOnly: true,
+        defaultWeightKg: 0,
+        maxRepsRegular: 15,
         cue: "Replaces CG bench + rope work safely (NO chair/bed dips)",
         swap: {
           name: "Backpack Floor Press",
           sets: 3,
-          reps: "15",
+          reps: "12-15",
           load: "15-20 kg bag",
+          trackLoad: true,
+          defaultWeightKg: 15,
+          stepKg: 2.5,
           cue: "Elbows 45 deg",
         },
       },
@@ -1164,18 +1619,21 @@ const WORKOUT_MATRIX: Record<
         name: "Chair-Braced Backpack Row",
         muscleGroup: "Mid/Upper Back",
         sets: 3,
-        reps: "12-15/arm",
+        reps: "8-12/arm",
         load: "15-20 kg bag",
         restSec: 75,
         trackLoad: true,
         defaultWeightKg: 15,
         stepKg: 2.5,
+        maxRepsRegular: 12,
         cue: "Pull elbow toward hip with 1s pause",
         swap: {
           name: "Prone Y-T-W Raise",
           sets: 3,
           reps: "15",
           load: "BW / 1 kg",
+          trackLoad: true,
+          bodyweightOnly: true,
           cue: "Scapular posture",
         },
       },
@@ -1184,18 +1642,21 @@ const WORKOUT_MATRIX: Record<
         name: "Bent-Over 2.5 kg Rear Delt Fly",
         muscleGroup: "Rear Delts",
         sets: 3,
-        reps: "15",
+        reps: "12-15",
         load: "2.5-3 kg DBs",
         restSec: 60,
         trackLoad: true,
         defaultWeightKg: 3,
         stepKg: 0.5,
+        maxRepsRegular: 15,
         cue: "Chest supported on knees or hip hinge; thumbs out slightly",
         swap: {
           name: "Wall Scapular Slides",
           sets: 3,
           reps: "15",
           load: "Bodyweight",
+          trackLoad: true,
+          bodyweightOnly: true,
           cue: "Opens desk posture",
         },
       },
@@ -1210,18 +1671,21 @@ const WORKOUT_MATRIX: Record<
         trackLoad: true,
         defaultWeightKg: 12.5,
         stepKg: 2.5,
+        maxRepsRegular: 15,
         cue: "Deep stretch behind head; NO bench dips",
         swap: {
           name: "Diamond Wall / Counter Push-Up",
           sets: 3,
           reps: "12-15",
           load: "Bodyweight",
+          trackLoad: true,
+          bodyweightOnly: true,
           cue: "Keep elbows tucked",
         },
       },
       {
         id: "hm_drag_curl_b",
-        progressKey: "hm_sofa_curl",
+        progressKey: "hm_drag_curl",
         name: "Towel-Under-Foot Drag Curl",
         muscleGroup: "Biceps",
         sets: 3,
@@ -1229,14 +1693,18 @@ const WORKOUT_MATRIX: Record<
         load: "Self-Resistance",
         restSec: 60,
         trackLoad: true,
-        defaultWeightKg: 12.5,
-        stepKg: 2.5,
+        bodyweightOnly: true,
+        defaultWeightKg: 0,
+        maxRepsRegular: 15,
         cue: "Pair with Tricep Extension so Home Upper B hits both arm flexors & extensors",
         swap: {
           name: "Sofa Backpack Hammer Curl",
           sets: 3,
           reps: "12-15",
           load: "10-15 kg bag",
+          trackLoad: true,
+          defaultWeightKg: 12.5,
+          stepKg: 2.5,
           cue: "Neutral grip brachialis bias",
         },
       },
@@ -1244,7 +1712,7 @@ const WORKOUT_MATRIX: Record<
     lower_b: [
       {
         id: "hm_towel_ham",
-        progressKey: "hm_rdl",
+        progressKey: "hm_towel_ham",
         name: "Towel Floor Hamstring Slide",
         muscleGroup: "Hamstrings",
         sets: 3,
@@ -1252,14 +1720,18 @@ const WORKOUT_MATRIX: Record<
         load: "Socks / Towel on Tile",
         restSec: 90,
         trackLoad: true,
-        defaultWeightKg: 17.5,
-        stepKg: 2.5,
+        bodyweightOnly: true,
+        defaultWeightKg: 0,
+        maxRepsRegular: 15,
         cue: "Bridge hips high, slide heels slow for 3s to target pure hamstrings",
         swap: {
           name: "Kickstand Backpack RDL",
           sets: 3,
-          reps: "12-15/leg",
+          reps: "8-12/leg",
           load: "15-20 kg bag",
+          trackLoad: true,
+          defaultWeightKg: 17.5,
+          stepKg: 2.5,
           cue: "80% load on front leg",
         },
       },
@@ -1268,12 +1740,13 @@ const WORKOUT_MATRIX: Record<
         name: "Heels-Elevated 1.5-Rep Squat",
         muscleGroup: "Quads",
         sets: 3,
-        reps: "12-15",
+        reps: "8-12",
         load: "15-20 kg bag",
         restSec: 90,
         trackLoad: true,
         defaultWeightKg: 15,
         stepKg: 2.5,
+        maxRepsRegular: 12,
         cue: "Heels on thin book; smooth depth without forward fold",
         swap: {
           name: "Wall Sit Occlusion",
@@ -1293,14 +1766,17 @@ const WORKOUT_MATRIX: Record<
         load: "Bodyweight",
         restSec: 75,
         trackLoad: true,
-        defaultWeightKg: 10,
-        stepKg: 2.5,
+        bodyweightOnly: true,
+        defaultWeightKg: 0,
+        maxRepsRegular: 15,
         cue: "2s lockout squeeze",
         swap: {
           name: "Frog Pump Bridge",
           sets: 3,
           reps: "20",
           load: "Bodyweight",
+          trackLoad: true,
+          bodyweightOnly: true,
           cue: "Soles together, knees wide",
         },
       },
@@ -1312,12 +1788,18 @@ const WORKOUT_MATRIX: Record<
         reps: "15/leg",
         load: "Bodyweight",
         restSec: 45,
+        trackLoad: true,
+        bodyweightOnly: true,
+        maxRepsRegular: 15,
         cue: "Slow 3s lowering past step level",
         swap: {
           name: "Two-Leg Tempo Calf Raise",
           sets: 3,
           reps: "20",
           load: "Backpack",
+          trackLoad: true,
+          defaultWeightKg: 15,
+          stepKg: 2.5,
           cue: "2s hold at top",
         },
       },
@@ -1329,6 +1811,9 @@ const WORKOUT_MATRIX: Record<
         reps: "12/side",
         load: "Bodyweight",
         restSec: 45,
+        trackLoad: true,
+        bodyweightOnly: true,
+        maxRepsRegular: 15,
         cue: "Low back glued to mat",
         swap: {
           name: "Side Plank",
@@ -1339,21 +1824,251 @@ const WORKOUT_MATRIX: Record<
         },
       },
     ],
+    ul_combo_a: [
+      {
+        id: "hm_pushup",
+        blockSection: "upper",
+        name: "Countertop Deficit Push-Up",
+        muscleGroup: "Chest",
+        sets: 3,
+        reps: "12-15",
+        load: "Bodyweight / 3s Eccentric",
+        restSec: 90,
+        trackLoad: true,
+        bodyweightOnly: true,
+        defaultWeightKg: 0,
+        maxRepsRegular: 15,
+        cue: "Deep chest stretch pause",
+        swap: { name: "Wide Stretch Push-Up", sets: 3, reps: "12-15", load: "BW", trackLoad: true, bodyweightOnly: true },
+      },
+      {
+        id: "hm_door_row",
+        blockSection: "upper",
+        name: "Knotted Door-Sheet Inverted Row",
+        muscleGroup: "Lats + Mid-Back",
+        sets: 3,
+        reps: "12-15",
+        load: "BW Angle",
+        restSec: 90,
+        trackLoad: true,
+        bodyweightOnly: true,
+        defaultWeightKg: 0,
+        maxRepsRegular: 15,
+        cue: "Pull away from door hinges",
+        swap: { name: "Chair-Braced Backpack Row", sets: 3, reps: "8-12/arm", load: "15 kg bag", trackLoad: true, defaultWeightKg: 15, stepKg: 2.5 },
+      },
+      {
+        id: "hm_lat_home",
+        blockSection: "upper",
+        name: "2.5-3 kg Slow 3s Lateral Raise",
+        muscleGroup: "Side Delts",
+        sets: 3,
+        reps: "12-15",
+        load: "2.5-3 kg DBs",
+        restSec: 60,
+        trackLoad: true,
+        defaultWeightKg: 3,
+        stepKg: 0.5,
+        maxRepsRegular: 15,
+        cue: "3s lowering",
+        swap: { name: "Mechanical Delt Giant Set", sets: 3, reps: "15+15+15", load: "3 kg DBs" },
+      },
+      {
+        id: "hm_sofa_curl",
+        blockSection: "upper",
+        name: "45-60 deg Sofa Backpack Curl",
+        muscleGroup: "Biceps",
+        sets: 3,
+        reps: "12-15",
+        load: "10-15 kg bag",
+        restSec: 60,
+        trackLoad: true,
+        defaultWeightKg: 12.5,
+        stepKg: 2.5,
+        maxRepsRegular: 15,
+        cue: "Superset w/ Tricep Push-Up",
+        swap: { name: "Towel Drag Curl", sets: 3, reps: "12-15", load: "Self-Resist", trackLoad: true, bodyweightOnly: true },
+      },
+      {
+        id: "hm_tri_push_a",
+        progressKey: "hm_push_close",
+        blockSection: "upper",
+        name: "Close-Grip Countertop Tricep Push-Up",
+        muscleGroup: "Triceps",
+        sets: 3,
+        reps: "12-15",
+        load: "Bodyweight",
+        restSec: 60,
+        trackLoad: true,
+        bodyweightOnly: true,
+        defaultWeightKg: 0,
+        maxRepsRegular: 15,
+        cue: "Elbows tucked",
+        swap: { name: "Overhead Backpack Tricep Ext", sets: 3, reps: "12-15", load: "12.5 kg bag", trackLoad: true, defaultWeightKg: 12.5, stepKg: 2.5 },
+      },
+      {
+        id: "hm_occlusion",
+        blockSection: "lower",
+        name: "Wall Sit -> Heels-Elevated Squat",
+        muscleGroup: "Quads",
+        sets: 3,
+        reps: "45s + 15",
+        load: "Isometric Occlusion",
+        restSec: 90,
+        timeBased: true,
+        cue: "45s Wall Sit -> 15 squats",
+        swap: { name: "Heels-Elevated 1.5-Rep Squat", sets: 3, reps: "10-12", load: "15 kg bag", trackLoad: true, defaultWeightKg: 15, stepKg: 2.5 },
+      },
+      {
+        id: "hm_sl_bridge",
+        blockSection: "lower",
+        name: "Single-Leg Bed-Edge Glute Bridge",
+        muscleGroup: "Glutes",
+        sets: 3,
+        reps: "12-15/leg",
+        load: "Bodyweight",
+        restSec: 75,
+        trackLoad: true,
+        bodyweightOnly: true,
+        defaultWeightKg: 0,
+        maxRepsRegular: 15,
+        cue: "2s pause at top",
+        swap: { name: "Kickstand Backpack RDL", sets: 3, reps: "8-12/leg", load: "17.5 kg bag", trackLoad: true, defaultWeightKg: 17.5, stepKg: 2.5 },
+      },
+    ],
+    ul_combo_b: [
+      {
+        id: "hm_ohp_home",
+        blockSection: "upper",
+        name: "Bed-Feet Pike Overhead Push-Up",
+        muscleGroup: "Shoulders",
+        sets: 3,
+        reps: "8-12",
+        load: "Bodyweight",
+        restSec: 90,
+        trackLoad: true,
+        bodyweightOnly: true,
+        defaultWeightKg: 0,
+        maxRepsRegular: 12,
+        cue: "Run BEFORE backpack rows",
+        swap: { name: "Backpack Overhead Press", sets: 3, reps: "8-12", load: "12.5 kg bag", trackLoad: true, defaultWeightKg: 12.5, stepKg: 2.5 },
+      },
+      {
+        id: "hm_pack_row_b",
+        progressKey: "hm_pack_row",
+        blockSection: "upper",
+        name: "Chair-Braced Backpack Row",
+        muscleGroup: "Mid/Upper Back",
+        sets: 3,
+        reps: "8-12/arm",
+        load: "15-20 kg bag",
+        restSec: 75,
+        trackLoad: true,
+        defaultWeightKg: 15,
+        stepKg: 2.5,
+        maxRepsRegular: 12,
+        cue: "1s squeeze at top",
+        swap: { name: "Knotted Door-Sheet Row", sets: 3, reps: "12-15", load: "BW", trackLoad: true, bodyweightOnly: true },
+      },
+      {
+        id: "hm_rear_ytw",
+        blockSection: "upper",
+        name: "Bent-Over 2.5 kg Rear Delt Fly",
+        muscleGroup: "Rear Delts",
+        sets: 3,
+        reps: "12-15",
+        load: "2.5-3 kg DBs",
+        restSec: 60,
+        trackLoad: true,
+        defaultWeightKg: 3,
+        stepKg: 0.5,
+        maxRepsRegular: 15,
+        cue: "Thumbs slightly out",
+        swap: { name: "Wall Scapular Slides", sets: 3, reps: "15", load: "BW", trackLoad: true, bodyweightOnly: true },
+      },
+      {
+        id: "hm_oh_tri",
+        blockSection: "upper",
+        name: "Overhead Backpack Tricep Ext",
+        muscleGroup: "Triceps Long Head",
+        sets: 3,
+        reps: "12-15",
+        load: "10-15 kg bag",
+        restSec: 60,
+        trackLoad: true,
+        defaultWeightKg: 12.5,
+        stepKg: 2.5,
+        maxRepsRegular: 15,
+        cue: "Deep stretch behind head",
+        swap: { name: "Close-Grip Countertop Push-Up", sets: 3, reps: "12-15", load: "BW", trackLoad: true, bodyweightOnly: true },
+      },
+      {
+        id: "hm_drag_curl_b",
+        progressKey: "hm_drag_curl",
+        blockSection: "upper",
+        name: "Towel-Under-Foot Drag Curl",
+        muscleGroup: "Biceps",
+        sets: 3,
+        reps: "12-15",
+        load: "Self-Resistance",
+        restSec: 60,
+        trackLoad: true,
+        bodyweightOnly: true,
+        defaultWeightKg: 0,
+        maxRepsRegular: 15,
+        cue: "Pair w/ OH Tricep Ext",
+        swap: { name: "Sofa Backpack Curl", sets: 3, reps: "12-15", load: "12.5 kg bag", trackLoad: true, defaultWeightKg: 12.5, stepKg: 2.5 },
+      },
+      {
+        id: "hm_kickstand_rdl",
+        progressKey: "hm_rdl",
+        blockSection: "lower",
+        name: "Kickstand Backpack RDL",
+        muscleGroup: "Hamstrings",
+        sets: 3,
+        reps: "8-12/leg",
+        load: "15-20 kg bag",
+        restSec: 90,
+        trackLoad: true,
+        defaultWeightKg: 17.5,
+        stepKg: 2.5,
+        maxRepsRegular: 12,
+        cue: "80% front-heel bias",
+        swap: { name: "Towel Floor Hamstring Slide", sets: 3, reps: "12-15", load: "BW", trackLoad: true, bodyweightOnly: true },
+      },
+      {
+        id: "hm_step_up",
+        blockSection: "lower",
+        name: "Staircase / Box Step-Ups (3s Down)",
+        muscleGroup: "Kili Knees + Quads",
+        sets: 3,
+        reps: "10-15/leg",
+        load: "BW / 3 kg DBs",
+        restSec: 60,
+        trackLoad: true,
+        bodyweightOnly: true,
+        defaultWeightKg: 0,
+        maxRepsRegular: 15,
+        cue: "Slow 3s step-down",
+        swap: { name: "Wall Sit Occlusion", sets: 3, reps: "45s", load: "BW" },
+      },
+    ],
     full_body_plus: [
       {
         id: "hm_fb_push",
         progressKey: "hm_pushup",
-        name: "Backpack Countertop Deficit Push-Up",
+        name: "Countertop Deficit Push-Up",
         muscleGroup: "Chest",
         sets: 3,
         reps: "12-15",
-        load: "10-15 kg bag",
+        load: "Bodyweight",
         restSec: 75,
         trackLoad: true,
-        defaultWeightKg: 10,
-        stepKg: 2.5,
+        bodyweightOnly: true,
+        defaultWeightKg: 0,
+        maxRepsRegular: 15,
         cue: "Extra chest volume cleanly away from CG gym",
-        swap: { name: "Standard Deficit Push-Up", sets: 3, reps: "15", load: "BW", cue: "Slow lower" },
+        swap: { name: "Standard Deficit Push-Up", sets: 3, reps: "15", load: "BW", trackLoad: true, bodyweightOnly: true, cue: "Slow lower" },
       },
       {
         id: "hm_fb_row",
@@ -1365,10 +2080,11 @@ const WORKOUT_MATRIX: Record<
         load: "BW Angle",
         restSec: 75,
         trackLoad: true,
-        defaultWeightKg: 45,
-        stepKg: 5,
+        bodyweightOnly: true,
+        defaultWeightKg: 0,
+        maxRepsRegular: 15,
         cue: "Balances pushing volume cleanly",
-        swap: { name: "Backpack 1-Arm Row", sets: 3, reps: "15/arm", load: "15 kg", cue: "Chair braced" },
+        swap: { name: "Backpack 1-Arm Row", sets: 3, reps: "12-15/arm", load: "15 kg", trackLoad: true, defaultWeightKg: 15, stepKg: 2.5, cue: "Chair braced" },
       },
       {
         id: "hm_fb_delt",
@@ -1380,7 +2096,7 @@ const WORKOUT_MATRIX: Record<
         load: "2.5-3 kg DBs",
         restSec: 75,
         cue: "Rear fly -> Lateral -> OHP nonstop",
-        swap: { name: "Slow Lateral Raise", sets: 3, reps: "15", load: "3 kg", cue: "3s eccentric" },
+        swap: { name: "Slow Lateral Raise", sets: 3, reps: "15", load: "3 kg", trackLoad: true, defaultWeightKg: 3, stepKg: 0.5, cue: "3s eccentric" },
       },
       {
         id: "hm_fb_arms",
@@ -1394,8 +2110,9 @@ const WORKOUT_MATRIX: Record<
         trackLoad: true,
         defaultWeightKg: 12.5,
         stepKg: 2.5,
+        maxRepsRegular: 15,
         cue: "Zero rest switching curl <-> overhead tricep",
-        swap: { name: "Towel Drag Curl", sets: 3, reps: "15", load: "Self-Resist", cue: "Strict tension" },
+        swap: { name: "Towel Drag Curl", sets: 3, reps: "15", load: "Self-Resist", trackLoad: true, bodyweightOnly: true, cue: "Strict tension" },
       },
       {
         id: "hm_fb_leg_core",
@@ -1451,41 +2168,44 @@ const WORKOUT_MATRIX: Record<
         muscleGroup: "Chest",
         sets: 3,
         reps: "12-15",
-        load: "3s Eccentric",
+        load: "Bodyweight / 3s Eccentric",
         restSec: 75,
         trackLoad: true,
-        defaultWeightKg: 10,
-        stepKg: 2.5,
+        bodyweightOnly: true,
+        defaultWeightKg: 0,
+        maxRepsRegular: 15,
         cue: "Clean deep stretch; zero wrist or shoulder pinch",
-        swap: { name: "Backpack Floor Press", sets: 3, reps: "15", load: "15 kg bag", cue: "Pause at bottom" },
+        swap: { name: "Backpack Floor Press", sets: 3, reps: "12-15", load: "15 kg bag", trackLoad: true, defaultWeightKg: 15, stepKg: 2.5, cue: "Pause at bottom" },
       },
       {
         id: "nm_suitcase_row",
         name: "Suitcase Chair-Braced 1-Arm Row",
         muscleGroup: "Mid-Back",
         sets: 3,
-        reps: "12-15/arm",
+        reps: "8-12/arm",
         load: "15-20 kg bag",
         restSec: 75,
         trackLoad: true,
         defaultWeightKg: 17.5,
         stepKg: 2.5,
+        maxRepsRegular: 12,
         cue: "Pack laptop/clothes to hit target load",
-        swap: { name: "Door-Towel Inverted Row", sets: 3, reps: "12-15", load: "BW Angle", cue: "Check door hinge direction" },
+        swap: { name: "Door-Towel Inverted Row", sets: 3, reps: "12-15", load: "BW Angle", trackLoad: true, bodyweightOnly: true, cue: "Check door hinge direction" },
       },
       {
         id: "nm_pack_ohp",
         name: "Suitcase / Backpack Overhead Press",
         muscleGroup: "Shoulders",
         sets: 3,
-        reps: "12-15",
+        reps: "8-12",
         load: "12-16 kg bag",
         restSec: 75,
         trackLoad: true,
         defaultWeightKg: 12.5,
         stepKg: 2.5,
+        maxRepsRegular: 12,
         cue: "Glutes squeezed, ribs stacked",
-        swap: { name: "Wall Pike Press", sets: 3, reps: "10-12", load: "Bodyweight", cue: "Smooth depth" },
+        swap: { name: "Wall Pike Press", sets: 3, reps: "10-12", load: "Bodyweight", trackLoad: true, bodyweightOnly: true, cue: "Smooth depth" },
       },
       {
         id: "nm_strap_curl",
@@ -1498,8 +2218,9 @@ const WORKOUT_MATRIX: Record<
         trackLoad: true,
         defaultWeightKg: 12.5,
         stepKg: 2.5,
+        maxRepsRegular: 15,
         cue: "Opens slumped travel upper back",
-        swap: { name: "Prone Y-T-W Floor Raise", sets: 3, reps: "15", load: "BW", cue: "Slow squeeze" },
+        swap: { name: "Prone Y-T-W Floor Raise", sets: 3, reps: "15", load: "BW", trackLoad: true, bodyweightOnly: true, cue: "Slow squeeze" },
       },
       {
         id: "nm_desk_tri",
@@ -1509,8 +2230,12 @@ const WORKOUT_MATRIX: Record<
         reps: "12-15",
         load: "Bodyweight",
         restSec: 60,
+        trackLoad: true,
+        bodyweightOnly: true,
+        defaultWeightKg: 0,
+        maxRepsRegular: 15,
         cue: "Elbows narrow (Zero Chair Dips)",
-        swap: { name: "Overhead Bag Tricep Ext", sets: 3, reps: "15", load: "12 kg bag", cue: "Full stretch" },
+        swap: { name: "Overhead Bag Tricep Ext", sets: 3, reps: "12-15", load: "12 kg bag", trackLoad: true, defaultWeightKg: 12, stepKg: 2.5, cue: "Full stretch" },
       },
     ],
     lower_a: [
@@ -1524,7 +2249,7 @@ const WORKOUT_MATRIX: Record<
         restSec: 75,
         timeBased: true,
         cue: "Glycogen sponge before travel/wedding dinners",
-        swap: { name: "Stair / Low-Chair Step-Ups", sets: 3, reps: "12/leg", load: "BW", cue: "NO Reverse Lunges" },
+        swap: { name: "Stair / Low-Chair Step-Ups", sets: 3, reps: "12/leg", load: "BW", trackLoad: true, bodyweightOnly: true, cue: "NO Reverse Lunges" },
       },
       {
         id: "nm_bag_rdl",
@@ -1532,14 +2257,15 @@ const WORKOUT_MATRIX: Record<
         name: "Kickstand Carry-On Bag RDL",
         muscleGroup: "Hamstrings",
         sets: 3,
-        reps: "12-15/leg",
+        reps: "8-12/leg",
         load: "15-20 kg bag",
         restSec: 75,
         trackLoad: true,
         defaultWeightKg: 15,
         stepKg: 2.5,
+        maxRepsRegular: 12,
         cue: "Pure hamstring stretch without equipment",
-        swap: { name: "Towel Hamstring Slide", sets: 3, reps: "12-15", load: "Hotel Tile", cue: "Slow 3s slide" },
+        swap: { name: "Towel Hamstring Slide", sets: 3, reps: "12-15", load: "Hotel Tile", trackLoad: true, bodyweightOnly: true, cue: "Slow 3s slide" },
       },
       {
         id: "nm_bed_bridge",
@@ -1549,8 +2275,11 @@ const WORKOUT_MATRIX: Record<
         reps: "12-15/side",
         load: "Bodyweight",
         restSec: 60,
+        trackLoad: true,
+        bodyweightOnly: true,
+        maxRepsRegular: 15,
         cue: "Zero equipment required",
-        swap: { name: "Single-Leg Calf Raise", sets: 3, reps: "15/leg", load: "BW", cue: "Tall calf stretch" },
+        swap: { name: "Single-Leg Calf Raise", sets: 3, reps: "15/leg", load: "BW", trackLoad: true, bodyweightOnly: true, cue: "Tall calf stretch" },
       },
       {
         id: "nm_hotel_calves",
@@ -1571,14 +2300,15 @@ const WORKOUT_MATRIX: Record<
         name: "Backpack Overhead Press",
         muscleGroup: "Shoulders",
         sets: 3,
-        reps: "12-15",
+        reps: "8-12",
         load: "12-16 kg bag",
         restSec: 75,
         trackLoad: true,
         defaultWeightKg: 12.5,
         stepKg: 2.5,
+        maxRepsRegular: 12,
         cue: "Strict torso stack",
-        swap: { name: "Wall Pike Press", sets: 3, reps: "12", load: "BW", cue: "Controlled tempo" },
+        swap: { name: "Wall Pike Press", sets: 3, reps: "10-12", load: "BW", trackLoad: true, bodyweightOnly: true, cue: "Controlled tempo" },
       },
       {
         id: "nm_towel_row_b",
@@ -1586,14 +2316,15 @@ const WORKOUT_MATRIX: Record<
         name: "Suitcase Row + Door Towel Pull",
         muscleGroup: "Back",
         sets: 3,
-        reps: "12-15/arm",
+        reps: "8-12/arm",
         load: "15-20 kg bag",
         restSec: 75,
         trackLoad: true,
         defaultWeightKg: 17.5,
         stepKg: 2.5,
+        maxRepsRegular: 12,
         cue: "High tension horizontal pull",
-        swap: { name: "Prone Floor Y-T-W", sets: 3, reps: "15", load: "BW", cue: "Rear delt + upper back" },
+        swap: { name: "Prone Floor Y-T-W", sets: 3, reps: "15", load: "BW", trackLoad: true, bodyweightOnly: true, cue: "Rear delt + upper back" },
       },
       {
         id: "nm_push_b",
@@ -1605,10 +2336,11 @@ const WORKOUT_MATRIX: Record<
         load: "Bodyweight",
         restSec: 60,
         trackLoad: true,
-        defaultWeightKg: 10,
-        stepKg: 2.5,
+        bodyweightOnly: true,
+        defaultWeightKg: 0,
+        maxRepsRegular: 15,
         cue: "Smooth pec stretch",
-        swap: { name: "Close-Grip Desk Push-Up", sets: 3, reps: "15", load: "BW", cue: "Lock triceps" },
+        swap: { name: "Close-Grip Desk Push-Up", sets: 3, reps: "15", load: "BW", trackLoad: true, bodyweightOnly: true, cue: "Lock triceps" },
       },
       {
         id: "nm_arms_b",
@@ -1622,8 +2354,9 @@ const WORKOUT_MATRIX: Record<
         trackLoad: true,
         defaultWeightKg: 12.5,
         stepKg: 2.5,
+        maxRepsRegular: 15,
         cue: "Balanced biceps & long-head triceps",
-        swap: { name: "Close-Grip Desk Push-Up", sets: 3, reps: "15", load: "BW", cue: "Elbows tucked" },
+        swap: { name: "Close-Grip Desk Push-Up", sets: 3, reps: "15", load: "BW", trackLoad: true, bodyweightOnly: true, cue: "Elbows tucked" },
       },
     ],
     lower_b: [
@@ -1633,14 +2366,15 @@ const WORKOUT_MATRIX: Record<
         name: "Kickstand Carry-On RDL",
         muscleGroup: "Hamstrings",
         sets: 3,
-        reps: "12-15/leg",
+        reps: "8-12/leg",
         load: "15-20 kg bag",
         restSec: 75,
         trackLoad: true,
         defaultWeightKg: 15,
         stepKg: 2.5,
+        maxRepsRegular: 12,
         cue: "Primary hotel hinge",
-        swap: { name: "Single-Leg Bridge", sets: 3, reps: "15/leg", load: "BW", cue: "2s hold" },
+        swap: { name: "Single-Leg Bridge", sets: 3, reps: "15/leg", load: "BW", trackLoad: true, bodyweightOnly: true, cue: "2s hold" },
       },
       {
         id: "nm_step_b",
@@ -1650,19 +2384,26 @@ const WORKOUT_MATRIX: Record<
         reps: "12/leg",
         load: "Bodyweight",
         restSec: 60,
+        trackLoad: true,
+        bodyweightOnly: true,
+        maxRepsRegular: 15,
         cue: "3s controlled descent (NO Reverse Lunges)",
         swap: { name: "45s Wall Sit", sets: 3, reps: "45s", load: "BW", cue: "Deep quad burn" },
       },
       {
         id: "nm_bridge_b",
+        progressKey: "nm_bed_bridge",
         name: "Single-Leg Bed-Edge Glute Bridge",
         muscleGroup: "Glutes",
         sets: 3,
         reps: "15/leg",
         load: "Bodyweight",
         restSec: 60,
+        trackLoad: true,
+        bodyweightOnly: true,
+        maxRepsRegular: 15,
         cue: "Squeeze glute cleanly at top",
-        swap: { name: "Frog Bridge", sets: 3, reps: "20", load: "BW", cue: "Smooth rep cadence" },
+        swap: { name: "Frog Bridge", sets: 3, reps: "20", load: "BW", trackLoad: true, bodyweightOnly: true, cue: "Smooth rep cadence" },
       },
       {
         id: "nm_calf_b",
@@ -1672,8 +2413,222 @@ const WORKOUT_MATRIX: Record<
         reps: "15 + 15",
         load: "Bodyweight",
         restSec: 45,
+        trackLoad: true,
+        bodyweightOnly: true,
+        maxRepsRegular: 15,
         cue: "Slow ankle mobility",
-        swap: { name: "Deadbug", sets: 3, reps: "12/side", load: "BW", cue: "Brace core" },
+        swap: { name: "Deadbug", sets: 3, reps: "12/side", load: "BW", trackLoad: true, bodyweightOnly: true, cue: "Brace core" },
+      },
+    ],
+    ul_combo_a: [
+      {
+        id: "nm_desk_push",
+        blockSection: "upper",
+        name: "Hotel Desk Incline Deficit Push-Up",
+        muscleGroup: "Chest",
+        sets: 3,
+        reps: "12-15",
+        load: "Bodyweight",
+        restSec: 75,
+        trackLoad: true,
+        bodyweightOnly: true,
+        maxRepsRegular: 15,
+        swap: { name: "Backpack Floor Press", sets: 3, reps: "12-15", load: "15 kg bag", trackLoad: true, defaultWeightKg: 15, stepKg: 2.5 },
+      },
+      {
+        id: "nm_suitcase_row",
+        blockSection: "upper",
+        name: "Suitcase Chair-Braced 1-Arm Row",
+        muscleGroup: "Mid-Back",
+        sets: 3,
+        reps: "8-12/arm",
+        load: "15-20 kg bag",
+        restSec: 75,
+        trackLoad: true,
+        defaultWeightKg: 17.5,
+        stepKg: 2.5,
+        maxRepsRegular: 12,
+        swap: { name: "Door-Towel Row", sets: 3, reps: "12-15", load: "BW", trackLoad: true, bodyweightOnly: true },
+      },
+      {
+        id: "nm_pack_ohp",
+        blockSection: "upper",
+        name: "Suitcase / Backpack Overhead Press",
+        muscleGroup: "Shoulders",
+        sets: 3,
+        reps: "8-12",
+        load: "12-16 kg bag",
+        restSec: 75,
+        trackLoad: true,
+        defaultWeightKg: 12.5,
+        stepKg: 2.5,
+        maxRepsRegular: 12,
+        swap: { name: "Wall Pike Press", sets: 3, reps: "10-12", load: "BW", trackLoad: true, bodyweightOnly: true },
+      },
+      {
+        id: "nm_desk_tri",
+        blockSection: "upper",
+        name: "Close-Grip Desk Tricep Push-Up",
+        muscleGroup: "Triceps",
+        sets: 3,
+        reps: "12-15",
+        load: "Bodyweight",
+        restSec: 60,
+        trackLoad: true,
+        bodyweightOnly: true,
+        maxRepsRegular: 15,
+        swap: { name: "Overhead Bag Tricep Ext", sets: 3, reps: "12-15", load: "12 kg bag", trackLoad: true, defaultWeightKg: 12, stepKg: 2.5 },
+      },
+      {
+        id: "nm_wall_squat",
+        blockSection: "lower",
+        name: "45s Wall Sit -> 15 BW Squats",
+        muscleGroup: "Quads",
+        sets: 3,
+        reps: "45s + 15",
+        load: "Occlusion Pair",
+        restSec: 75,
+        timeBased: true,
+        swap: { name: "Hotel Step-Ups", sets: 3, reps: "12/leg", load: "BW", trackLoad: true, bodyweightOnly: true },
+      },
+      {
+        id: "nm_bag_rdl",
+        progressKey: "nm_rdl",
+        blockSection: "lower",
+        name: "Kickstand Carry-On Bag RDL",
+        muscleGroup: "Hamstrings",
+        sets: 3,
+        reps: "8-12/leg",
+        load: "15-20 kg bag",
+        restSec: 75,
+        trackLoad: true,
+        defaultWeightKg: 15,
+        stepKg: 2.5,
+        maxRepsRegular: 12,
+        swap: { name: "Towel Hamstring Slide", sets: 3, reps: "12-15", load: "Tile", trackLoad: true, bodyweightOnly: true },
+      },
+      {
+        id: "nm_bed_bridge",
+        blockSection: "lower",
+        name: "Single-Leg Bed-Edge Glute Bridge",
+        muscleGroup: "Glutes",
+        sets: 3,
+        reps: "12-15/side",
+        load: "Bodyweight",
+        restSec: 60,
+        trackLoad: true,
+        bodyweightOnly: true,
+        maxRepsRegular: 15,
+        swap: { name: "Side Plank", sets: 3, reps: "35s/side", load: "BW" },
+      },
+    ],
+    ul_combo_b: [
+      {
+        id: "nm_ohp_b",
+        progressKey: "nm_pack_ohp",
+        blockSection: "upper",
+        name: "Backpack Overhead Press",
+        muscleGroup: "Shoulders",
+        sets: 3,
+        reps: "8-12",
+        load: "12-16 kg bag",
+        restSec: 75,
+        trackLoad: true,
+        defaultWeightKg: 12.5,
+        stepKg: 2.5,
+        maxRepsRegular: 12,
+        swap: { name: "Wall Pike Press", sets: 3, reps: "10-12", load: "BW", trackLoad: true, bodyweightOnly: true },
+      },
+      {
+        id: "nm_towel_row_b",
+        progressKey: "nm_suitcase_row",
+        blockSection: "upper",
+        name: "Suitcase Row + Door Towel Pull",
+        muscleGroup: "Back",
+        sets: 3,
+        reps: "8-12/arm",
+        load: "15-20 kg bag",
+        restSec: 75,
+        trackLoad: true,
+        defaultWeightKg: 17.5,
+        stepKg: 2.5,
+        maxRepsRegular: 12,
+        swap: { name: "Prone Floor Y-T-W", sets: 3, reps: "15", load: "BW", trackLoad: true, bodyweightOnly: true },
+      },
+      {
+        id: "nm_push_b",
+        progressKey: "nm_desk_push",
+        blockSection: "upper",
+        name: "Desk Deficit Push-Up",
+        muscleGroup: "Chest",
+        sets: 3,
+        reps: "12-15",
+        load: "Bodyweight",
+        restSec: 60,
+        trackLoad: true,
+        bodyweightOnly: true,
+        maxRepsRegular: 15,
+        swap: { name: "Close-Grip Desk Push-Up", sets: 3, reps: "15", load: "BW", trackLoad: true, bodyweightOnly: true },
+      },
+      {
+        id: "nm_arms_b",
+        progressKey: "nm_strap_curl",
+        blockSection: "upper",
+        name: "Carry-On Curl + Overhead Bag Tricep",
+        muscleGroup: "Arms",
+        sets: 3,
+        reps: "12-15",
+        load: "12-16 kg bag",
+        restSec: 60,
+        trackLoad: true,
+        defaultWeightKg: 12.5,
+        stepKg: 2.5,
+        maxRepsRegular: 15,
+        swap: { name: "Close-Grip Desk Push-Up", sets: 3, reps: "15", load: "BW", trackLoad: true, bodyweightOnly: true },
+      },
+      {
+        id: "nm_rdl_b",
+        progressKey: "nm_rdl",
+        blockSection: "lower",
+        name: "Kickstand Carry-On RDL",
+        muscleGroup: "Hamstrings",
+        sets: 3,
+        reps: "8-12/leg",
+        load: "15-20 kg bag",
+        restSec: 75,
+        trackLoad: true,
+        defaultWeightKg: 15,
+        stepKg: 2.5,
+        maxRepsRegular: 12,
+        swap: { name: "Single-Leg Bridge", sets: 3, reps: "15/leg", load: "BW", trackLoad: true, bodyweightOnly: true },
+      },
+      {
+        id: "nm_step_b",
+        blockSection: "lower",
+        name: "Hotel Stair / Low-Chair Step-Ups",
+        muscleGroup: "Quads + Kili Knees",
+        sets: 3,
+        reps: "12/leg",
+        load: "Bodyweight",
+        restSec: 60,
+        trackLoad: true,
+        bodyweightOnly: true,
+        maxRepsRegular: 15,
+        swap: { name: "45s Wall Sit", sets: 3, reps: "45s", load: "BW" },
+      },
+      {
+        id: "nm_calf_b",
+        blockSection: "lower",
+        name: "Single-Leg Step Calf + Core",
+        muscleGroup: "Calves + Core",
+        sets: 3,
+        reps: "15 + 15",
+        load: "Bodyweight",
+        restSec: 45,
+        trackLoad: true,
+        bodyweightOnly: true,
+        maxRepsRegular: 15,
+        swap: { name: "Deadbug", sets: 3, reps: "12/side", load: "BW", trackLoad: true, bodyweightOnly: true },
       },
     ],
     full_body_plus: [
@@ -1687,10 +2642,11 @@ const WORKOUT_MATRIX: Record<
         load: "Bodyweight",
         restSec: 60,
         trackLoad: true,
-        defaultWeightKg: 10,
-        stepKg: 2.5,
+        bodyweightOnly: true,
+        defaultWeightKg: 0,
+        maxRepsRegular: 15,
         cue: "Optional Day 5 travel upper pump",
-        swap: { name: "Close-Grip Push-Up", sets: 3, reps: "15", load: "BW", cue: "Triceps focus" },
+        swap: { name: "Close-Grip Push-Up", sets: 3, reps: "15", load: "BW", trackLoad: true, bodyweightOnly: true, cue: "Triceps focus" },
       },
       {
         id: "nm_fb_row",
@@ -1698,14 +2654,15 @@ const WORKOUT_MATRIX: Record<
         name: "Suitcase 1-Arm Row",
         muscleGroup: "Back",
         sets: 3,
-        reps: "12-15/arm",
+        reps: "8-12/arm",
         load: "15-20 kg bag",
         restSec: 60,
         trackLoad: true,
         defaultWeightKg: 17.5,
         stepKg: 2.5,
+        maxRepsRegular: 12,
         cue: "Chair-braced zero back strain",
-        swap: { name: "Prone Y-T-W", sets: 3, reps: "15", load: "BW", cue: "Upper back" },
+        swap: { name: "Prone Y-T-W", sets: 3, reps: "15", load: "BW", trackLoad: true, bodyweightOnly: true, cue: "Upper back" },
       },
       {
         id: "nm_fb_arm",
@@ -1719,6 +2676,7 @@ const WORKOUT_MATRIX: Record<
         trackLoad: true,
         defaultWeightKg: 12.5,
         stepKg: 2.5,
+        maxRepsRegular: 15,
         cue: "Clean upper pump before dinner out",
         swap: { name: "Wall Sit 45s", sets: 3, reps: "45s", load: "BW", cue: "Glycogen sponge" },
       },
@@ -1746,10 +2704,54 @@ const WORKOUT_MATRIX: Record<
   },
 };
 
+export function normalizeGateRankInput(raw: string | undefined): GateRankId {
+  if (raw === "regular" || raw === "express_2x" || raw === "low_mana_rir2") {
+    return raw;
+  }
+  if (raw === "low_time_2x" || raw === "floor_5m" || raw === "express_25m") {
+    return "express_2x";
+  }
+  return "regular";
+}
+
+function formatModeReps(
+  baseReps: string,
+  gateRank: GateRankId,
+  regCap: number,
+  lowCap: number,
+  isBarbellCompound?: boolean,
+  isTimeBased?: boolean
+): string {
+  if (isTimeBased) return baseReps;
+  const baseBand =
+    baseReps === "10-12"
+      ? "10-12"
+      : regCap === 8
+        ? "5-8"
+        : regCap === 10
+          ? "6-10"
+          : regCap === 12
+            ? "8-12"
+            : "12-15";
+
+  if (gateRank === "regular") {
+    return baseBand;
+  }
+  if (gateRank === "low_mana_rir2") {
+    const recoveryBand = regCap === 8 ? "5-8" : regCap === 12 ? "8-12" : "10-12";
+    return `${recoveryBand} · RIR 2-3`;
+  }
+  // express_2x: barbell compounds stay RIR 1-2 for safety without spotter
+  if (isBarbellCompound) {
+    return `${baseBand} · RIR 1-2`;
+  }
+  return `0-1 RIR (<=${lowCap})`;
+}
+
 export function getPrescribedWorkout(
   arena: ArenaId,
   split: SplitId,
-  gateRank: GateRankId
+  gateRank: GateRankId | string
 ): ExerciseSpec[] {
   const arenaMap = WORKOUT_MATRIX[arena] ?? WORKOUT_MATRIX.cg_gym;
   const raw = split as string;
@@ -1764,47 +2766,33 @@ export function getPrescribedWorkout(
             ? "cardio_pool"
             : split;
 
-  const list: ExerciseSpec[] =
-    safeSplit === "ul_combo_a"
-      ? [
-          ...arenaMap.upper_a.map((e) => ({ ...e, blockSection: "upper" as const })),
-          ...arenaMap.lower_a.map((e) => ({ ...e, blockSection: "lower" as const })),
-        ]
-      : safeSplit === "ul_combo_b"
-        ? [
-            ...arenaMap.upper_b.map((e) => ({ ...e, blockSection: "upper" as const })),
-            ...arenaMap.lower_b.map((e) => ({ ...e, blockSection: "lower" as const })),
-          ]
-        : arenaMap[safeSplit] ?? arenaMap.upper_a;
-
+  const normRank = normalizeGateRankInput(gateRank as string);
+  const list: ExerciseSpec[] = arenaMap[safeSplit] ?? arenaMap.upper_a;
   const isCardio = safeSplit === "cardio_pool";
 
   return list.map((ex) => {
     if (isCardio) return ex;
-    const isLowTime = gateRank === "low_time_2x";
-    const scaledSets = isLowTime ? 2 : 3;
-    const scaledSwapSets = scaledSets;
-    const lowCap = ex.maxRepsLowTime ?? 19;
+    const scaledSets = normRank === "regular" ? 3 : 2;
     const regCap = ex.maxRepsRegular ?? 15;
-    const scaledReps = ex.timeBased
-      ? ex.reps
-      : isLowTime
-        ? `Fail (<=${lowCap})`
-        : regCap === 10
-          ? "6-10"
-          : regCap === 12
-            ? "8-12"
-            : "12-15";
+    const lowCap = ex.maxRepsLowTime ?? (regCap <= 12 ? regCap + 2 : 17);
+    const scaledReps = formatModeReps(
+      ex.reps,
+      normRank,
+      regCap,
+      lowCap,
+      ex.isBarbellCompound,
+      ex.timeBased
+    );
+
     const isSwapTimeBased = /\d+s\b|\bmin\b/i.test(ex.swap.reps);
-    const scaledSwapReps = isSwapTimeBased
-      ? ex.swap.reps
-      : isLowTime
-        ? `Fail (<=${lowCap})`
-        : regCap === 10
-          ? "6-10"
-          : regCap === 12
-            ? "8-12"
-            : "12-15";
+    const scaledSwapReps = formatModeReps(
+      ex.swap.reps,
+      normRank,
+      regCap,
+      lowCap,
+      ex.swap.isBarbellCompound,
+      isSwapTimeBased
+    );
 
     return {
       ...ex,
@@ -1812,7 +2800,7 @@ export function getPrescribedWorkout(
       reps: scaledReps,
       swap: {
         ...ex.swap,
-        sets: scaledSwapSets,
+        sets: scaledSets,
         reps: scaledSwapReps,
       },
     };
@@ -1825,7 +2813,11 @@ export type FoodTag =
   | "seal"
   | "abs_raid"
   | "social"
-  | "debloat";
+  | "debloat"
+  | "fiber_micro"
+  | "healthy_fat"
+  | "training_carb"
+  | "alcohol";
 
 export type MealSlot = "primer" | "lunch" | "seal" | "dinner";
 
@@ -1853,15 +2845,21 @@ export interface FoodPreset {
   category?: "spot" | "staple" | "dinner_dish";
 }
 
+export type FoodTier = "S" | "A" | "B" | "C" | "M" | "F" | "X" | "0";
+
 export interface FoodViability {
-  tier: "S" | "A" | "B" | "C";
+  tier: FoodTier;
   proteinPer100Kcal: number;
   proteinCalPct: number;
   label: string;
   verdict: string;
 }
 
-export function evaluateFoodViability(kcal: number, proteinG: number): FoodViability {
+export function evaluateFoodViability(
+  kcal: number,
+  proteinG: number,
+  tags?: FoodTag[]
+): FoodViability {
   const safeKcal = Math.max(0, kcal);
   const safeProtein = Math.max(0, proteinG);
 
@@ -1876,16 +2874,44 @@ export function evaluateFoodViability(kcal: number, proteinG: number): FoodViabi
       };
     }
     return {
-      tier: "A",
+      tier: "0",
       proteinPer100Kcal: 0,
       proteinCalPct: 0,
       label: "0 kcal Buffer",
-      verdict: "Zero-calorie mixer or late-evening craving crutch",
+      verdict: "Zero-calorie mixer, black coffee, or hydration buffer",
     };
   }
 
   const proteinPer100Kcal = Math.round(((safeProtein * 100) / safeKcal) * 10) / 10;
   const proteinCalPct = Math.min(100, Math.round(((safeProtein * 4) / safeKcal) * 100));
+
+  if (tags?.includes("alcohol")) {
+    return {
+      tier: "X",
+      proteinPer100Kcal,
+      proteinCalPct,
+      label: "Alcohol",
+      verdict: "Empty ethanol calories - log honestly & pre-buffer protein",
+    };
+  }
+  if (tags?.includes("fiber_micro") && proteinPer100Kcal < 7) {
+    return {
+      tier: "M",
+      proteinPer100Kcal,
+      proteinCalPct,
+      label: "Micro / Fiber",
+      verdict: "Essential potassium, vitamins & fiber - protects digestion and deficit adherence",
+    };
+  }
+  if (tags?.includes("healthy_fat") && proteinPer100Kcal < 7) {
+    return {
+      tier: "F",
+      proteinPer100Kcal,
+      proteinCalPct,
+      label: "Healthy Fat",
+      verdict: "Supports hormones, fat-soluble vitamins & gallbladder emptying on OMAD",
+    };
+  }
 
   if (proteinPer100Kcal >= 10) {
     return {
@@ -1918,8 +2944,8 @@ export function evaluateFoodViability(kcal: number, proteinG: number): FoodViabi
     tier: "C",
     proteinPer100Kcal,
     proteinCalPct,
-    label: "C-Tier Treat / Carb",
-    verdict: "High non-protein energy - buffer earlier with S-tier protein to avoid deficit spill",
+    label: "C-Tier Carb / Treat",
+    verdict: "Carb or calorie-dense side - pair with S-tier protein or keep around training",
   };
 }
 
@@ -1953,7 +2979,7 @@ export const FOOD_PRESETS: FoodPreset[] = [
     kcal: 380,
     proteinG: 70,
     contexts: ["cg_home", "hsr_office", "raid_social", "travel"],
-    note: "Locks 155-175g daytime protein by 7 PM so skipping dinner is effortless",
+    note: "Skyr casein slows digestion alongside whey - hits 165g+ protein cleanly",
     tags: ["seal", "high_protein"],
     category: "spot",
   },
@@ -1964,19 +2990,30 @@ export const FOOD_PRESETS: FoodPreset[] = [
     kcal: 1550,
     proteinG: 160,
     contexts: ["raid_social", "cg_home", "hsr_office"],
-    note: "Fish Tikka + Prawns + Chicken skewers + Light-Oil Wish Grill -> Auto-skips dinner!",
+    note: "Fish Tikka + Prawns + Chicken skewers + Light-Oil Wish Grill -> Auto-closes OMAD!",
     tags: ["abs_raid", "high_protein"],
     category: "spot",
   },
   {
-    id: "am_eggs_whey",
-    shortLabel: "4 Eggs / 1.5x Whey Primer",
-    spot: "Extra Protein Primer",
-    kcal: 320,
-    proteinG: 42,
+    id: "eggs_4_whole",
+    shortLabel: "4 Whole Eggs (Boiled / Omelette)",
+    spot: "Home / Office Staple",
+    kcal: 300,
+    proteinG: 25,
     contexts: ["cg_home", "hsr_office", "travel"],
-    note: "Keep Monster White >= 8h before sleep",
-    tags: ["high_protein"],
+    note: "25g P + ~20g healthy fats & choline - protects hormones & gallbladder on OMAD",
+    tags: ["high_protein", "healthy_fat"],
+    category: "staple",
+  },
+  {
+    id: "whey_1_5x",
+    shortLabel: "1.5 Scoops Whey (Water)",
+    spot: "Post-Workout / Bridge",
+    kcal: 180,
+    proteinG: 38,
+    contexts: ["cg_home", "hsr_office", "raid_social", "travel"],
+    note: "Fast 38g P AM post-lift buffer if main OMAD meal is hours away",
+    tags: ["seal", "high_protein"],
     category: "staple",
   },
   {
@@ -2101,6 +3138,61 @@ export const FOOD_PRESETS: FoodPreset[] = [
     category: "spot",
   },
   {
+    id: "cucumber_salad_olive",
+    shortLabel: "Cucumber-Tomato Salad + Olive Oil",
+    spot: "Daily Fiber & Healthy Fat",
+    kcal: 160,
+    proteinG: 3,
+    contexts: ["cg_home", "hsr_office", "travel"],
+    note: "Watery gut-safe greens + 1 tsp olive oil/lemon for fiber, potassium & fat-soluble absorption",
+    tags: ["fiber_micro", "healthy_fat", "debloat"],
+    category: "staple",
+  },
+  {
+    id: "mixed_nuts_30g",
+    shortLabel: "Almonds / Walnuts (30g)",
+    spot: "Healthy Fat Anchor",
+    kcal: 180,
+    proteinG: 6,
+    contexts: ["cg_home", "hsr_office", "travel"],
+    note: "Magnesium, Vitamin E & dietary fat floor support on low-fat grill days",
+    tags: ["healthy_fat"],
+    category: "staple",
+  },
+  {
+    id: "seasonal_fruit_bowl",
+    shortLabel: "Papaya / Guava / Apple (250g)",
+    spot: "Micronutrient + Fiber Bowl",
+    kcal: 130,
+    proteinG: 2,
+    contexts: ["cg_home", "hsr_office", "travel"],
+    note: "Potassium + digestive fiber without caloric spill",
+    tags: ["fiber_micro"],
+    category: "staple",
+  },
+  {
+    id: "steamed_rice_half",
+    shortLabel: "Steamed Rice / 2 Phulkas",
+    spot: "Training Glycogen Fuel",
+    kcal: 240,
+    proteinG: 5,
+    contexts: ["cg_home", "hsr_office", "raid_social", "travel"],
+    note: "Clean carbs around heavy bench or badminton to preserve strength",
+    tags: ["training_carb"],
+    category: "staple",
+  },
+  {
+    id: "electrolyte_ors",
+    shortLabel: "Electrolytes + Lemon Salt (1L)",
+    spot: "OMAD Hydration Buffer",
+    kcal: 15,
+    proteinG: 0,
+    contexts: ["cg_home", "hsr_office", "raid_social", "travel"],
+    note: "Prevents fasting headaches & gym cramps when insulin is low",
+    tags: ["debloat", "fiber_micro"],
+    category: "staple",
+  },
+  {
     id: "boiled_eggs_2",
     shortLabel: "2 Boiled Eggs",
     spot: "Everyday Staple",
@@ -2129,7 +3221,7 @@ export const FOOD_PRESETS: FoodPreset[] = [
     kcal: 130,
     proteinG: 20,
     contexts: ["cg_home", "hsr_office", "travel"],
-    note: "High-satiety dairy bridge before dinner window",
+    note: "Slow-digesting casein dairy bridge for sustained MPS",
     tags: ["seal", "high_protein"],
     category: "staple",
   },
@@ -2262,7 +3354,7 @@ export const FOOD_PRESETS: FoodPreset[] = [
     proteinG: 0,
     contexts: ["raid_social"],
     note: "Mix with soda or Diet Coke only; skip bar fries",
-    tags: ["social"],
+    tags: ["social", "alcohol"],
     category: "dinner_dish",
   },
   {
@@ -2273,7 +3365,7 @@ export const FOOD_PRESETS: FoodPreset[] = [
     proteinG: 1,
     contexts: ["raid_social"],
     note: "Log each pint honestly so the week stays on track",
-    tags: ["social"],
+    tags: ["social", "alcohol"],
     category: "dinner_dish",
   },
   {
@@ -2322,73 +3414,87 @@ export interface DayMealPlan {
 
 export const DEFAULT_WEEKLY_MEAL_PLAN: Record<WeekdayKey, DayMealPlan> = {
   mon: {
-    focus: "OMAD · HSR Hebe's + Whey/Skyr Seal",
+    focus: "OMAD · Hebe's + Whole Eggs + Greens + Seal",
     dinnerSkipped: true,
     dinnerOut: false,
     meals: [
       { id: "mon_1", slot: "lunch", presetId: "hebe_salsa_chicken", label: "Hebe's Salsa Egg + Chicken", kcal: 680, proteinG: 65 },
-      { id: "mon_2", slot: "seal", presetId: "whey_skyr_seal", label: "5 PM Seal: 2x Whey + Skyr", kcal: 380, proteinG: 70 },
-      { id: "mon_3", slot: "seal", presetId: "whey_1x", label: "1 Scoop Whey (Water)", kcal: 120, proteinG: 25 },
+      { id: "mon_2", slot: "lunch", presetId: "eggs_4_whole", label: "4 Whole Eggs (Boiled / Omelette)", kcal: 300, proteinG: 25 },
+      { id: "mon_3", slot: "lunch", presetId: "cucumber_salad_olive", label: "Cucumber-Tomato Salad + Olive Oil", kcal: 160, proteinG: 3 },
+      { id: "mon_4", slot: "seal", presetId: "whey_skyr_seal", label: "5 PM Seal: 2x Whey + Skyr", kcal: 380, proteinG: 70 },
+      { id: "mon_5", slot: "seal", presetId: "mixed_nuts_30g", label: "Almonds / Walnuts (30g)", kcal: 180, proteinG: 6 },
     ],
   },
   tue: {
-    focus: "OMAD · Grill Daddy + Tikka + Seal",
+    focus: "OMAD · Grill Daddy + Tikka + Fiber/Fats + Seal",
     dinnerSkipped: true,
     dinnerOut: false,
     meals: [
       { id: "tue_1", slot: "lunch", presetId: "grill_daddy_skewers", label: "Grill Daddy Skewers / 1/2 Roast", kcal: 490, proteinG: 48 },
       { id: "tue_2", slot: "lunch", presetId: "chicken_tikka_6", label: "Chicken Tikka (6 pcs)", kcal: 320, proteinG: 44 },
-      { id: "tue_3", slot: "seal", presetId: "whey_skyr_seal", label: "5 PM Seal: 2x Whey + Skyr", kcal: 380, proteinG: 70 },
+      { id: "tue_3", slot: "lunch", presetId: "cucumber_salad_olive", label: "Cucumber-Tomato Salad + Olive Oil", kcal: 160, proteinG: 3 },
+      { id: "tue_4", slot: "seal", presetId: "whey_skyr_seal", label: "5 PM Seal: 2x Whey + Skyr", kcal: 380, proteinG: 70 },
+      { id: "tue_5", slot: "seal", presetId: "mixed_nuts_30g", label: "Almonds / Walnuts (30g)", kcal: 180, proteinG: 6 },
+      { id: "tue_6", slot: "seal", presetId: "seasonal_fruit_bowl", label: "Papaya / Guava / Apple (250g)", kcal: 130, proteinG: 2 },
     ],
   },
   wed: {
-    focus: "OMAD · AB's Weekly Proteinmaxx Raid",
+    focus: "OMAD · AB's Proteinmaxx Raid + Fruit",
     dinnerSkipped: true,
     dinnerOut: false,
     meals: [
       { id: "wed_1", slot: "lunch", presetId: "abs_omad_raid", label: "AB's Proteinmaxx Lunch Raid", kcal: 1550, proteinG: 160 },
-      { id: "wed_2", slot: "seal", presetId: "diet_coke", label: "Diet Coke / Coke Zero (330 ml)", kcal: 0, proteinG: 0 },
+      { id: "wed_2", slot: "seal", presetId: "seasonal_fruit_bowl", label: "Papaya / Guava / Apple (250g)", kcal: 130, proteinG: 2 },
+      { id: "wed_3", slot: "seal", presetId: "diet_coke", label: "Diet Coke / Coke Zero (330 ml)", kcal: 0, proteinG: 0 },
     ],
   },
   thu: {
-    focus: "OMAD · Cal Burrito + Tandoori + Seal",
+    focus: "OMAD · Cal Burrito + Tandoori + Greens + Seal",
     dinnerSkipped: true,
     dinnerOut: false,
     meals: [
       { id: "thu_1", slot: "lunch", presetId: "cal_burrito_bowl", label: "Cal Burrito BBQ Bowl", kcal: 550, proteinG: 48 },
       { id: "thu_2", slot: "lunch", presetId: "tandoori_half", label: "Tandoori Chicken (Half)", kcal: 420, proteinG: 56 },
-      { id: "thu_3", slot: "seal", presetId: "whey_skyr_seal", label: "5 PM Seal: 2x Whey + Skyr", kcal: 380, proteinG: 70 },
+      { id: "thu_3", slot: "lunch", presetId: "cucumber_salad_olive", label: "Cucumber-Tomato Salad + Olive Oil", kcal: 160, proteinG: 3 },
+      { id: "thu_4", slot: "seal", presetId: "whey_skyr_seal", label: "5 PM Seal: 2x Whey + Skyr", kcal: 380, proteinG: 70 },
+      { id: "thu_5", slot: "seal", presetId: "mixed_nuts_30g", label: "Almonds / Walnuts (30g)", kcal: 180, proteinG: 6 },
     ],
   },
   fri: {
-    focus: "OMAD · Social Dinner Out",
+    focus: "OMAD · Social Dinner Out (Shield + Tandoor + Half Biryani)",
     dinnerSkipped: false,
     dinnerOut: true,
     meals: [
       { id: "fri_1", slot: "seal", presetId: "pre_social_shield", label: "Pre-Taproom Curd + Whey", kcal: 220, proteinG: 35 },
       { id: "fri_2", slot: "dinner", presetId: "tandoori_half", label: "Tandoori Chicken (Half)", kcal: 420, proteinG: 56 },
       { id: "fri_3", slot: "dinner", presetId: "fish_tikka", label: "Tandoori Fish Tikka (1 plate)", kcal: 290, proteinG: 42 },
-      { id: "fri_4", slot: "dinner", presetId: "whey_1x", label: "1 Scoop Whey (Water)", kcal: 120, proteinG: 25 },
+      { id: "fri_4", slot: "dinner", presetId: "biryani_half", label: "Chicken Biryani (Half Plate)", kcal: 520, proteinG: 32 },
+      { id: "fri_5", slot: "dinner", presetId: "cucumber_salad_olive", label: "Cucumber-Tomato Salad + Olive Oil", kcal: 160, proteinG: 3 },
+      { id: "fri_6", slot: "dinner", presetId: "diet_coke", label: "Diet Coke / Coke Zero (330 ml)", kcal: 0, proteinG: 0 },
     ],
   },
   sat: {
-    focus: "OMAD · CG Home Grill Stack",
+    focus: "OMAD · CG Home Grill Stack + Greens + Fruit",
     dinnerSkipped: true,
     dinnerOut: false,
     meals: [
       { id: "sat_1", slot: "lunch", presetId: "khan_saheb_tikka", label: "Khan Saheb Tikka + Charcoal", kcal: 520, proteinG: 65 },
       { id: "sat_2", slot: "lunch", presetId: "kfc_smoky_red", label: "KFC Smoky Red (3 pc)", kcal: 480, proteinG: 52 },
-      { id: "sat_3", slot: "seal", presetId: "whey_skyr_seal", label: "5 PM Seal: 2x Whey + Skyr", kcal: 380, proteinG: 70 },
+      { id: "sat_3", slot: "lunch", presetId: "cucumber_salad_olive", label: "Cucumber-Tomato Salad + Olive Oil", kcal: 160, proteinG: 3 },
+      { id: "sat_4", slot: "seal", presetId: "whey_skyr_seal", label: "5 PM Seal: 2x Whey + Skyr", kcal: 380, proteinG: 70 },
+      { id: "sat_5", slot: "seal", presetId: "seasonal_fruit_bowl", label: "Papaya / Guava / Apple (250g)", kcal: 130, proteinG: 2 },
     ],
   },
   sun: {
-    focus: "OMAD · Post-Badminton Meghana + Seal",
+    focus: "OMAD · Badminton Fuel (+200 Flex) + Meghana + Seal",
     dinnerSkipped: true,
     dinnerOut: false,
     meals: [
-      { id: "sun_1", slot: "lunch", presetId: "meghana_half", label: "Meghana Leg + Eggs + 1/2 Rice", kcal: 720, proteinG: 54 },
-      { id: "sun_2", slot: "lunch", presetId: "tandoori_half", label: "Tandoori Chicken (Half)", kcal: 420, proteinG: 56 },
-      { id: "sun_3", slot: "seal", presetId: "whey_skyr_seal", label: "5 PM Seal: 2x Whey + Skyr", kcal: 380, proteinG: 70 },
+      { id: "sun_1", slot: "primer", presetId: "taaza_whey", label: "Taaza 2 Idli + Whey/Eggs", kcal: 540, proteinG: 38 },
+      { id: "sun_2", slot: "lunch", presetId: "meghana_half", label: "Meghana Leg + Eggs + 1/2 Rice", kcal: 720, proteinG: 54 },
+      { id: "sun_3", slot: "lunch", presetId: "cucumber_salad_olive", label: "Cucumber-Tomato Salad + Olive Oil", kcal: 160, proteinG: 3 },
+      { id: "sun_4", slot: "seal", presetId: "whey_skyr_seal", label: "5 PM Seal: 2x Whey + Skyr", kcal: 380, proteinG: 70 },
+      { id: "sun_5", slot: "seal", presetId: "seasonal_fruit_bowl", label: "Papaya / Guava / Apple (250g)", kcal: 130, proteinG: 2 },
     ],
   },
 };
@@ -2396,6 +3502,20 @@ export const DEFAULT_WEEKLY_MEAL_PLAN: Record<WeekdayKey, DayMealPlan> = {
 export function getTodayWeekdayKey(date: Date = new Date()): WeekdayKey {
   const map: WeekdayKey[] = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
   return map[date.getDay()] ?? "mon";
+}
+
+export function isPlannedMealLogged(
+  meal: PlannedMealItem,
+  loggedFoods: Array<{ presetId?: string; label: string }>
+): boolean {
+  const targetLabel = meal.label.trim().toLowerCase();
+  return loggedFoods.some((f) => {
+    if (meal.presetId && f.presetId && f.presetId === meal.presetId) {
+      return true;
+    }
+    const norm = f.label.trim().toLowerCase().replace(/\s*\(\d+(\.\d+)?x\)$/, "");
+    return norm === targetLabel;
+  });
 }
 
 export interface NutritionCoachAdvice {
@@ -2416,9 +3536,11 @@ export function computeNutritionCoachAdvice(params: {
   proteinTargetG: number;
   dinnerSkipped: boolean;
   dinnerOutMode: boolean;
-  loggedLabels: string[];
+  loggedFoods: Array<{ presetId?: string; label: string }>;
   todayPlan?: DayMealPlan;
   currentHour?: number;
+  weeklyAvgKcal?: number | null;
+  trainedFastedBeforeNoon?: boolean;
 }): NutritionCoachAdvice {
   const {
     consumedKcal,
@@ -2427,9 +3549,11 @@ export function computeNutritionCoachAdvice(params: {
     proteinTargetG,
     dinnerSkipped,
     dinnerOutMode,
-    loggedLabels,
+    loggedFoods,
     todayPlan,
     currentHour = new Date().getHours(),
+    weeklyAvgKcal = null,
+    trainedFastedBeforeNoon = false,
   } = params;
 
   const remainingKcal = Math.max(0, kcalCeiling - consumedKcal);
@@ -2437,12 +3561,8 @@ export function computeNutritionCoachAdvice(params: {
   const currentDensity =
     consumedKcal > 0 ? Math.round(((consumedProteinG * 100) / consumedKcal) * 10) / 10 : 0;
 
-  const normLogged = loggedLabels.map((l) => l.toLowerCase());
   const nextPlannedMeal =
-    todayPlan?.meals.find((m) => {
-      const needle = m.label.toLowerCase().slice(0, 14);
-      return !normLogged.some((logged) => logged.includes(needle));
-    }) ?? null;
+    todayPlan?.meals.find((m) => !isPlannedMealLogged(m, loggedFoods)) ?? null;
 
   const projectedDinnerBudgetKcal = dinnerOutMode
     ? remainingKcal
@@ -2451,6 +3571,20 @@ export function computeNutritionCoachAdvice(params: {
       : Math.min(600, remainingKcal);
 
   if (consumedKcal === 0) {
+    if (trainedFastedBeforeNoon && currentHour >= 11) {
+      return {
+        headline: "Morning lift logged fasted - break fast with protein soon",
+        actionTip:
+          "Take 1-1.5x Whey (+25-38g P) or start your OMAD main meal early so post-workout MPS is not delayed until evening.",
+        tone: "amber",
+        remainingKcal,
+        remainingProteinG,
+        currentDensity,
+        projectedDinnerBudgetKcal,
+        nextPlannedMeal,
+      };
+    }
+
     return {
       headline:
         currentHour < 12
@@ -2459,13 +3593,13 @@ export function computeNutritionCoachAdvice(params: {
             ? `OMAD Dinner window: ${kcalCeiling} kcal & ${proteinTargetG}g P budget untouched`
             : nextPlannedMeal
               ? `OMAD window ready: ${nextPlannedMeal.label}`
-              : `OMAD window open - aim for ${proteinTargetG}g P in 1 sitting`,
+              : `OMAD window open - aim for ${proteinTargetG}g P + >=1,600 kcal`,
       actionTip:
         currentHour < 12
-          ? "Stay on water, black coffee, or Monster White (>=8h pre-sleep). Break fast with your full protein-dense OMAD plate."
+          ? "Stay on water, electrolytes, black coffee, or Monster White (>=8h pre-sleep). Break fast with whole-food protein + greens."
           : currentHour >= 18
-            ? "Build your full OMAD dinner plate in Fuel - lead with S-tier grilled/tandoor protein + shake top-up if needed."
-            : "Stack main protein + Whey/Skyr Seal inside your eating window so evening fasting stays effortless.",
+            ? "Build your full OMAD dinner plate in Fuel - lead with S-tier grilled/tandoor protein + greens + Whey/Skyr top-up."
+            : "Pair whole-food protein, greens, and healthy fats with your Whey/Skyr Seal so evening fasting stays effortless.",
       tone: "cobalt",
       remainingKcal,
       remainingProteinG,
@@ -2475,12 +3609,30 @@ export function computeNutritionCoachAdvice(params: {
     };
   }
 
+  // Guard against accidental crash dieting (<1,450 kcal sealed)
+  if (dinnerSkipped && consumedKcal < 1450) {
+    return {
+      headline: `OMAD sealed light (${consumedKcal} kcal) - protect your calorie floor`,
+      actionTip:
+        "Under 1,450 kcal at 112 kg risks midnight Swiggy rebound, muscle loss, and gallbladder stress. Add whole eggs, nuts, fruit, or rice toward ~1,650-1,800 kcal.",
+      tone: "amber",
+      remainingKcal,
+      remainingProteinG,
+      currentDensity,
+      projectedDinnerBudgetKcal: 0,
+      nextPlannedMeal,
+    };
+  }
+
   if (consumedKcal > kcalCeiling) {
     const overKcal = consumedKcal - kcalCeiling;
-    const recoverySteps = Math.max(1000, Math.round(overKcal / 45) * 1000);
+    const weeklyNote =
+      weeklyAvgKcal !== null
+        ? `7d avg is ${weeklyAvgKcal} kcal/day (still a deep cut at 112 kg).`
+        : "At 112 kg, ~2,000 kcal is still a strong fat-loss deficit.";
     return {
-      headline: `+${overKcal} kcal over ${kcalCeiling} ceiling (Protein: ${consumedProteinG}g)`,
-      actionTip: `Stop solid food for today, lean on Diet Coke + water, and add ~${recoverySteps.toLocaleString()} extra steps.`,
+      headline: `+${overKcal} kcal over ${kcalCeiling} target (${consumedProteinG}g P logged)`,
+      actionTip: `No crash compensation or punishment cardio needed - ${weeklyNote} Close solid food cleanly and resume tomorrow.`,
       tone: "amber",
       remainingKcal: 0,
       remainingProteinG,
@@ -2494,8 +3646,10 @@ export function computeNutritionCoachAdvice(params: {
     return {
       headline: `OMAD protein locked (${consumedProteinG}g P) with ${remainingKcal} kcal left`,
       actionTip: dinnerOutMode
-        ? `Dinner Out budget: up to ${remainingKcal} kcal. Stick to grilled starters; skip mindless desserts.`
-        : "Close your OMAD window cleanly - stick to water or Diet Coke until tomorrow.",
+        ? `Dinner Out budget: up to ${remainingKcal} kcal. Stick to grilled starters + veg; skip mindless desserts.`
+        : consumedKcal < 1500
+          ? `Protein is hit, but add ~250 kcal of healthy fats/greens/fruit before closing so you hit >=1,600 kcal.`
+          : "Close your OMAD window cleanly - stick to water, electrolytes, or Diet Coke until tomorrow.",
       tone: "emerald",
       remainingKcal,
       remainingProteinG: 0,
@@ -2551,7 +3705,7 @@ export function computeNutritionCoachAdvice(params: {
     actionTip:
       reqDensity >= 9.5
         ? `Remaining food needs >= ${reqDensity}g P / 100 kcal (S-tier): lean on Whey, Skyr, Eggs, or Tandoori cuts.`
-        : `On pace for your cut - any A/S-tier plate keeps today's deficit intact.`,
+        : `On pace for your cut - any A/S-tier plate + greens keeps today's deficit sustainable.`,
     tone: reqDensity >= 11 ? "amber" : "emerald",
     remainingKcal,
     remainingProteinG,
@@ -2560,6 +3714,45 @@ export function computeNutritionCoachAdvice(params: {
     nextPlannedMeal,
   };
 }
+
+export interface KiliChecklistItem {
+  id: string;
+  title: string;
+  detail: string;
+}
+
+export const KILI_CHECKLIST_ITEMS: KiliChecklistItem[] = [
+  {
+    id: "foracort_pulmo",
+    title: "Pulmonologist consult (Foracort G + Diamox)",
+    detail: "Pre-altitude PFT clearance, asthma action plan & acetazolamide protocol for 5,895m.",
+  },
+  {
+    id: "zone2_base",
+    title: "4+ weeks @ >=150 min/wk Zone-2",
+    detail: "Consistent nasal-pace incline treadmill, CG swim, jog, or badminton endurance.",
+  },
+  {
+    id: "pack_incline_3x",
+    title: "3x 45-60m loaded incline walks (6-8 kg pack)",
+    detail: "10-15% grade treadmill or hill climbs mimicking summit-day gear load.",
+  },
+  {
+    id: "back_to_back_hikes",
+    title: "2x back-to-back weekend sunrise hikes",
+    detail: "Tests multi-day leg recovery and 3s eccentric step-down knee resilience.",
+  },
+  {
+    id: "boots_broken_in",
+    title: "Trekking boots + merino socks broken in",
+    detail: "Zero blisters across 15k step walks and steep descent drills.",
+  },
+  {
+    id: "hydration_electrolytes",
+    title: "4L/day hydration + altitude electrolyte kit",
+    detail: "Oral rehydration salts + insulated bladder tested in cold early mornings.",
+  },
+];
 
 export interface RaidBossDef {
   id: string;
@@ -2584,12 +3777,12 @@ export interface ShadowPassiveDef {
 }
 
 export const SHADOW_PASSIVES: ShadowPassiveDef[] = [
-  { id: "igris", name: "Igris", role: "1/wk Streak Shield", trigger: "Absorbs 1 missed travel/work day cleanly" },
-  { id: "iron", name: "Iron", role: "Instant Safe Swap", trigger: "Busy machine or joint tweak inside Combat Sheet" },
-  { id: "tank", name: "Tank", role: "Context Food Radar", trigger: "Filters spots by CG / HSR / Raid / Travel" },
-  { id: "beru", name: "Beru", role: "5m Survival Floor", trigger: "Low-Mana Mode (<5.5h sleep) locks No-Skip floor" },
-  { id: "greed", name: "Greed", role: "Skip-Dinner Guardian", trigger: "Alerts on <50g P lunches & counts Swiggy Rs saved" },
-  { id: "tusk", name: "Tusk", role: "36h De-Bloat Mode", trigger: "4L water + cucumber/chicken after salt feasts" },
-  { id: "kaisel", name: "Kaisel", role: "Kili 5,895m Engine", trigger: "Converts steps, swim & incline into vertical meters" },
-  { id: "bellion", name: "Bellion", role: "2x Boss Crit Aura", trigger: "Unlocks at S-Rank or <100 kg on PR streaks" },
+  { id: "igris", name: "Igris", role: "1/wk Streak Shield", trigger: "Absorbs 1 missed travel/work day cleanly (even checked in the morning)" },
+  { id: "iron", name: "Iron", role: "Instant Safe Swap", trigger: "Busy machine or joint tweak inside Combat Sheet with full load tracking" },
+  { id: "tank", name: "Tank", role: "Context Food Radar", trigger: "Auto-filters CG / HSR / Raid / Travel spots by time & clock" },
+  { id: "beru", name: "Beru", role: "Low Mana Guard", trigger: "<5.5h sleep switches to 2 sets @ RIR 2-3 + 5m Survival Floor" },
+  { id: "greed", name: "Greed", role: "OMAD Fast Guardian", trigger: "Alerts on <50g P & crash-diet floors while banking Swiggy Rs saved" },
+  { id: "tusk", name: "Tusk", role: "36h De-Bloat Mode", trigger: "4L water + electrolytes + potassium after salt/travel swings" },
+  { id: "kaisel", name: "Kaisel", role: "Kili 5,895m Engine", trigger: "Tracks Zone-2 weekly minutes, pack inclines & vertical ascent" },
+  { id: "bellion", name: "Bellion", role: "1.5x-2x PR Crit Aura", trigger: "Unlocks at S-Rank or <100 kg; boosts PR & combo XP live" },
 ];
